@@ -90,11 +90,11 @@ npx pingcode-cli@latest --target "$HOME/.codex/skills/pingcode" --force
 - 更新工作项状态
 - 在故事下创建子工作项（通过 `parent_id`）
 - 查询、创建、更新产品和产品需求
-- 通过子命令（`config *`, `work-item *`）或 `--method/--path` 调用 PingCode API
+- 通过子命令（`config *`, `work-item *`）调用 PingCode API
 
 ## 子命令
 
-PingCode CLI 支持结构化子命令和传统 `--method/--path` 两种调用方式。
+PingCode CLI 通过子命令管理配置和工作项。
 
 ### 配置管理 (`config`)
 
@@ -148,24 +148,6 @@ node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority
 # 试运行（预览 API 请求，不发送）
 node scripts/pingcode.js work-item create --title "test" --type task --dry-run
 node scripts/pingcode.js work-item update SCR-123 --state 已完成 --dry-run
-```
-
-### 传统方式 (Legacy)
-
-原有的 `--method/--path` 调用方式继续支持，适用于未被新子命令覆盖的 API 操作：
-
-```bash
-# 查询项目列表
-node scripts/pingcode.js --method GET --path /v1/project/projects --param page_size=20
-
-# 通过查询参数过滤工作项
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@me --param page_size=20 --compact
-
-# 创建产品需求
-node scripts/pingcode.js --method POST --path /v1/ship/ideas --data '{"product_id":"PRODUCT_ID","title":"New idea"}'
-
-# 更新工作项（传统 PATCH）
-node scripts/pingcode.js --method PATCH --path /v1/project/work_items/WORK_ITEM_ID --data '{"state_id":"STATE_ID"}'
 ```
 
 ## 自然语言使用方式
@@ -230,8 +212,6 @@ CLI 默认把工作区偏好和常用字典缓存到 `.pingcode-skill/cache.json
 - 工作项状态字典
 - 工作项优先级字典
 - 工作项属性字典
-- 需求状态字典
-- 需求优先级字典
 
 首次写入默认缓存时，如果当前项目已有 `.gitignore`，CLI 会自动确保 `.pingcode-skill/` 已加入忽略列表。
 
@@ -246,17 +226,6 @@ CLI 默认把工作区偏好和常用字典缓存到 `.pingcode-skill/cache.json
 ```
 
 该 skill 会让 Agent 在前台聊天里按顺序展示项目、迭代、用户的编号选项。用户回复编号、ID 或名称后，Agent 会执行非交互式命令写入 `.pingcode-skill/cache.json`。这个流程不依赖某个产品的专用 UI 控件，因此可兼容 Codex、Claude Code 和其他支持 skills 的 Agent。
-
-底层命令如下：
-
-```bash
-node scripts/pingcode.js --context-options project
-node scripts/pingcode.js --set-current-project PROJECT_ID_OR_NAME
-node scripts/pingcode.js --context-options sprint
-node scripts/pingcode.js --set-current-sprint SPRINT_ID_OR_NAME
-node scripts/pingcode.js --context-options user
-node scripts/pingcode.js --set-current-user USER_ID_OR_NAME
-```
 
 ### 终端交互方式
 
@@ -274,31 +243,6 @@ pingcode-ctx
 
 使用 `$pingcode` skill 执行常规工作项查询或创建前，应先确认工作区缓存里有 `current_user_id`、`current_project_id`、`current_sprint_id`。缺少任一项时先运行 `pingcode-ctx`，完成后再重试原来的 PingCode 操作。
 
-首次在一个工作区使用时可以按下面顺序显式初始化：
-
-```bash
-node scripts/pingcode.js --cache-projects
-node scripts/pingcode.js --set-current-project PROJECT_ID
-node scripts/pingcode.js --cache-sprints
-node scripts/pingcode.js --set-current-sprint SPRINT_ID
-node scripts/pingcode.js --cache-users
-node scripts/pingcode.js --set-current-user USER_ID_OR_CACHED_NAME
-node scripts/pingcode.js --cache-states
-node scripts/pingcode.js --cache-work-item-priorities
-node scripts/pingcode.js --cache-work-item-properties
-# 产品需求字典按产品缓存，需要产品 ID：
-node scripts/pingcode.js --cache-idea-states --product-id PRODUCT_ID
-node scripts/pingcode.js --cache-idea-priorities --product-id PRODUCT_ID
-```
-
-如果查询或创建工作项时工作区上下文不完整，CLI 会提示先运行 `pingcode-ctx`。agent 应先完成交互式上下文初始化，再重试原查询或创建命令。没有交互终端时，才使用下面的 `--cache-*` / `--set-current-*` 命令手动初始化。
-
-如果租户没有全局用户列表接口，`--cache-users --project-id PROJECT_ID` 会缓存项目成员。之后查询“某某的工作项”时可以直接使用缓存：
-
-```bash
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@user:某某
-```
-
 查询工作项时，CLI 会自动补当前用户、当前项目、当前迭代过滤条件。用户明确要求“所有人”“全部项目”“全部迭代”时分别加 `--all-users`、`--all-projects`、`--all-sprints`。
 
 ## 自然语言到命令的映射原则
@@ -306,12 +250,12 @@ node scripts/pingcode.js --method GET --path /v1/project/work_items --param assi
 - 当前用户默认规则：操作创建工作项、查询工作项时，如果用户没有明确说“所有人”或指定其他负责人，默认按当前用户处理。查询工作项时 CLI 会自动加当前用户过滤；创建时在 JSON 里加 `"assignee_id":"@me"`。
 - 当前项目/迭代默认规则：查询工作项时默认加缓存的当前项目和当前迭代。用户明确说“全部项目”或“全部迭代”时，用 `--all-projects` 或 `--all-sprints` 跳过对应过滤。
 - “所有人”：这是当前用户默认规则的 opt-out。用户明确说“所有人”时，查询用 `--all-users`，创建时不要加 `assignee_id=@me`，但仍应尽量用项目、迭代、类型、状态等条件缩小范围。
-- “我”的身份：因为使用企业令牌，不能从 token 推断具体用户。优先读取工作区缓存、`PINGCODE_USER_ID` / `PINGCODE_USER_NAME`，或使用 `--user-id` / `--user-name`；如果没有配置，就先运行 `--cache-users` 并让用户选择。
+- “我”的身份：因为使用企业令牌，不能从 token 推断具体用户。优先读取工作区缓存、`PINGCODE_USER_ID` / `PINGCODE_USER_NAME`，或使用 `--user-id` / `--user-name`；如果没有配置，就先运行 `pingcode-ctx` 并让用户选择。
 - 用户占位符：CLI 支持在参数和 JSON 请求体里使用 `@me` 表示当前用户 ID，使用 `@me_name` 表示当前用户名称，使用 `@user:<名称或ID>` 从缓存用户列表解析 ID。如果对应配置不存在，脚本会输出配置引导并退出。
 - “未完成”：查询工作项后，由模型把 `state.type` 为 `pending`、`in_progress` 的项视为未完成，除非用户另有定义。
-- “未解决缺陷”：调用 `/v1/project/work_items`，传 `type_ids=bug`、负责人过滤和 `--compact`，例如 `--param assignee_ids=@me`，再按状态过滤未完成项。
-- “在某故事下新增工作项”：先调用 `/v1/project/work_items` 按编号或关键词找到父故事，再调用 `POST /v1/project/work_items` 并传 `parent_id`。
-- 状态更新：优先用缓存状态字典；没有缓存或怀疑过期时运行 `--cache-states`，它会先缓存当前项目的工作项类型字典，再缓存每个类型的状态；只刷新单个类型时传 `--work-item-type-id TYPE_ID`。不要猜 `state_id`。
+- “未解决缺陷”：调用 `work-item list --type bug --assignee @me --compact`。
+- “在某故事下新增工作项”：先用 `work-item show <identifier>` 按编号或关键词找到父故事，再用 `work-item create --title "..." --type task --parent <identifier>`。
+- 状态更新：优先用缓存状态字典；没有缓存或怀疑过期时先运行 `config init` 刷新上下文。不要猜 `state_id`。
 
 ## 参考资料
 

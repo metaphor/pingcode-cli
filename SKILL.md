@@ -78,38 +78,20 @@ node scripts/pingcode.js work-item update SCR-123 --state 已完成
 node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
 ```
 
-### Legacy Mode (for uncovered endpoints)
-
-For API endpoints not yet covered by subcommands, use the original `--method/--path` style:
-
-```bash
-node scripts/pingcode.js --method GET --path /v1/project/projects --param page_size=20
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@me --param project_ids=PROJECT_ID --param page_size=20 --compact
-node scripts/pingcode.js --method GET --path /v1/project/work_item/types --param project_id=PROJECT_ID
-node scripts/pingcode.js --method GET --path /v1/project/work_item/states --param project_id=PROJECT_ID --param work_item_type_id=TYPE_ID
-node scripts/pingcode.js --method POST --path /v1/project/work_items --data '{"project_id":"PROJECT_ID","type_id":"story","title":"New story","assignee_id":"@me"}'
-node scripts/pingcode.js --method POST --path /v1/project/work_items --data '{"project_id":"PROJECT_ID","type_id":"task","parent_id":"STORY_ID","title":"New task","assignee_id":"@me"}'
-node scripts/pingcode.js --method PATCH --path /v1/project/work_items/WORK_ITEM_ID --data '{"state_id":"STATE_ID"}'
-node scripts/pingcode.js --method GET --path /v1/ship/products --param page_size=20
-node scripts/pingcode.js --method POST --path /v1/ship/ideas --data '{"product_id":"PRODUCT_ID","title":"New idea"}'
-```
-
-All output is JSON by default so agents can parse it reliably.
-
 ## Workflow
 
 1. Read [`references/workflows.md`](references/workflows.md) before mutating PingCode data.
 2. Resolve names to IDs using list commands, with `--compact` by default for list/query output. PingCode write APIs usually require IDs.
 3. Execute write commands directly once the target project/product/work item and state IDs are unambiguous.
 4. Use `--dry-run` only when the target or payload is unusually risky and the user wants a manual preview.
-5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item update`). For any endpoint not covered by a subcommand, use the single `scripts/pingcode.js --method/--path` command and consult [`references/api.md`](references/api.md).
+5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item update`). Consult [`references/api.md`](references/api.md) for API reference.
 
 ## Safety Rules
 
 * Never guess `state_id`, `type_id`, `priority_id`, `project_id`, or `product_id`.
 * Never infer a human user from an enterprise token. For work item create/query requests, default to `@me` only when a current user is configured; if the user explicitly asks for "所有人" / all users, do not add `assignee_ids=@me` or `assignee_id=@me`.
-* For status changes, use cached states when present; otherwise fetch valid states for the work item project and type before patching. Refresh stale type/state dictionaries with `--cache-states`; pass `--work-item-type-id TYPE_ID` only when refreshing one type.
-* For work item creates/updates that need `priority_id` or custom `properties`, refresh dictionaries with `--cache-work-item-priorities` and `--cache-work-item-properties`.
+* For status changes, use cached states when present; otherwise fetch valid states for the work item project and type before patching.
+* For work item creates/updates that need `priority_id` or custom `properties`, refresh dictionaries with `config init`.
 * Prefer `--compact` for list/query responses before showing data to the model. Do not pipe raw PingCode JSON through `jq` only to reduce length; let `scripts/pingcode.js` keep useful business fields and drop bulky raw fields.
 * Treat HTTP 429 as rate limit. Wait for `x-pc-retry-after` seconds before retrying.
 * Prefer the narrowest query possible. Pagination defaults to 30 and maxes at 100.
