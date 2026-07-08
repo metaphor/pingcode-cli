@@ -1082,3 +1082,79 @@ testInCleanTmp('work-item update resolves all-cached state for flat id update', 
   assert.strictEqual(result.json.priority_id, 'high');
   assert.strictEqual(result.json.assignee_id, 'user-alice');
 });
+
+testInCleanEnv('module help lists all subcommands', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('Subcommands:'));
+  assert.ok(output.includes('list [options]'));
+  assert.ok(output.includes('create --title TITLE'));
+  assert.ok(output.includes('show <id|identifier>'));
+  assert.ok(output.includes('update <id|identifier>'));
+});
+
+testInCleanEnv('list --help shows list-specific usage', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['list', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item list [options]'));
+  assert.ok(output.includes('--all-users'));
+  assert.ok(output.includes('--state <name|id>'));
+  assert.ok(!output.includes('create --title TITLE'));
+});
+
+testInCleanEnv('create --help shows create-specific usage', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['create', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item create --title TITLE [options]'));
+  assert.ok(output.includes('--title TITLE'));
+  assert.ok(output.includes('--parent <id|identifier>'));
+  assert.ok(!output.includes('list [options]'));
+});
+
+testInCleanEnv('show --help shows show-specific usage', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['show', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item show <id|identifier>'));
+  assert.ok(!output.includes('list [options]'));
+  assert.ok(!output.includes('create --title TITLE'));
+});
+
+testInCleanEnv('update --help shows update-specific usage', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['update', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item update <id|identifier> --state <name|id> [options]'));
+  assert.ok(output.includes('--state <name|id>'));
+  assert.ok(output.includes('--priority <name|id>'));
+  assert.ok(!output.includes('list [options]'));
+  assert.ok(!output.includes('create --title TITLE'));
+});

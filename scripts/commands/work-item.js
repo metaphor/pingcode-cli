@@ -44,8 +44,8 @@ function parseGlobalOptions(tokens) {
   for (let i = 0; i < tokens.length; i++) {
     const arg = tokens[i];
     if (arg === '--help' || arg === '-h') {
-      printHelp();
-      process.exit(0);
+      remaining.push(arg);
+      continue;
     }
     if (GLOBAL_BOOLEAN_FLAGS.has(arg)) {
       const key = arg.replace(/^--/, '').replace(/-/g, '_');
@@ -684,6 +684,68 @@ function printHelp() {
   ].join('\n'));
 }
 
+function printSubcommandHelp(subcommand) {
+  switch (subcommand) {
+    case 'list':
+      console.log([
+        'Usage: node scripts/pingcode.js work-item list [options]',
+        '',
+        'List work items from the current project/sprint/assignee.',
+        '',
+        'Options:',
+        '  --all-users               Show work items from all users (skip current-user filter)',
+        '  --all-projects            Show work items from all projects (skip current-project filter)',
+        '  --all-sprints             Show work items from all sprints (skip current-sprint filter)',
+        '  --state <name|id>         Filter by state',
+        '  --type <name|id>          Filter by type',
+        '  --assignee <name|id|@me>  Filter by assignee',
+        '  --project <id|name>       Filter by project',
+        '  --sprint <id|name>        Filter by sprint',
+        '  --limit N                 Max results per page',
+      ].join('\n'));
+      break;
+    case 'create':
+      console.log([
+        'Usage: node scripts/pingcode.js work-item create --title TITLE [options]',
+        '',
+        'Create a new work item.',
+        '',
+        'Options:',
+        '  --title TITLE             Title (required)',
+        '  --type <name|id>          Work item type',
+        '  --project <id|name>       Target project',
+        '  --sprint <id|name>        Target sprint',
+        '  --assignee <name|id|@me>  Assignee (defaults to @me)',
+        '  --state <name|id>         Initial state',
+        '  --priority <name|id>      Priority',
+        '  --description TEXT        Description text',
+        '  --parent <id|identifier>  Parent work item',
+      ].join('\n'));
+      break;
+    case 'show':
+      console.log([
+        'Usage: node scripts/pingcode.js work-item show <id|identifier>',
+        '',
+        'Show a single work item by id or identifier.',
+      ].join('\n'));
+      break;
+    case 'update':
+      console.log([
+        'Usage: node scripts/pingcode.js work-item update <id|identifier> --state <name|id> [options]',
+        '',
+        'Update a work item.',
+        '',
+        'Options:',
+        '  --state <name|id>         New state (required)',
+        '  --priority <name|id>      New priority',
+        '  --assignee <name|id|@me>  New assignee',
+      ].join('\n'));
+      break;
+    default:
+      printHelp();
+  }
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────
 
 async function run(argv) {
@@ -696,6 +758,11 @@ async function run(argv) {
 
   const subcommand = tokens[0];
   const remaining = tokens.slice(1);
+
+  if (remaining.includes('--help') || remaining.includes('-h')) {
+    printSubcommandHelp(subcommand);
+    return;
+  }
 
   // Parse global options from remaining tokens
   const { opts, remaining: subArgs } = parseGlobalOptions(remaining);
