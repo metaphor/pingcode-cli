@@ -18,26 +18,11 @@ require('./commands/work-item');
 
 const shared = require('./commands/shared');
 
-// ── Legaacy entry flags ──────────────────────────────────────────────
-// These flags signal "the user intends to use the old --method/--path
-// interface or a cache/set-current helper command". When the first
-// argument matches one of these, the dispatcher delegates to the legacy
-// main() and the original parser/behaviour is preserved unchanged.
-const LEGACY_ENTRY_FLAGS = new Set([
-  '--method', '--path',
-  '--cache-users', '--cache-projects', '--cache-sprints',
-  '--cache-work-item-types', '--cache-work-item-priorities',
-  '--cache-work-item-properties',
-  '--cache-states', '--cache-idea-states', '--cache-idea-priorities',
-  '--context-options',
-  '--set-current-user', '--set-current-project', '--set-current-sprint',
-]);
-
 // ── Dispatcher ───────────────────────────────────────────────────────
 async function dispatcherMain(argv) {
   const tokens = argv || process.argv.slice(2);
 
-  // (1) No args, or --help / -h as the first positional arg → new help.
+  // (1) No args, or --help / -h as the first positional arg → help.
   if (tokens.length === 0 || tokens[0] === '--help' || tokens[0] === '-h') {
     shared.printModulesHelp();
     process.exit(0);
@@ -57,24 +42,7 @@ async function dispatcherMain(argv) {
     return;
   }
 
-  // (3) Legacy entry flag → delegate to the original main() unchanged.
-  if (LEGACY_ENTRY_FLAGS.has(firstArg)) {
-    await core.main(argv);
-    return;
-  }
-
-  // (4) Any other --flag in the first position (global options before a
-  //     subcommand are only supported in legacy mode).
-  if (firstArg.startsWith('--')) {
-    console.error(
-      'error: Unknown module. ' +
-      'Options before the subcommand are only supported in legacy mode. ' +
-      'Did you mean to use --method/--path?',
-    );
-    process.exit(1);
-  }
-
-  // (5) Unknown positional argument.
+  // (3) Unknown argument.
   console.error(`error: Unknown module: ${firstArg}`);
   process.exit(1);
 }

@@ -35,9 +35,6 @@ function printModulesHelp() {
     const padded = m.name.padEnd(maxLen + 2);
     lines.push(`  ${padded}${m.description}`);
   }
-  lines.push('');
-  lines.push('Legacy: node scripts/pingcode.js --method METHOD --path PATH [options]');
-  lines.push('Options before the subcommand are only supported in legacy mode.');
   console.log(lines.join('\n'));
 }
 
