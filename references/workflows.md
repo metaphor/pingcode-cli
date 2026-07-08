@@ -1,15 +1,26 @@
 # PingCode Workflows
 
+## Command Styles
+
+The CLI supports two command styles. Prefer the **subcommand** style for common operations; fall back to the **legacy** `--method/--path` style for endpoints not yet covered by subcommands.
+
+| Style | Example |
+|---|---|
+| Subcommand (preferred) | `node scripts/pingcode.js work-item list --assignee @me --compact` |
+| Legacy (fallback) | `node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@me --compact` |
+
+Most workflows below show both styles. The subcommand style is easier for AI agents to construct and includes built-in validation.
+
 ## Natural Language Mapping
 
 | User says | Use |
-|---|---|---|
-| "查看当前没完成的任务" | Unless the user says "所有人", require the configured current user and list work items filtered by `assignee_ids=@me`, then interpret non-completed states |
-| "查看所有人当前没完成的任务" | Do not add the current-user assignee filter; narrow by project/type/status if available |
-| "查看我的未解决缺陷" | Require the configured current user, list work items filtered by `assignee_ids=@me` and `type_ids=bug`, then interpret non-completed states |
-| "帮我在 xxx 故事下新增工作项" | Find the story, then create a child work item with `POST /v1/project/work_items`, `parent_id`, and `assignee_id=@me` unless another assignee or "所有人" is explicit |
-| "把某个工作项改成已完成/进行中" | Resolve states, then patch the work item with `state_id` |
-| "创建一个故事/任务/缺陷" | Resolve project/type, then create via `POST /v1/project/work_items` with `assignee_id=@me` unless another assignee or "所有人" is explicit |
+|---|---|
+| "查看当前没完成的任务" | `work-item list --assignee @me --compact`, then filter by non-completed states. Unless the user says "所有人", require the configured current user. |
+| "查看所有人当前没完成的任务" | `work-item list --all-users --compact`, then filter by non-completed states. Do not add the current-user assignee filter. |
+| "查看我的未解决缺陷" | `work-item list --type bug --assignee @me --compact`, then filter by non-completed states. |
+| "帮我在 xxx 故事下新增工作项" | Find the story, then `work-item create --title "..." --type task --parent STORY_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
+| "把某个工作项改成已完成/进行中" | `work-item update <id|identifier> --state 已完成`. Resolve states from cache first. |
+| "创建一个故事/任务/缺陷" | `work-item create --title "..." --type story|task|bug --project PROJECT_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
 
 This skill uses `client_credentials`, so the token is an enterprise token and does not represent a specific human user. For work item create/query requests, default to the configured current user unless the user explicitly says "所有人" / all users or names another assignee. Use `PINGCODE_USER_ID` / `PINGCODE_USER_NAME`, the matching CLI flags, or the workspace cache if present. If none is set, cache users first and ask the user to choose their PingCode user before filtering or assigning.
 
@@ -110,31 +121,63 @@ If the user explicitly asks for all users, all projects, or all iterations, pass
 
 ## View My Current Unfinished Tasks
 
+**Subcommand (preferred):**
+
 ```bash
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param page_size=100 --compact
+node scripts/pingcode.js work-item list --assignee @me --compact
+```
+
+Filter by type, state, etc.:
+
+```bash
+node scripts/pingcode.js work-item list --assignee @me --type task --state 进行中 --compact
+```
+
+**Legacy fallback:**
+
+```bash
+node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@me --param page_size=100 --compact
 ```
 
 Use this same current-user filter for generic work item queries unless the user explicitly asks for "所有人" / all users.
-
-Optional filters:
-
-```bash
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param type_ids=story,task --param page_size=100 --compact
-```
 
 The model should treat state types `pending` and `in_progress` as unfinished unless the user defines a different rule.
 
 ## View My Unresolved Defects
 
+**Subcommand (preferred):**
+
 ```bash
-node scripts/pingcode.js --method GET --path /v1/project/work_items --param type_ids=bug --param page_size=100 --compact
+node scripts/pingcode.js work-item list --type bug --assignee @me --compact
+```
+
+**Legacy fallback:**
+
+```bash
+node scripts/pingcode.js --method GET --path /v1/project/work_items --param type_ids=bug --param assignee_ids=@me --param page_size=100 --compact
 ```
 
 This returns assigned bugs whose state type is `pending` or `in_progress`.
 
 ## Create a Work Item Under a Story
 
-1. Find the parent story by identifier or keywords:
+**Subcommand (preferred):**
+
+1. Find the parent story by identifier:
+
+   ```bash
+   node scripts/pingcode.js work-item show MND-123 --compact
+   ```
+
+2. Create the child work item:
+
+   ```bash
+   node scripts/pingcode.js work-item create --title "Child task" --type task --parent MND-123
+   ```
+
+**Legacy fallback:**
+
+1. Find the parent story:
 
    ```bash
    node scripts/pingcode.js --method GET --path /v1/project/work_items --param identifier=MND-123 --compact
@@ -147,9 +190,31 @@ This returns assigned bugs whose state type is `pending` or `in_progress`.
    node scripts/pingcode.js --method POST --path /v1/project/work_items --data '{"project_id":"PROJECT_ID","type_id":"task","parent_id":"STORY_ID","title":"Child task","assignee_id":"@me"}'
    ```
 
-4. Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
+Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
 
 ## Update a Work Item Status
+
+**Subcommand (preferred):**
+
+Update by identifier (resolves to id automatically):
+
+```bash
+node scripts/pingcode.js work-item update SCR-123 --state 已完成
+```
+
+Or by id:
+
+```bash
+node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
+```
+
+Use `--dry-run` to preview before executing:
+
+```bash
+node scripts/pingcode.js work-item update SCR-123 --state 已完成 --dry-run
+```
+
+**Legacy fallback:**
 
 1. Locate the work item:
 
@@ -175,6 +240,17 @@ This returns assigned bugs whose state type is `pending` or `in_progress`.
 
 ## Create a Work Item or Story
 
+**Subcommand (preferred):**
+
+```bash
+node scripts/pingcode.js work-item create --title "New story" --type story --project PROJECT_ID
+node scripts/pingcode.js work-item create --title "Bug fix" --type bug --assignee @me --priority high
+```
+
+The subcommand resolves names to IDs from the workspace cache automatically. Add `--dry-run` to preview the request.
+
+**Legacy fallback:**
+
 1. Resolve the project:
 
    ```bash
@@ -194,7 +270,7 @@ This returns assigned bugs whose state type is `pending` or `in_progress`.
    node scripts/pingcode.js --method POST --path /v1/project/work_items --data '{"project_id":"PROJECT_ID","type_id":"story","title":"Title","assignee_id":"@me"}'
    ```
 
-5. Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
+Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
 
 ## Create a Product Idea
 

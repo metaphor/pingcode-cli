@@ -20,12 +20,14 @@
     "references/workflows.md",
     "scripts/pingcode.js",
     "scripts/pingcode-ctx.js",
+    "scripts/core.js",
+    "scripts/commands/",
     "bin/install.js",
     "bin/pingcode-ctx.js",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test tests/test_pingcode.js tests/test_install.js",
+    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_config.js tests/test_work_item.js",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {
