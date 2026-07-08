@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+*.tgz
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+.npmrc
+
+# PingCode runtime artifacts
+.pingcode/
+pingcode-token*.json
+token.json
+
+# Local skill install targets
+.agents/
+.codex/
+.claude/
+.codex/skills/
+.claude/skills/
+
+# OpenCode / agent runtime state
+.omo/
+
+# Workspace cache
+.pingcode-skill/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

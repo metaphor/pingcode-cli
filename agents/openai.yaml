@@ -1,0 +1,5 @@
+interface:
+  display_name: "PingCode"
+  short_description: "Operate PingCode projects and work items"
+  brand_color: "#2563EB"
+  default_prompt: "Use $pingcode to update a PingCode work item or create a product idea."
