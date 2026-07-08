@@ -90,7 +90,83 @@ npx pingcode-cli@latest --target "$HOME/.codex/skills/pingcode" --force
 - 更新工作项状态
 - 在故事下创建子工作项（通过 `parent_id`）
 - 查询、创建、更新产品和产品需求
-- 通过统一 `scripts/pingcode.js --method/--path` 调用 PingCode API
+- 通过子命令（`config *`, `work-item *`）或 `--method/--path` 调用 PingCode API
+
+## 子命令
+
+PingCode CLI 支持结构化子命令和传统 `--method/--path` 两种调用方式。
+
+### 配置管理 (`config`)
+
+| 子命令 | 说明 | 示例 |
+|---|---|---|
+| `config init` | 交互式初始化工作区上下文 | `node scripts/pingcode.js config init` |
+| `config list` | 显示当前偏好和字典摘要 | `node scripts/pingcode.js config list` |
+| `config set-current-user <id>` | 设置当前用户 | `node scripts/pingcode.js config set-current-user @me` |
+| `config set-current-project <id>` | 设置当前项目 | `node scripts/pingcode.js config set-current-project PROJECT_ID` |
+| `config set-current-sprint <id>` | 设置当前迭代 | `node scripts/pingcode.js config set-current-sprint SPRINT_ID` |
+
+```bash
+# 查看当前工作区配置
+node scripts/pingcode.js config list
+
+# 交互式初始化
+node scripts/pingcode.js config init
+
+# 设置当前项目
+node scripts/pingcode.js config set-current-project my-project
+```
+
+### 工作项管理 (`work-item`)
+
+| 子命令 | 说明 | 示例 |
+|---|---|---|
+| `work-item list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `node scripts/pingcode.js work-item list --assignee @me --state 进行中` |
+| `work-item create` | 创建工作项 | `node scripts/pingcode.js work-item create --title "新任务" --type task` |
+| `work-item show <id>` | 查看单个工作项 | `node scripts/pingcode.js work-item show SCR-123` |
+| `work-item update <id>` | 更新工作项 | `node scripts/pingcode.js work-item update SCR-123 --state 已完成` |
+
+```bash
+# 查看当前用户的未完成任务
+node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
+
+# 按类型查询
+node scripts/pingcode.js work-item list --type bug --assignee @me --compact
+
+# 创建工作项（默认负责人为当前用户）
+node scripts/pingcode.js work-item create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
+
+# 通过编号查看工作项
+node scripts/pingcode.js work-item show SCR-123
+
+# 通过编号更新状态（支持 identifier 或 id）
+node scripts/pingcode.js work-item update SCR-123 --state 已完成
+
+# 通过 id 更新状态
+node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority 高
+
+# 试运行（预览 API 请求，不发送）
+node scripts/pingcode.js work-item create --title "test" --type task --dry-run
+node scripts/pingcode.js work-item update SCR-123 --state 已完成 --dry-run
+```
+
+### 传统方式 (Legacy)
+
+原有的 `--method/--path` 调用方式继续支持，适用于未被新子命令覆盖的 API 操作：
+
+```bash
+# 查询项目列表
+node scripts/pingcode.js --method GET --path /v1/project/projects --param page_size=20
+
+# 通过查询参数过滤工作项
+node scripts/pingcode.js --method GET --path /v1/project/work_items --param assignee_ids=@me --param page_size=20 --compact
+
+# 创建产品需求
+node scripts/pingcode.js --method POST --path /v1/ship/ideas --data '{"product_id":"PRODUCT_ID","title":"New idea"}'
+
+# 更新工作项（传统 PATCH）
+node scripts/pingcode.js --method PATCH --path /v1/project/work_items/WORK_ITEM_ID --data '{"state_id":"STATE_ID"}'
+```
 
 ## 自然语言使用方式
 

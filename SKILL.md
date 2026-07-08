@@ -48,7 +48,39 @@ absolute script path, such as `node ~/.codex/skills/pingcode/scripts/pingcode.js
 prefer that installed absolute command because sandbox/network approvals are matched by command
 prefix; a stable installed path is more likely to reuse a prior approval than a relative repo path.
 
-Common commands:
+### Subcommand Mode (Preferred)
+
+Prefer the structured subcommands for common work item and config operations:
+
+```bash
+# Config — workspace management
+node scripts/pingcode.js config list
+node scripts/pingcode.js config init
+node scripts/pingcode.js config set-current-project PROJECT_ID
+node scripts/pingcode.js config set-current-sprint SPRINT_ID
+node scripts/pingcode.js config set-current-user USER_ID_OR_NAME
+
+# Work items — list
+node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
+node scripts/pingcode.js work-item list --type bug --assignee @me --compact
+node scripts/pingcode.js work-item list --assignee @me --all-sprints --compact
+
+# Work items — create
+node scripts/pingcode.js work-item create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
+node scripts/pingcode.js work-item create --title "Bug fix" --type bug --assignee @me --priority high
+
+# Work items — show
+node scripts/pingcode.js work-item show SCR-123
+node scripts/pingcode.js work-item show WI-AbCdEf
+
+# Work items — update (by identifier or id)
+node scripts/pingcode.js work-item update SCR-123 --state 已完成
+node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
+```
+
+### Legacy Mode (for uncovered endpoints)
+
+For API endpoints not yet covered by subcommands, use the original `--method/--path` style:
 
 ```bash
 node scripts/pingcode.js --method GET --path /v1/project/projects --param page_size=20
@@ -70,7 +102,7 @@ All output is JSON by default so agents can parse it reliably.
 2. Resolve names to IDs using list commands, with `--compact` by default for list/query output. PingCode write APIs usually require IDs.
 3. Execute write commands directly once the target project/product/work item and state IDs are unambiguous.
 4. Use `--dry-run` only when the target or payload is unusually risky and the user wants a manual preview.
-5. For any endpoint, use the single `scripts/pingcode.js --method/--path` command and consult [`references/api.md`](references/api.md).
+5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item update`). For any endpoint not covered by a subcommand, use the single `scripts/pingcode.js --method/--path` command and consult [`references/api.md`](references/api.md).
 
 ## Safety Rules
 
