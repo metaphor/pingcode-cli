@@ -896,5 +896,160 @@ testInCleanEnv('main prints help', async () => {
     cwd: REPO_ROOT,
   });
   assert.strictEqual(result.status, 0);
+  // After the subcommand dispatcher refactor, --help prints the new module list.
+  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('work-item'));
+});
+
+testInCleanEnv('baseline legacy dry-run produces correct JSON after refactor', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
+    '--method', 'GET',
+    '--path', '/v1/project/projects',
+    '--param', 'page_size=1',
+    '--dry-run',
+  ], {
+    encoding: 'utf8',
+    cwd: REPO_ROOT,
+  });
+  assert.strictEqual(result.status, 0);
+  const output = JSON.parse(result.stdout);
+  assert.strictEqual(output.dry_run, true);
+  assert.strictEqual(output.method, 'GET');
+  assert.strictEqual(output.path, '/v1/project/projects');
+  assert.strictEqual(output.params.page_size, '1');
+  assert.strictEqual(output.json, null);
+  assert.strictEqual(output.url, 'https://open.pingcode.com/v1/project/projects?page_size=1');
+});
+
+testInCleanEnv('dispatcher prints module list with --help', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '--help',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('work-item'));
+  assert.ok(result.stdout.includes('Usage:'));
+  assert.ok(result.stdout.includes('Legacy:'));
+});
+
+testInCleanEnv('dispatcher prints module list with -h', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '-h',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('work-item'));
+});
+
+testInCleanEnv('dispatcher prints work-item help', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'work-item', '--help',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('work-item'));
+  assert.ok(result.stdout.includes('list'));
+  assert.ok(result.stdout.includes('create'));
+  assert.ok(result.stdout.includes('show'));
+  assert.ok(result.stdout.includes('update'));
+});
+
+testInCleanEnv('dispatcher prints config help', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'config', '--help',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('init'));
+  assert.ok(result.stdout.includes('set-current-user'));
+  assert.ok(result.stdout.includes('set-current-project'));
+  assert.ok(result.stdout.includes('set-current-sprint'));
+  assert.ok(result.stdout.includes('list'));
+});
+
+testInCleanEnv('dispatcher unknown module exits 1', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'unknown-module',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 1);
+  assert.ok(result.stderr.includes('Unknown module'));
+});
+
+testInCleanEnv('dispatcher legacy path still works after refactor', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
+    '--method', 'GET',
+    '--path', '/v1/project/projects',
+    '--param', 'page_size=1',
+    '--dry-run',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  const output = JSON.parse(result.stdout);
+  assert.strictEqual(output.dry_run, true);
+  assert.strictEqual(output.method, 'GET');
+  assert.strictEqual(output.path, '/v1/project/projects');
+  assert.strictEqual(output.params.page_size, '1');
+});
+
+testInCleanEnv('dispatcher legacy --method --help prints legacy usage', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
+    '--method', 'GET',
+    '--path', '/v1/project/projects',
+    '--help',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
   assert.ok(result.stdout.includes('Single-command PingCode REST API caller'));
+  assert.ok(result.stdout.includes('--method'));
+  assert.ok(result.stdout.includes('--path'));
+});
+
+testInCleanEnv('dispatcher global flag before module is rejected', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
+    '--base-url', 'https://open.pingcode.com',
+    'work-item', 'list', '--dry-run',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 1);
+  assert.ok(
+    result.stderr.includes('Unknown module') ||
+    result.stderr.includes('Options before'),
+  );
+});
+
+testInCleanEnv('dispatcher no args prints help', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('work-item'));
+});
+
+testInCleanEnv('dispatcher bad flag produces error', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '--bad-flag',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 1);
+  assert.ok(result.stderr.length > 0);
+});
+
+testInCleanEnv('dispatcher work-item subcommand with bad flag exits with error', async () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'work-item', '--bad-flag',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 1);
+  assert.ok(result.stderr.includes('Unknown work-item subcommand'));
 });
