@@ -77,8 +77,6 @@ function emptyWorkspaceCache() {
     work_item_states: {},
     work_item_priorities: {},
     work_item_properties: {},
-    idea_states: {},
-    idea_priorities: {},
   };
 }
 
@@ -154,12 +152,6 @@ function loadWorkspaceCache(cachePath) {
   }
   if (!cache.work_item_properties || typeof cache.work_item_properties !== 'object') {
     cache.work_item_properties = {};
-  }
-  if (!cache.idea_states || typeof cache.idea_states !== 'object') {
-    cache.idea_states = {};
-  }
-  if (!cache.idea_priorities || typeof cache.idea_priorities !== 'object') {
-    cache.idea_priorities = {};
   }
   return cache;
 }
@@ -599,22 +591,6 @@ function cachedResponse(method, rawPath, params, workspaceCache, baseUrl) {
       if (cached && typeof cached === 'object') return cached;
     }
   }
-  if (normalized === '/v1/ship/idea/states') {
-    const productIdValue = params.product_id;
-    if (typeof productIdValue === 'string') {
-      const ideaStates = workspaceCache.idea_states || {};
-      const cached = ideaStates[productIdValue];
-      if (cached && typeof cached === 'object') return cached;
-    }
-  }
-  if (normalized === '/v1/ship/idea/priorities') {
-    const productIdValue = params.product_id;
-    if (typeof productIdValue === 'string') {
-      const ideaPriorities = workspaceCache.idea_priorities || {};
-      const cached = ideaPriorities[productIdValue];
-      if (cached && typeof cached === 'object') return cached;
-    }
-  }
   return null;
 }
 
@@ -674,22 +650,6 @@ function updateWorkspaceCacheForResponse(method, rawPath, params, response, work
     if (typeof projectIdValue === 'string' && typeof typeIdValue === 'string') {
       if (!workspaceCache.work_item_properties) workspaceCache.work_item_properties = {};
       workspaceCache.work_item_properties[stateCacheKey(projectIdValue, typeIdValue)] = response;
-      return true;
-    }
-  }
-  if (normalized === '/v1/ship/idea/states') {
-    const productIdValue = params.product_id;
-    if (typeof productIdValue === 'string') {
-      if (!workspaceCache.idea_states) workspaceCache.idea_states = {};
-      workspaceCache.idea_states[productIdValue] = response;
-      return true;
-    }
-  }
-  if (normalized === '/v1/ship/idea/priorities') {
-    const productIdValue = params.product_id;
-    if (typeof productIdValue === 'string') {
-      if (!workspaceCache.idea_priorities) workspaceCache.idea_priorities = {};
-      workspaceCache.idea_priorities[productIdValue] = response;
       return true;
     }
   }
@@ -854,10 +814,6 @@ class PingCodeClient {
   }
 }
 
-async function listCommand(client, rawPath, params = null) {
-  return await client.request('GET', rawPath, params || {});
-}
-
 async function refreshCommand(client, rawPath, params = null) {
   return await client.request('GET', rawPath, params || {}, null, { use_workspace_cache: false });
 }
@@ -883,46 +839,8 @@ async function cacheWorkItemStates(client, projectId, workItemTypeId) {
   return await refreshCommand(client, '/v1/project/work_item/states', { project_id: projectId, work_item_type_id: workItemTypeId });
 }
 
-async function cacheAllWorkItemStates(client, projectId) {
-  const typesPayload = await cacheWorkItemTypes(client, projectId);
-  const states = {};
-  for (const item of pageValues(typesPayload)) {
-    const typeId = item.id;
-    if (typeof typeId !== 'string' || !typeId) continue;
-    states[typeId] = await cacheWorkItemStates(client, projectId, typeId);
-  }
-  return {
-    project_id: projectId,
-    work_item_types: typesPayload,
-    work_item_states: states,
-  };
-}
-
 async function cacheWorkItemProperties(client, projectId, workItemTypeId) {
   return await refreshCommand(client, '/v1/project/work_item/properties', { project_id: projectId, work_item_type_id: workItemTypeId, page_size: 100 });
-}
-
-async function cacheAllWorkItemProperties(client, projectId) {
-  const typesPayload = await cacheWorkItemTypes(client, projectId);
-  const properties = {};
-  for (const item of pageValues(typesPayload)) {
-    const typeId = item.id;
-    if (typeof typeId !== 'string' || !typeId) continue;
-    properties[typeId] = await cacheWorkItemProperties(client, projectId, typeId);
-  }
-  return {
-    project_id: projectId,
-    work_item_types: typesPayload,
-    work_item_properties: properties,
-  };
-}
-
-async function cacheIdeaStates(client, productId) {
-  return await refreshCommand(client, '/v1/ship/idea/states', { product_id: productId, page_size: 100 });
-}
-
-async function cacheIdeaPriorities(client, productId) {
-  return await refreshCommand(client, '/v1/ship/idea/priorities', { product_id: productId, page_size: 100 });
 }
 
 async function cacheUsers(client, projectId = null) {
@@ -939,25 +857,6 @@ async function cacheUsers(client, projectId = null) {
       '--project-id so the CLI can cache project members.'
     );
   }
-}
-
-async function contextOptions(client, kind, projectId = null) {
-  let payload;
-  if (kind === 'project') {
-    payload = await cacheProjects(client);
-  } else if (kind === 'sprint') {
-    const selectedProjectId = projectId || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof selectedProjectId !== 'string' || !selectedProjectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before listing sprint options');
-    }
-    payload = await cacheSprints(client, selectedProjectId);
-  } else if (kind === 'user') {
-    payload = await cacheUsers(client, projectId);
-  } else {
-    throw new PingCodeError(`Unsupported context option kind: ${kind}`);
-  }
-  const [options, total] = selectionOptions(payload);
-  return { kind, total, options };
 }
 
 async function setCurrentUser(client, userId) {
@@ -1138,350 +1037,6 @@ function sortKeys(value) {
   return value;
 }
 
-function buildParser() {
-  return {
-    parseArgs(argv) {
-      const args = {
-        base_url: process.env.PINGCODE_BASE_URL || DEFAULT_BASE_URL,
-        client_id: process.env.PINGCODE_CLIENT_ID || null,
-        client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
-        token: process.env.PINGCODE_ACCESS_TOKEN || null,
-        user_id: process.env.PINGCODE_USER_ID || null,
-        user_name: process.env.PINGCODE_USER_NAME || null,
-        no_token_cache: false,
-        workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || DEFAULT_WORKSPACE_CACHE,
-        no_workspace_cache: false,
-        no_cache_read: false,
-        cache_users: false,
-        cache_projects: false,
-        cache_sprints: false,
-        cache_work_item_types: false,
-        cache_work_item_priorities: false,
-        cache_work_item_properties: false,
-        cache_states: false,
-        cache_idea_states: false,
-        cache_idea_priorities: false,
-        context_options: null,
-        set_current_user: null,
-        set_current_project: null,
-        set_current_sprint: null,
-        project_id: null,
-        product_id: null,
-        work_item_type_id: null,
-        all_users: false,
-        all_projects: false,
-        all_sprints: false,
-        method: 'GET',
-        path: null,
-        param: [],
-        data: null,
-        dry_run: false,
-        compact: false,
-      };
-
-      const booleanFlags = new Set([
-        '--no-token-cache', '--no-workspace-cache', '--no-cache-read',
-        '--cache-users', '--cache-projects', '--cache-sprints',
-        '--cache-work-item-types', '--cache-work-item-priorities', '--cache-work-item-properties',
-        '--cache-states', '--cache-idea-states', '--cache-idea-priorities',
-        '--all-users', '--all-projects', '--all-sprints', '--dry-run', '--compact',
-      ]);
-      const stringFlags = {
-        '--base-url': 'base_url',
-        '--client-id': 'client_id',
-        '--client-secret': 'client_secret',
-        '--token': 'token',
-        '--user-id': 'user_id',
-        '--user-name': 'user_name',
-        '--workspace-cache': 'workspace_cache',
-        '--context-options': 'context_options',
-        '--set-current-user': 'set_current_user',
-        '--set-current-project': 'set_current_project',
-        '--set-current-sprint': 'set_current_sprint',
-        '--project-id': 'project_id',
-        '--product-id': 'product_id',
-        '--work-item-type-id': 'work_item_type_id',
-        '--method': 'method',
-        '--path': 'path',
-        '--param': 'param',
-        '--data': 'data',
-      };
-      const choiceFlags = {
-        '--context-options': ['project', 'sprint', 'user'],
-      };
-      const repeatableFlags = new Set(['--param']);
-
-      const tokens = argv || process.argv.slice(2);
-      for (let i = 0; i < tokens.length; i++) {
-        const arg = tokens[i];
-        if (arg === '--help' || arg === '-h') {
-          console.log(usageText());
-          process.exit(0);
-        }
-        if (booleanFlags.has(arg)) {
-          const key = arg.replace(/^--/, '').replace(/-/g, '_');
-          args[key] = true;
-          continue;
-        }
-        if (arg.startsWith('--no-') && arg.includes('=')) {
-          // not handled
-        }
-        const eqIndex = arg.indexOf('=');
-        let flag, value, consumedNext = false;
-        if (eqIndex !== -1) {
-          flag = arg.slice(0, eqIndex);
-          value = arg.slice(eqIndex + 1);
-        } else {
-          flag = arg;
-          if (i + 1 < tokens.length) {
-            value = tokens[i + 1];
-            consumedNext = true;
-          } else {
-            throw new PingCodeError(`Flag ${flag} requires a value`);
-          }
-        }
-        if (!(flag in stringFlags)) {
-          throw new PingCodeError(`Unknown option: ${flag}`);
-        }
-        if (choiceFlags[flag] && !choiceFlags[flag].includes(value)) {
-          throw new PingCodeError(`${flag} must be one of: ${choiceFlags[flag].join(', ')}`);
-        }
-        if (flag === '--method') {
-          value = value.toUpperCase();
-          if (!HTTP_METHODS.includes(value)) {
-            throw new PingCodeError(`Unsupported method: ${value}`);
-          }
-        }
-        if (repeatableFlags.has(flag)) {
-          args[stringFlags[flag]].push(value);
-        } else {
-          args[stringFlags[flag]] = value;
-        }
-        if (consumedNext) i += 1;
-      }
-      return args;
-    },
-  };
-}
-
-function usageText() {
-  return [
-    'Single-command PingCode REST API caller',
-    '',
-    'Usage: node scripts/pingcode.js [options]',
-    '',
-    'Options:',
-    '  --base-url URL',
-    '  --client-id ID',
-    '  --client-secret SECRET',
-    '  --token TOKEN',
-    '  --user-id ID',
-    '  --user-name NAME',
-    '  --no-token-cache',
-    '  --workspace-cache PATH',
-    '  --no-workspace-cache',
-    '  --no-cache-read',
-    '  --cache-users',
-    '  --cache-projects',
-    '  --cache-sprints',
-    '  --cache-work-item-types',
-    '  --cache-work-item-priorities',
-    '  --cache-work-item-properties',
-    '  --cache-states',
-    '  --cache-idea-states',
-    '  --cache-idea-priorities',
-    '  --context-options {project|sprint|user}',
-    '  --set-current-user ID',
-    '  --set-current-project ID',
-    '  --set-current-sprint ID',
-    '  --project-id ID',
-    '  --product-id ID',
-    '  --work-item-type-id ID',
-    '  --all-users',
-    '  --all-projects',
-    '  --all-sprints',
-    '  --method {GET|POST|PUT|PATCH|DELETE|OPTIONS}',
-    '  --path PATH',
-    '  --param KEY=VALUE  (repeatable)',
-    '  --data JSON',
-    '  --dry-run',
-    '  --compact',
-    '  -h, --help',
-    '',
-    'Examples:',
-    `  ${CLI_COMMAND} --method GET --path /v1/project/projects --param page_size=20`,
-    `  ${CLI_COMMAND} --method POST --path /v1/project/work_items --data '{"project_id":"...","type_id":"story","title":"..."}'`,
-  ].join('\n');
-}
-
-function clientFromArgs(args) {
-  const tokenCache = args.no_token_cache ? null : (process.env.PINGCODE_TOKEN_CACHE || DEFAULT_TOKEN_CACHE);
-  const workspaceCache = args.no_workspace_cache ? null : args.workspace_cache;
-  return new PingCodeClient({
-    base_url: args.base_url,
-    client_id: args.client_id,
-    client_secret: args.client_secret,
-    token: args.token,
-    token_cache: tokenCache,
-    workspace_cache: workspaceCache,
-  });
-}
-
-async function run(args) {
-  const client = clientFromArgs(args);
-  if (args.context_options) {
-    return await contextOptions(client, args.context_options, args.project_id);
-  }
-  if (args.cache_users) {
-    return await cacheUsers(client, args.project_id);
-  }
-  if (args.cache_projects) {
-    return await cacheProjects(client);
-  }
-  if (args.cache_sprints) {
-    const projectId = args.project_id || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof projectId !== 'string' || !projectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before --cache-sprints');
-    }
-    return await cacheSprints(client, projectId);
-  }
-  if (args.cache_work_item_types) {
-    const projectId = args.project_id || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof projectId !== 'string' || !projectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before --cache-work-item-types');
-    }
-    return await cacheWorkItemTypes(client, projectId);
-  }
-  if (args.cache_work_item_priorities) {
-    const projectId = args.project_id || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof projectId !== 'string' || !projectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before --cache-work-item-priorities');
-    }
-    return await cacheWorkItemPriorities(client, projectId);
-  }
-  if (args.cache_work_item_properties) {
-    const projectId = args.project_id || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof projectId !== 'string' || !projectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before --cache-work-item-properties');
-    }
-    if (!args.work_item_type_id) {
-      return await cacheAllWorkItemProperties(client, projectId);
-    }
-    return await cacheWorkItemProperties(client, projectId, args.work_item_type_id);
-  }
-  if (args.cache_states) {
-    const projectId = args.project_id || (client.workspaceCache.preferences || {}).current_project_id;
-    if (typeof projectId !== 'string' || !projectId) {
-      throw new PingCodeError('Provide --project-id or set a cached current project before --cache-states');
-    }
-    if (!args.work_item_type_id) {
-      return await cacheAllWorkItemStates(client, projectId);
-    }
-    return await cacheWorkItemStates(client, projectId, args.work_item_type_id);
-  }
-  if (args.cache_idea_states) {
-    if (!args.product_id) {
-      throw new PingCodeError('Provide --product-id before --cache-idea-states');
-    }
-    return await cacheIdeaStates(client, args.product_id);
-  }
-  if (args.cache_idea_priorities) {
-    if (!args.product_id) {
-      throw new PingCodeError('Provide --product-id before --cache-idea-priorities');
-    }
-    return await cacheIdeaPriorities(client, args.product_id);
-  }
-  if (args.set_current_user) {
-    return await setCurrentUser(client, args.set_current_user);
-  }
-  if (args.set_current_project) {
-    return await setCurrentProject(client, args.set_current_project);
-  }
-  if (args.set_current_sprint) {
-    return await setCurrentSprint(client, args.set_current_sprint);
-  }
-  if (!args.path) {
-    throw new PingCodeError('--path is required unless using a cache helper command');
-  }
-  const workspaceCache = client.workspaceCache;
-  let params = expandIdentityPlaceholders(
-    parseKeyValues(args.param),
-    args.user_id,
-    args.user_name,
-    workspaceCache,
-  ) || {};
-  ensureWorkItemWorkspaceContext(
-    args.path,
-    client,
-    args.method,
-    !args.all_users,
-    args.all_projects,
-    args.all_sprints,
-  );
-  if (args.method === 'GET') {
-    params = applyDefaultWorkItemFilters(
-      args.path,
-      params,
-      client,
-      args.user_id,
-      args.user_name,
-      !args.all_users,
-      args.all_projects,
-      args.all_sprints,
-    );
-  }
-  let body = expandIdentityPlaceholders(
-    parseJsonObject(args.data, '--data'),
-    args.user_id,
-    args.user_name,
-    workspaceCache,
-  );
-  body = applyDefaultWorkItemCreateBody(
-    args.method,
-    args.path,
-    body,
-    client,
-    args.user_id,
-    !args.all_users,
-  );
-  const result = await client.request(
-    args.method,
-    args.path,
-    params,
-    body,
-    {
-      dry_run: args.dry_run,
-      use_workspace_cache: !args.no_cache_read,
-    },
-  );
-  if (args.compact && !args.dry_run) {
-    return compactResponse(result);
-  }
-  return result;
-}
-
-async function main(argv) {
-  const parser = buildParser();
-  let args;
-  try {
-    args = parser.parseArgs(argv);
-  } catch (exc) {
-    console.error(`error: ${exc.message}`);
-    process.exitCode = 1;
-    return;
-  }
-  try {
-    printJson(await run(args));
-  } catch (exc) {
-    if (exc instanceof PingCodeError) {
-      console.error(`error: ${exc.message}`);
-    } else {
-      console.error(`error: ${exc.message}`);
-    }
-    process.exitCode = 1;
-  }
-}
-
 module.exports = {
   PingCodeError,
   PingCodeClient,
@@ -1527,29 +1082,19 @@ module.exports = {
   cachedResponse,
   updateWorkspaceCacheForResponse,
   pathIsListWorkItems,
-  listCommand,
   refreshCommand,
   cacheProjects,
   cacheSprints,
   cacheWorkItemTypes,
   cacheWorkItemPriorities,
   cacheWorkItemStates,
-  cacheAllWorkItemStates,
   cacheWorkItemProperties,
-  cacheAllWorkItemProperties,
-  cacheIdeaStates,
-  cacheIdeaPriorities,
   cacheUsers,
-  contextOptions,
   setCurrentUser,
   setCurrentProject,
   setCurrentSprint,
   applyDefaultWorkItemFilters,
   ensureWorkItemWorkspaceContext,
   applyDefaultWorkItemCreateBody,
-  buildParser,
-  clientFromArgs,
-  run,
   printJson,
-  main,
 };
