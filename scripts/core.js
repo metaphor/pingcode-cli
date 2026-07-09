@@ -5,7 +5,6 @@ const http = require('node:http');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
-const nodeUrl = require('node:url');
 
 const DEFAULT_BASE_URL = 'https://open.pingcode.com';
 const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode-skill/token.json';
@@ -1157,20 +1156,19 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
 
     const server = http.createServer((req, res) => {
       res.setHeader('Connection', 'close');
-      const parsed = nodeUrl.parse(req.url, true);
+      const callbackUrl = new URL(req.url, 'http://127.0.0.1');
 
-      if (parsed.pathname !== callbackPath) {
+      if (callbackUrl.pathname !== callbackPath) {
         res.writeHead(404);
         res.end('Not found');
         return;
       }
 
-      const query = parsed.query;
-      const code = query.code;
-      const oauthError = query.error;
+      const code = callbackUrl.searchParams.get('code');
+      const oauthError = callbackUrl.searchParams.get('error');
 
       if (oauthError) {
-        const errorDescription = query.error_description || '';
+        const errorDescription = callbackUrl.searchParams.get('error_description') || '';
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
           '<html><body><h1>Authentication Error</h1>' +
@@ -1183,7 +1181,8 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
         return;
       }
 
-      if (query.state !== state) {
+      const returnedState = callbackUrl.searchParams.get('state');
+      if (returnedState !== state) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
           '<html><body><h1>State Mismatch</h1>' +
@@ -1191,7 +1190,7 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
           '<p>You can close this window.</p></body></html>',
         );
         finish('reject', new PingCodeError(
-          `State mismatch: expected '${state}', got '${query.state || 'none'}'`,
+          `State mismatch: expected '${state}', got '${returnedState || 'none'}'`,
         ));
         return;
       }
@@ -1202,7 +1201,7 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
           '<html><body><h1>Authentication Successful</h1>' +
           '<p>You can close this window.</p></body></html>',
         );
-        finish('resolve', { code, state: query.state });
+        finish('resolve', { code, state: returnedState });
         return;
       }
 
