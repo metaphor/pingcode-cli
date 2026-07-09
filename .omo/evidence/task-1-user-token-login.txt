@@ -1,0 +1,29 @@
+Wave 1 (Todo 1) — user-token-login: Extend PingCodeClient for authorization_code and refresh_token grants
+
+VERIFICATION RESULTS
+====================
+npm test: 130/130 pass (112 original + 18 new), 0 fail
+LSP diagnostics: clean (scripts/core.js, references/api.md, tests/test_pingcode.js)
+Files modified: scripts/core.js, references/api.md, tests/test_pingcode.js
+
+QA SCENARIO — happy path (exchangeAuthorizationCode):
+  node -e "const c = new (require('./scripts/core').PingCodeClient)({grant_type:'authorization_code', client_id:'c', client_secret:'s', token_cache:'/tmp/t.json'}); global.fetch = (url) => ({ok:true, status:200, text:()=>JSON.stringify({access_token:'a',refresh_token:'r',expires_in:3600})}); c.exchangeAuthorizationCode('x').then(() => console.log('ok'))"
+  Result: ok ✓
+
+QA SCENARIO — failure (accessToken without cache):
+  node -e "const c = new (require('./scripts/core').PingCodeClient)({grant_type:'authorization_code', client_id:'c', client_secret:'s', token_cache:'/tmp/t.json'}); c.accessToken().catch(e => console.log(e.message))"
+  Result: contains "login" ✓
+
+QA SCENARIO — regression:
+  npm test passes with 130/130 ✓
+
+IMPLEMENTATION SUMMARY
+======================
+- PingCodeClient: constructor accepts `grant_type` (default 'client_credentials')
+- loadCachedToken: returns {grant_type, access_token, refresh_token, expires_at} object; backward-compatible with old format
+- saveCachedToken: writes {grant_type, access_token, refresh_token?, expires_at}; backward-compatible 3-arg calls
+- readRawTokenCache: new helper reads cache file regardless of expiry
+- accessToken(): handles both grant types; authorization_code with expired access_token uses refresh_token
+- exchangeAuthorizationCode(code, redirectUri): exchanges auth code for tokens, caches result
+- refreshAccessToken(refreshToken): refreshes access token, preserves existing refresh_token
+- buildAuthorizationUrl(redirectUri, state): builds /oauth2/authorize URL

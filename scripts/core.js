@@ -447,6 +447,18 @@ function expandIdentityPlaceholders(data, userId, userName, workspaceCache) {
   return expandIdentityPlaceholder(data, userId, userName, workspaceCache);
 }
 
+function readRawTokenCache(cachePath) {
+  try {
+    const payload = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return payload;
+    }
+  } catch (exc) {
+    // ignore
+  }
+  return null;
+}
+
 function loadCachedToken(cachePath) {
   let payload;
   try {
@@ -465,10 +477,15 @@ function loadCachedToken(cachePath) {
   if (expiresAt <= Math.floor(Date.now() / 1000)) {
     return null;
   }
-  return token;
+  return {
+    grant_type: payload.grant_type || 'client_credentials',
+    access_token: token,
+    refresh_token: typeof payload.refresh_token === 'string' ? payload.refresh_token : null,
+    expires_at: expiresAt,
+  };
 }
 
-function saveCachedToken(cachePath, token, expiresIn) {
+function saveCachedToken(cachePath, token, expiresIn, grantType = 'client_credentials', refreshToken = null) {
   let ttl;
   if (typeof expiresIn === 'number' && !Number.isNaN(expiresIn)) {
     ttl = Math.floor(expiresIn);
@@ -479,9 +496,13 @@ function saveCachedToken(cachePath, token, expiresIn) {
   }
   ttl = Math.max(60, Math.min(ttl, MAX_TOKEN_TTL_SECONDS));
   const payload = {
+    grant_type: grantType,
     access_token: token,
     expires_at: Math.floor(Date.now() / 1000) + ttl,
   };
+  if (refreshToken) {
+    payload.refresh_token = refreshToken;
+  }
   fs.mkdirSync(path.dirname(cachePath), { recursive: true });
   fs.writeFileSync(cachePath, JSON.stringify(payload, null, 2) + '\n');
   try {
@@ -664,6 +685,7 @@ class PingCodeClient {
     token = null,
     token_cache = DEFAULT_TOKEN_CACHE,
     workspace_cache = DEFAULT_WORKSPACE_CACHE,
+    grant_type = 'client_credentials',
   } = {}) {
     this.baseUrl = (base_url || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.clientId = client_id;
@@ -672,6 +694,7 @@ class PingCodeClient {
     this.tokenCache = token_cache ? expandUserPath(token_cache) : null;
     this.workspaceCachePath = workspace_cache ? expandUserPath(workspace_cache) : null;
     this.workspaceCache = loadWorkspaceCache(this.workspaceCachePath);
+    this.grantType = grant_type;
   }
 
   async accessToken() {
@@ -681,36 +704,113 @@ class PingCodeClient {
     if (this.tokenCache) {
       const cached = loadCachedToken(this.tokenCache);
       if (cached) {
-        this.token = cached;
-        return cached;
+        if (cached.grant_type !== this.grantType) {
+          throw new PingCodeError(
+            `Cached token grant_type '${cached.grant_type}' does not match ` +
+            `configured '${this.grantType}'. Remove the token cache and re-authenticate.`
+          );
+        }
+        this.token = cached.access_token;
+        return cached.access_token;
+      }
+      if (this.grantType === 'authorization_code') {
+        const raw = readRawTokenCache(this.tokenCache);
+        if (raw && typeof raw.refresh_token === 'string' && raw.refresh_token) {
+          return this.refreshAccessToken(raw.refresh_token);
+        }
       }
     }
-    if (!this.clientId || !this.clientSecret) {
+    if (this.grantType === 'client_credentials') {
+      if (!this.clientId || !this.clientSecret) {
+        throw new PingCodeError(
+          'Missing credentials. Set PINGCODE_CLIENT_ID and PINGCODE_CLIENT_SECRET, ' +
+          'or pass --token.\n' + AUTH_ENV_GUIDANCE
+        );
+      }
+      const response = await this.rawRequest(
+        'GET',
+        '/v1/auth/token',
+        {
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        },
+        null,
+        false,
+      );
+      const token = response.access_token;
+      if (typeof token !== 'string' || !token) {
+        throw new PingCodeError('Token response did not include access_token');
+      }
+      this.token = token;
+      if (this.tokenCache) {
+        saveCachedToken(this.tokenCache, token, response.expires_in, 'client_credentials');
+      }
+      return token;
+    }
+    if (this.grantType === 'authorization_code') {
       throw new PingCodeError(
-        'Missing credentials. Set PINGCODE_CLIENT_ID and PINGCODE_CLIENT_SECRET, ' +
-        'or pass --token.\n' + AUTH_ENV_GUIDANCE
+        'No valid user token available. Run `login` to authenticate with your PingCode account.'
       );
     }
+    throw new PingCodeError(`Unsupported grant_type: ${this.grantType}`);
+  }
+
+  async exchangeAuthorizationCode(code, redirectUri) {
+    const params = {
+      grant_type: 'authorization_code',
+      code: code,
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+    };
+    if (redirectUri) {
+      params.redirect_uri = redirectUri;
+    }
+    const response = await this.rawRequest('GET', '/v1/auth/token', params, null, false);
+    const accessToken = response.access_token;
+    if (typeof accessToken !== 'string' || !accessToken) {
+      throw new PingCodeError('Token response did not include access_token');
+    }
+    this.token = accessToken;
+    const refreshToken = typeof response.refresh_token === 'string' ? response.refresh_token : null;
+    if (this.tokenCache) {
+      saveCachedToken(this.tokenCache, accessToken, response.expires_in, 'authorization_code', refreshToken);
+    }
+    return { access_token: accessToken, refresh_token: refreshToken };
+  }
+
+  async refreshAccessToken(refreshToken) {
     const response = await this.rawRequest(
       'GET',
       '/v1/auth/token',
       {
-        grant_type: 'client_credentials',
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
         client_id: this.clientId,
         client_secret: this.clientSecret,
       },
       null,
       false,
     );
-    const token = response.access_token;
-    if (typeof token !== 'string' || !token) {
-      throw new PingCodeError('Token response did not include access_token');
+    const accessToken = response.access_token;
+    if (typeof accessToken !== 'string' || !accessToken) {
+      throw new PingCodeError('Token refresh response did not include access_token');
     }
-    this.token = token;
+    this.token = accessToken;
+    const newRefreshToken = typeof response.refresh_token === 'string' ? response.refresh_token : refreshToken;
     if (this.tokenCache) {
-      saveCachedToken(this.tokenCache, token, response.expires_in);
+      saveCachedToken(this.tokenCache, accessToken, response.expires_in, 'authorization_code', newRefreshToken);
     }
-    return token;
+    return accessToken;
+  }
+
+  buildAuthorizationUrl(redirectUri, state) {
+    return buildUrl(this.baseUrl, '/oauth2/authorize', {
+      response_type: 'code',
+      client_id: this.clientId,
+      redirect_uri: redirectUri,
+      state: state,
+    });
   }
 
   async rawRequest(method, rawPath, params = null, body = null, auth = true) {
@@ -1074,6 +1174,7 @@ module.exports = {
   expandIdentityPlaceholders,
   loadCachedToken,
   saveCachedToken,
+  readRawTokenCache,
   buildUrl,
   normalizePath,
   stateCacheKey,

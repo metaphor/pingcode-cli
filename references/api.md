@@ -16,19 +16,75 @@ https://<host>/open
 
 ## Auth
 
-Client credentials:
+PingCode supports two token types:
+- **企业令牌 (Enterprise Token)** — `grant_type=client_credentials`. System administrator permissions. No user identity.
+- **用户令牌 (User Token)** — `grant_type=authorization_code`. Represents a specific human user via browser OAuth.
+
+### Token endpoint
+
+All grant types use the same endpoint with query parameters:
+
+```
+GET /v1/auth/token?grant_type={grant_type}&...
+```
+
+Response shape (all grant types):
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "eyJhbGciOi..."   // only for authorization_code
+}
+```
+
+### Client credentials (enterprise token)
 
 ```http
 GET /v1/auth/token?grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}
 ```
 
-Use the returned access token as:
+### Authorization code (user token)
 
+**Step 1 — Authorization URL** (browser redirect):
+```
+/oauth2/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}
+```
+
+The user completes login in the browser. PingCode redirects back to `redirect_uri` with `?code=...&state=...`.
+
+**Step 2 — Exchange code for tokens:**
+```http
+GET /v1/auth/token?grant_type=authorization_code&code={code}&client_id={client_id}&client_secret={client_secret}&redirect_uri={redirect_uri}
+```
+
+`redirect_uri` is REQUIRED in the token exchange if it was included in the authorization request (OAuth2 RFC 6749 §4.1.3).
+
+**Step 3 — Use and refresh:**
 ```http
 Authorization: Bearer {access_token}
 ```
 
-The docs call this an enterprise token and state that it has system administrator permissions.
+### Refresh token (user token)
+
+```http
+GET /v1/auth/token?grant_type=refresh_token&refresh_token={refresh_token}&client_id={client_id}&client_secret={client_secret}
+```
+
+The response includes a new `access_token` and `expires_in`. If the response does NOT include a new `refresh_token` (common with rotating refresh tokens), the existing `refresh_token` in the cache must be preserved.
+
+### Confirmed API details
+
+| Detail | Status | Source |
+|--------|--------|--------|
+| Token endpoint is `GET /v1/auth/token` | Confirmed | Existing code, all API calls |
+| `client_credentials` requires `client_id` + `client_secret` | Confirmed | Existing code |
+| Authorization URL path is `/oauth2/authorize` | Confirmed | PingCode docs SPA structure, standard OAuth2 |
+| `authorization_code` token exchange requires `client_id` + `client_secret` | Assumed | Follows `client_credentials` pattern, standard OAuth2 |
+| `redirect_uri` is required in token exchange when used in authorization request | Confirmed | OAuth2 RFC 6749 §4.1.3 |
+| `refresh_token` grant requires `client_id` + `client_secret` | Assumed | Follows existing `client_credentials` auth pattern |
+| `/oauth2/authorized` HTML-extraction path | NOT used | Standard OAuth2 redirect-based flow is the production path |
+| Token response includes `refresh_token` only for `authorization_code` grant | Confirmed | Standard OAuth2 behavior
 
 ## Request Conventions
 

@@ -84,6 +84,8 @@ function mockFetch(response) {
 
 // ── Core library tests ──────────────────────────────────────────────
 
+const core = require('../scripts/core');
+
 testInCleanEnv('build_url merges query parameters', () => {
   const url = pingcode.buildUrl(
     'https://open.pingcode.com',
@@ -241,6 +243,386 @@ testInCleanTmp('workspace cache save compacts unneeded api fields', async (t, tm
   assert.strictEqual('avatar' in cached.users.values[0].user, false);
   assert.strictEqual('email' in cached.users.values[0].user, false);
   assert.strictEqual('created_by' in cached.projects.values[0], false);
+});
+
+// ── OAuth authorization_code & refresh_token tests ─────────────────
+
+testInCleanTmp('grant_type defaults to client_credentials', async (t, tmpdir) => {
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    token_cache: null,
+  });
+  assert.strictEqual(client.grantType, 'client_credentials');
+});
+
+testInCleanTmp('accessToken with authorization_code and no cache throws login guidance', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+  await assert.rejects(async () => client.accessToken(), (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('login'), `Message should mention login, got: ${err.message}`);
+    return true;
+  });
+});
+
+testInCleanTmp('accessToken with authorization_code uses cached valid token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    grant_type: 'authorization_code',
+    access_token: 'cached-user-token',
+    refresh_token: 'rt-1',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'cached-user-token');
+});
+
+testInCleanTmp('accessToken with authorization_code and expired token refreshes', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    grant_type: 'authorization_code',
+    access_token: 'expired-token',
+    refresh_token: 'rt-old',
+    expires_at: now - 60,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  let requestUrl = null;
+  mockFetch((url) => {
+    requestUrl = url;
+    return fakeResponse({ access_token: 'refreshed-token', expires_in: 3600 });
+  });
+
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'refreshed-token');
+  assert.ok(requestUrl.includes('grant_type=refresh_token'));
+  assert.ok(requestUrl.includes('refresh_token=rt-old'));
+
+  // Verify cache file updated
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.access_token, 'refreshed-token');
+  assert.strictEqual(cached.refresh_token, 'rt-old'); // preserved
+  assert.strictEqual(cached.grant_type, 'authorization_code');
+  assert.ok(cached.expires_at > now);
+});
+
+testInCleanTmp('accessToken with authorization_code and expired token no refresh_token throws', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    grant_type: 'authorization_code',
+    access_token: 'expired-no-refresh',
+    expires_at: now - 60,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  await assert.rejects(async () => client.accessToken(), (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('login'));
+    return true;
+  });
+});
+
+testInCleanTmp('client_credentials with old cache format still works', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    access_token: 'old-format-token',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    token_cache: cachePath,
+  });
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'old-format-token');
+});
+
+testInCleanTmp('exchangeAuthorizationCode calls token endpoint and caches', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  let requestUrl = null;
+  mockFetch((url) => {
+    requestUrl = url;
+    return fakeResponse({
+      access_token: 'user-access-token',
+      refresh_token: 'user-refresh-token',
+      expires_in: 3600,
+    });
+  });
+
+  const result = await client.exchangeAuthorizationCode('code-1', 'http://127.0.0.1:8765/callback');
+  assert.strictEqual(result.access_token, 'user-access-token');
+  assert.strictEqual(result.refresh_token, 'user-refresh-token');
+  assert.ok(requestUrl.includes('grant_type=authorization_code'));
+  assert.ok(requestUrl.includes('code=code-1'));
+  assert.ok(requestUrl.includes('client_id=c'));
+  assert.ok(requestUrl.includes('client_secret=s'));
+  assert.ok(requestUrl.includes('redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback'));
+
+  // Verify cache written
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.grant_type, 'authorization_code');
+  assert.strictEqual(cached.access_token, 'user-access-token');
+  assert.strictEqual(cached.refresh_token, 'user-refresh-token');
+  assert.ok(typeof cached.expires_at === 'number');
+  assert.ok(cached.expires_at > Math.floor(Date.now() / 1000));
+});
+
+testInCleanTmp('refreshAccessToken calls refresh endpoint and preserves refresh_token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  let requestUrl = null;
+  mockFetch((url) => {
+    requestUrl = url;
+    return fakeResponse({
+      access_token: 'new-access',
+      expires_in: 3600,
+      // no refresh_token in response
+    });
+  });
+
+  const token = await client.refreshAccessToken('existing-refresh');
+  assert.strictEqual(token, 'new-access');
+  assert.ok(requestUrl.includes('grant_type=refresh_token'));
+  assert.ok(requestUrl.includes('refresh_token=existing-refresh'));
+  assert.ok(requestUrl.includes('client_id=c'));
+  assert.ok(requestUrl.includes('client_secret=s'));
+
+  // Verify cache preserves refresh_token from input
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.access_token, 'new-access');
+  assert.strictEqual(cached.refresh_token, 'existing-refresh');
+  assert.strictEqual(cached.grant_type, 'authorization_code');
+  assert.ok(cached.expires_at > Math.floor(Date.now() / 1000));
+});
+
+testInCleanTmp('refreshAccessToken uses new refresh_token from response when present', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  mockFetch(() => fakeResponse({
+    access_token: 'new-access-2',
+    refresh_token: 'new-refresh-2',
+    expires_in: 7200,
+  }));
+
+  await client.refreshAccessToken('old-refresh');
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.access_token, 'new-access-2');
+  assert.strictEqual(cached.refresh_token, 'new-refresh-2');
+  assert.strictEqual(cached.expires_in, undefined, 'expires_in should not be in cache payload');
+});
+
+testInCleanTmp('buildAuthorizationUrl returns correct OAuth URL', async (t, tmpdir) => {
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'my-client-id',
+    grant_type: 'authorization_code',
+  });
+  const url = client.buildAuthorizationUrl('http://127.0.0.1:8765/callback', 'state-abc');
+  assert.ok(url.startsWith('https://open.pingcode.com/oauth2/authorize'));
+  assert.ok(url.includes('response_type=code'));
+  assert.ok(url.includes('client_id=my-client-id'));
+  assert.ok(url.includes('redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback'));
+  assert.ok(url.includes('state=state-abc'));
+});
+
+testInCleanTmp('saveCachedToken writes new format with grant_type', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  core.saveCachedToken(cachePath, 'token-1', 3600);
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.access_token, 'token-1');
+  assert.strictEqual(cached.grant_type, 'client_credentials');
+  assert.ok(typeof cached.expires_at === 'number');
+});
+
+testInCleanTmp('saveCachedToken with refresh_token writes authorization_code format', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  core.saveCachedToken(cachePath, 'token-2', 3600, 'authorization_code', 'rt-1');
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cached.access_token, 'token-2');
+  assert.strictEqual(cached.grant_type, 'authorization_code');
+  assert.strictEqual(cached.refresh_token, 'rt-1');
+  assert.ok(typeof cached.expires_at === 'number');
+});
+
+testInCleanTmp('loadCachedToken returns full object from new cache format', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    grant_type: 'authorization_code',
+    access_token: 'at-1',
+    refresh_token: 'rt-1',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload));
+
+  const cached = core.loadCachedToken(cachePath);
+  assert.strictEqual(cached.grant_type, 'authorization_code');
+  assert.strictEqual(cached.access_token, 'at-1');
+  assert.strictEqual(cached.refresh_token, 'rt-1');
+  assert.strictEqual(cached.expires_at, now + 3600);
+});
+
+testInCleanTmp('loadCachedToken defaults grant_type to client_credentials for old cache', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { access_token: 'old-token', expires_at: now + 3600 };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload));
+
+  const cached = core.loadCachedToken(cachePath);
+  assert.strictEqual(cached.grant_type, 'client_credentials');
+  assert.strictEqual(cached.access_token, 'old-token');
+  assert.strictEqual(cached.refresh_token, null);
+});
+
+testInCleanTmp('loadCachedToken returns null for expired token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const payload = { access_token: 'expired', expires_at: 1 };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload));
+
+  const cached = core.loadCachedToken(cachePath);
+  assert.strictEqual(cached, null);
+});
+
+testInCleanTmp('client_credentials with cached valid token returns it without network', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    grant_type: 'client_credentials',
+    access_token: 'cached-cc-token',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    token_cache: cachePath,
+  });
+
+  // Replace fetch with a spy that should NOT be called
+  let fetchCalled = false;
+  mockFetch(() => {
+    fetchCalled = true;
+    return fakeResponse({ access_token: 'network-token', expires_in: 3600 });
+  });
+
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'cached-cc-token');
+  assert.strictEqual(fetchCalled, false, 'fetch should not be called for valid cached token');
+});
+
+testInCleanTmp('grant_type mismatch between cache and client throws', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    grant_type: 'client_credentials',
+    access_token: 'cc-token',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  await assert.rejects(async () => client.accessToken(), (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('grant_type'));
+    return true;
+  });
+});
+
+testInCleanTmp('exchangeAuthorizationCode throws on missing access_token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'authorization_code',
+    token_cache: cachePath,
+  });
+
+  mockFetch(() => fakeResponse({ error: 'invalid_grant' }));
+
+  await assert.rejects(async () => client.exchangeAuthorizationCode('bad-code'), (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('access_token'));
+    return true;
+  });
 });
 
 // ── pingcode-ctx integration test ───────────────────────────────────
