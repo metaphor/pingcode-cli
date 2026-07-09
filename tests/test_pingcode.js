@@ -608,6 +608,65 @@ testInCleanTmp('grant_type mismatch between cache and client throws', async (t, 
   });
 });
 
+testInCleanTmp('grant_type auto uses cached authorization_code token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    grant_type: 'authorization_code',
+    access_token: 'auto-user-token',
+    refresh_token: 'rt-1',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'auto',
+    token_cache: cachePath,
+  });
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'auto-user-token');
+  assert.strictEqual(client.resolveGrantType(), 'authorization_code');
+});
+
+testInCleanTmp('grant_type auto falls back to client_credentials when no cache', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'auto',
+    token_cache: cachePath,
+  });
+  assert.strictEqual(client.resolveGrantType(), 'client_credentials');
+});
+
+testInCleanTmp('grant_type auto uses cached client_credentials token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const now = Math.floor(Date.now() / 1000);
+  const cachePayload = {
+    grant_type: 'client_credentials',
+    access_token: 'auto-cc-token',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cachePayload));
+
+  const client = new core.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'c',
+    client_secret: 's',
+    grant_type: 'auto',
+    token_cache: cachePath,
+  });
+  const token = await client.accessToken();
+  assert.strictEqual(token, 'auto-cc-token');
+  assert.strictEqual(client.resolveGrantType(), 'client_credentials');
+});
+
 testInCleanTmp('exchangeAuthorizationCode throws on missing access_token', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'token.json');
   const client = new core.PingCodeClient({
@@ -695,6 +754,27 @@ test('startAuthCallbackServer rejects on state mismatch', async () => {
   assert.ok(promiseSettled.reason.message.includes('State mismatch'));
   assert.ok(promiseSettled.reason.message.includes('expected-state'));
   assert.ok(promiseSettled.reason.message.includes('wrong-state'));
+});
+
+test('startAuthCallbackServer accepts callback without state parameter', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 10;
+  const state = 'expected-state';
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state,
+    timeoutMs: 5000,
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const result = await callbackRequest(port, '/callback', { code: 'code-no-state' });
+  assert.strictEqual(result.status, 200);
+  assert.ok(result.body.includes('Authentication Successful'));
+
+  const resolved = await promise;
+  assert.deepStrictEqual(resolved, { code: 'code-no-state', state: 'expected-state' });
 });
 
 test('startAuthCallbackServer rejects on OAuth error', async () => {
@@ -847,12 +927,12 @@ testInCleanTmp('pingcode-ctx parser accepts --grant-type', async (t, tmpdir) => 
   assert.strictEqual(args.grant_type, 'authorization_code');
 });
 
-testInCleanTmp('pingcode-ctx parser defaults grant_type to client_credentials', async (t, tmpdir) => {
+testInCleanTmp('pingcode-ctx parser defaults grant_type to auto', async (t, tmpdir) => {
   const args = pingcodeCtx.buildParser().parseArgs([
     '--workspace-cache', String(tmpFile(tmpdir, 'workspace.json')),
     '--token', 'token-1',
   ]);
-  assert.strictEqual(args.grant_type, 'client_credentials');
+  assert.strictEqual(args.grant_type, 'auto');
 });
 
 // ── Dispatcher tests ────────────────────────────────────────────────

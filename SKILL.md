@@ -29,7 +29,7 @@ Run the requested CLI command directly. If credentials or identity settings are 
 
 `client_credentials` returns an enterprise token and does not identify a human user. For work item create/query requests, let the CLI apply cached current-user defaults unless the user explicitly asks for "所有人" / all users or names another assignee.
 
-The CLI also supports user tokens via `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`). User tokens represent a specific human user and can be used for commands that require a user identity. `client_credentials` remains the default grant type for all other commands.
+The CLI also supports user tokens via `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`). User tokens represent a specific human user and can be used for commands that require a user identity. After `login`, the CLI automatically detects the cached user token grant type, so subsequent commands do not need `--grant-type` unless you want to override it. `client_credentials` remains the fallback when no user token is cached.
 
 ## Workspace Cache
 

@@ -13,7 +13,7 @@
 
 This skill uses `client_credentials`, so the token is an enterprise token and does not represent a specific human user. For work item create/query requests, default to the configured current user unless the user explicitly says "所有人" / all users or names another assignee. Use `PINGCODE_USER_ID` / `PINGCODE_USER_NAME`, the matching CLI flags, or the workspace cache if present. If none is set, cache users first and ask the user to choose their PingCode user before filtering or assigning.
 
-User-token login is available for human-user operations when a browser login is acceptable. Run `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`) to obtain a user token. This does not change the `@me` identity resolution workflow: `@me` still expands from the workspace cache, `PINGCODE_USER_ID`, or `PINGCODE_USER_NAME`, and is never inferred from the token itself.
+User-token login is available for human-user operations when a browser login is acceptable. Run `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`) to obtain a user token. After `login`, the CLI automatically detects the cached user token, so subsequent commands do not need `--grant-type` unless you want to override the detected type. This does not change the `@me` identity resolution workflow: `@me` still expands from the workspace cache, `PINGCODE_USER_ID`, or `PINGCODE_USER_NAME`, and is never inferred from the token itself.
 
 The CLI accepts identity placeholders:
 

@@ -811,7 +811,7 @@ test('parseConfigArgs parses --grant-type flag', () => {
   assert.strictEqual(result.opts.grant_type, 'authorization_code');
 });
 
-test('parseConfigArgs defaults grant_type to client_credentials', () => {
-  const result = config.parseConfigArgs(['list']);
-  assert.strictEqual(result.opts.grant_type, 'client_credentials');
+test('parseConfigArgs defaults grant_type to auto', () => {
+  const result = config.parseConfigArgs([]);
+  assert.strictEqual(result.opts.grant_type, 'auto');
 });

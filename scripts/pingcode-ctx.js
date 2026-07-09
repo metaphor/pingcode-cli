@@ -127,7 +127,7 @@ function buildParser() {
         no_token_cache: false,
         workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || pingcode.DEFAULT_WORKSPACE_CACHE,
         refresh: false,
-        grant_type: 'client_credentials',
+        grant_type: 'auto',
       };
 
       const booleanFlags = new Set(['--no-token-cache', '--refresh']);
@@ -190,7 +190,7 @@ function usageText() {
     '  --token TOKEN',
     '  --no-token-cache',
     '  --workspace-cache PATH',
-    '  --grant-type TYPE          OAuth grant type: client_credentials (default) or authorization_code',
+    '  --grant-type TYPE          OAuth grant type: client_credentials, authorization_code, or auto (default; uses cached token type)',
     '  --refresh',
     '  -h, --help',
   ].join('\n');

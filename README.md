@@ -200,11 +200,11 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 # 在浏览器中完成授权
 node scripts/pingcode.js login --client-id ID --client-secret SECRET
 
-# 使用用户令牌查询工作项
-node scripts/pingcode.js work-item list --grant-type authorization_code --assignee @me --state 进行中 --compact
+# 使用用户令牌查询工作项（--grant-type 会自动从缓存中识别）
+node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
 ```
 
-首次使用用户令牌前必须先运行 `login`。`client_credentials` 仍然是默认且无需浏览器授权的认证方式。
+首次使用用户令牌前必须先运行 `login`。`login` 成功后的用户令牌会缓存在默认 token cache 中，后续命令不再需要在命令行写 `--grant-type`。如果缓存里是企业令牌，命令仍然走 `client_credentials`；如果缓存里是用户令牌，就走 `authorization_code`。显式传 `--grant-type` 会覆盖自动识别。
 
 ## 初次使用
 

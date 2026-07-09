@@ -698,30 +698,44 @@ class PingCodeClient {
     this.grantType = grant_type;
   }
 
+  resolveGrantType() {
+    if (this.grantType !== 'auto') {
+      return this.grantType;
+    }
+    if (this.tokenCache) {
+      const raw = readRawTokenCache(this.tokenCache);
+      if (raw && typeof raw.grant_type === 'string') {
+        return raw.grant_type;
+      }
+    }
+    return 'client_credentials';
+  }
+
   async accessToken() {
+    const grantType = this.resolveGrantType();
     if (this.token) {
       return this.token;
     }
     if (this.tokenCache) {
       const cached = loadCachedToken(this.tokenCache);
       if (cached) {
-        if (cached.grant_type !== this.grantType) {
+        if (cached.grant_type !== grantType) {
           throw new PingCodeError(
             `Cached token grant_type '${cached.grant_type}' does not match ` +
-            `configured '${this.grantType}'. Remove the token cache and re-authenticate.`
+            `configured '${grantType}'. Remove the token cache and re-authenticate.`
           );
         }
         this.token = cached.access_token;
         return cached.access_token;
       }
-      if (this.grantType === 'authorization_code') {
+      if (grantType === 'authorization_code') {
         const raw = readRawTokenCache(this.tokenCache);
         if (raw && typeof raw.refresh_token === 'string' && raw.refresh_token) {
           return this.refreshAccessToken(raw.refresh_token);
         }
       }
     }
-    if (this.grantType === 'client_credentials') {
+    if (grantType === 'client_credentials') {
       if (!this.clientId || !this.clientSecret) {
         throw new PingCodeError(
           'Missing credentials. Set PINGCODE_CLIENT_ID and PINGCODE_CLIENT_SECRET, ' +
@@ -749,12 +763,12 @@ class PingCodeClient {
       }
       return token;
     }
-    if (this.grantType === 'authorization_code') {
+    if (grantType === 'authorization_code') {
       throw new PingCodeError(
         'No valid user token available. Run `login` to authenticate with your PingCode account.'
       );
     }
-    throw new PingCodeError(`Unsupported grant_type: ${this.grantType}`);
+    throw new PingCodeError(`Unsupported grant_type: ${grantType}`);
   }
 
   async exchangeAuthorizationCode(code, redirectUri) {
@@ -1182,7 +1196,7 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
       }
 
       const returnedState = callbackUrl.searchParams.get('state');
-      if (returnedState !== state) {
+      if (returnedState && returnedState !== state) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
           '<html><body><h1>State Mismatch</h1>' +
@@ -1190,7 +1204,7 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
           '<p>You can close this window.</p></body></html>',
         );
         finish('reject', new PingCodeError(
-          `State mismatch: expected '${state}', got '${returnedState || 'none'}'`,
+          `State mismatch: expected '${state}', got '${returnedState}'`,
         ));
         return;
       }
@@ -1201,7 +1215,7 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
           '<html><body><h1>Authentication Successful</h1>' +
           '<p>You can close this window.</p></body></html>',
         );
-        finish('resolve', { code, state: returnedState });
+        finish('resolve', { code, state: returnedState || state });
         return;
       }
 

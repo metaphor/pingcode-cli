@@ -105,7 +105,7 @@ function printHelp(subcommand) {
     '  --workspace-cache PATH   Workspace cache file path',
     '  --no-workspace-cache     Disable workspace cache',
     '  --dry-run                Show what would be done without executing',
-    '  --grant-type TYPE        OAuth grant type: client_credentials (default) or authorization_code',
+    '  --grant-type TYPE        OAuth grant type: client_credentials, authorization_code, or auto (default; uses cached token type)',
     '  --help                   Show this help',
   ].join('\n'));
 }
@@ -137,7 +137,7 @@ function parseConfigArgs(tokens) {
     no_token_cache: false,
     dry_run: false,
     refresh: false,
-    grant_type: 'client_credentials',
+    grant_type: 'auto',
   };
 
   const positionals = [];

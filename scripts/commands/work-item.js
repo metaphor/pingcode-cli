@@ -36,7 +36,7 @@ function defaultGlobalOpts() {
     all_users: false,
     all_projects: false,
     all_sprints: false,
-    grant_type: 'client_credentials',
+    grant_type: 'auto',
   };
 }
 
@@ -683,7 +683,7 @@ function printHelp() {
     '  --no-token-cache            Disable token cache',
     '  --dry-run                   Show API request without executing',
     '  --compact                   Compact output',
-    '  --grant-type TYPE           OAuth grant type: client_credentials (default) or authorization_code',
+    '  --grant-type TYPE           OAuth grant type: client_credentials, authorization_code, or auto (default; uses cached token type)',
     '  --help                      Show this help',
   ].join('\n'));
 }
