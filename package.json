@@ -22,8 +22,10 @@
     "scripts/pingcode-ctx.js",
     "scripts/core.js",
     "scripts/commands/",
+    "scripts/commands/login.js",
     "bin/install.js",
     "bin/pingcode-ctx.js",
+    "tests/test_login.js",
     "README.md"
   ],
   "scripts": {

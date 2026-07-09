@@ -98,3 +98,19 @@
 ### Test Coverage
 - 32 new tests in `tests/test_login.js` covering: parser (all flags, defaults, env vars, error cases), dry-run with `--code` and `--no-browser`, credential errors, `--code` exchange with mocked fetch + cache verification, `--no-browser` with mocked stdin, dispatcher integration (help output, module listing), `createClient`, `buildDryRunExchange`.
 - All 178 tests pass (146 existing + 32 new).
+
+## Wave 5 — Documentation and Package Manifest (2026-07-09)
+
+### Documentation
+- `references/api.md`: Added parameter tables for `/oauth2/authorize`, `/v1/auth/token?grant_type=authorization_code`, and `/v1/auth/token?grant_type=refresh_token`. Added request/response JSON examples. Documented `/oauth2/authorized` as a docs-only test fixture (not production).
+- `README.md`: Added a "User token login" section in Chinese with `node scripts/pingcode.js login` and `node scripts/pingcode.js work-item list --grant-type authorization_code ...` examples. Kept `client_credentials` as the primary/default flow.
+- `SKILL.md`: Added a paragraph in the Setup section noting `login` with `--grant-type authorization_code` is available, while `client_credentials` remains the default for other commands.
+- `references/workflows.md`: Added a note that user-token login is available for human-user operations but does not change the `@me` identity resolution workflow.
+
+### Package manifest
+- `package.json`: Added explicit `files` entries for `scripts/commands/login.js` and `tests/test_login.js`.
+
+### Verification
+- `npm test`: 178 pass, 0 fail.
+- `npm pack --dry-run`: lists `scripts/commands/login.js` and `tests/test_login.js`.
+- `node bin/install.js --target <tmp>/install --force`: copied docs contain the new login content and paths are rewritten to the installed absolute path.

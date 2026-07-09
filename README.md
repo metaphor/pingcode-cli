@@ -192,6 +192,20 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 
 如果脚本调用时缺少 `PINGCODE_CLIENT_ID` / `PINGCODE_CLIENT_SECRET`，会直接输出 `export` 配置示例并退出。企业令牌不能代表个人身份；操作创建工作项、查询工作项时，如果用户没有明确说“所有人”或指定其他负责人，agent 应默认使用当前用户。当前用户来自 `PINGCODE_USER_ID` / `PINGCODE_USER_NAME`、`--user-id` / `--user-name` 或工作区缓存；如果没有配置，agent 应先缓存用户列表，再让用户选择自己的 PingCode 用户。
 
+## User token login
+
+除了 `client_credentials` 企业令牌，CLI 也支持通过 OAuth2 `authorization_code` 获取用户令牌。用户令牌代表具体的人类用户，适合需要以个人身份操作 PingCode 的场景。
+
+```bash
+# 在浏览器中完成授权
+node scripts/pingcode.js login --client-id ID --client-secret SECRET
+
+# 使用用户令牌查询工作项
+node scripts/pingcode.js work-item list --grant-type authorization_code --assignee @me --state 进行中 --compact
+```
+
+首次使用用户令牌前必须先运行 `login`。`client_credentials` 仍然是默认且无需浏览器授权的认证方式。
+
 ## 初次使用
 
 首次在一个工作区使用前，先用 `pingcode-ctx` 初始化项目上下文，选择当前项目、当前迭代和当前用户：

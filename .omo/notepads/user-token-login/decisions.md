@@ -105,3 +105,21 @@
 ### Security: token secrecy
 - Success output only prints `User token saved for grant_type authorization_code` — never echoes `access_token` or `refresh_token`.
 - Dry-run output with `--code` includes the code in params (it's a one-time code about to be exchanged), but the real flow never prints it.
+
+## Wave 5 Documentation Decisions (2026-07-09)
+
+### Endpoint documentation
+- `/oauth2/authorize` is documented as the production authorization endpoint.
+- `/oauth2/authorized` is explicitly called out as a docs-only test fixture; production uses the `redirect_uri` callback via `startAuthCallbackServer`.
+- Parameter tables and request/response examples were added for `authorization_code` and `refresh_token` grants.
+
+### README positioning
+- `client_credentials` remains the primary/default documented flow.
+- User-token login is presented as an optional alternative for human-user operations.
+
+### Package manifest
+- Explicit `files` entries added for `scripts/commands/login.js` and `tests/test_login.js` even though the `scripts/commands/` directory entry already covers the former; explicit entries improve clarity and ensure `npm pack` includes them.
+- No `scripts/auth-server.js` entry was added because callback server logic lives in `scripts/core.js`.
+
+### No behavior change
+- No product code was modified. Only documentation, package manifest, and notepad summaries were updated.

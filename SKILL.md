@@ -29,6 +29,8 @@ Run the requested CLI command directly. If credentials or identity settings are 
 
 `client_credentials` returns an enterprise token and does not identify a human user. For work item create/query requests, let the CLI apply cached current-user defaults unless the user explicitly asks for "所有人" / all users or names another assignee.
 
+The CLI also supports user tokens via `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`). User tokens represent a specific human user and can be used for commands that require a user identity. `client_credentials` remains the default grant type for all other commands.
+
 ## Workspace Cache
 
 The CLI owns workspace-cache discovery and validation. Run the requested query/create command first; if cached user/project/sprint context is incomplete, the script exits with guidance. Then invoke `$pingcode-ctx` when available, or run `node scripts/pingcode-ctx.js`, and retry the original command.

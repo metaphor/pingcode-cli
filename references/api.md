@@ -48,8 +48,15 @@ GET /v1/auth/token?grant_type=client_credentials&client_id={client_id}&client_se
 
 **Step 1 — Authorization URL** (browser redirect):
 ```
-/oauth2/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}
+GET /oauth2/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}
 ```
+
+| Parameter | Required | Description |
+|---|---|---|
+| `response_type` | Yes | Must be `code`. |
+| `client_id` | Yes | Application client ID. |
+| `redirect_uri` | Yes | Must match the registered callback URL. |
+| `state` | Recommended | Opaque value to prevent CSRF; must be verified on callback. |
 
 The user completes login in the browser. PingCode redirects back to `redirect_uri` with `?code=...&state=...`.
 
@@ -58,17 +65,55 @@ The user completes login in the browser. PingCode redirects back to `redirect_ur
 GET /v1/auth/token?grant_type=authorization_code&code={code}&client_id={client_id}&client_secret={client_secret}&redirect_uri={redirect_uri}
 ```
 
+| Parameter | Required | Description |
+|---|---|---|
+| `grant_type` | Yes | Must be `authorization_code`. |
+| `code` | Yes | Authorization code returned in the redirect. |
+| `client_id` | Yes | Same as authorization request. |
+| `client_secret` | Yes | Application client secret. |
+| `redirect_uri` | Yes | Must match the value used in the authorization request. |
+
 `redirect_uri` is REQUIRED in the token exchange if it was included in the authorization request (OAuth2 RFC 6749 §4.1.3).
+
+Example response:
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "eyJhbGciOi..."
+}
+```
 
 **Step 3 — Use and refresh:**
 ```http
 Authorization: Bearer {access_token}
 ```
 
+#### `/oauth2/authorized` (docs-only test fixture)
+
+The CLI tests include a mock endpoint at `/oauth2/authorized` that extracts a code from an HTML page for unit testing. This is **not** the production OAuth2 flow. Production uses the `redirect_uri` callback in Step 1.
+
 ### Refresh token (user token)
 
 ```http
 GET /v1/auth/token?grant_type=refresh_token&refresh_token={refresh_token}&client_id={client_id}&client_secret={client_secret}
+```
+
+| Parameter | Required | Description |
+|---|---|---|
+| `grant_type` | Yes | Must be `refresh_token`. |
+| `refresh_token` | Yes | Refresh token from the `authorization_code` exchange. |
+| `client_id` | Yes | Application client ID. |
+| `client_secret` | Yes | Application client secret. |
+
+Example response:
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
 ```
 
 The response includes a new `access_token` and `expires_in`. If the response does NOT include a new `refresh_token` (common with rotating refresh tokens), the existing `refresh_token` in the cache must be preserved.
