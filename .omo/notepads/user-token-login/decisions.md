@@ -72,3 +72,36 @@
   - `--grant-type authorization_code` with cached token succeeds (via `global.fetch` mock).
   - `config list` accepts both `client_credentials` and `authorization_code` grant types.
   - `pingcode-ctx` parser accepts `--grant-type` and defaults correctly.
+
+## Wave 3 Implementation Decisions (2026-07-09)
+
+### Login subcommand location
+- **File**: `scripts/commands/login.js` — follows the established command module pattern.
+- **Registration**: `shared.registerModule('login', ...)` with side-effect `require('./commands/login')` in `scripts/pingcode.js`.
+- **No external dependencies**: Uses only Node built-ins (`node:crypto`, `node:child_process`, `node:readline`, `node:os`).
+
+### Default grant type
+- `login` defaults `grant_type` to `'authorization_code'` (not `'client_credentials'`). This is the only command module where `authorization_code` is the default.
+- `--grant-type` flag is still accepted for consistency with other commands.
+
+### Browser spawning
+- Cross-platform via `node:child_process.spawn` with platform detection: `open` (macOS), `xdg-open` (Linux), `cmd /c start` (Windows).
+- Non-blocking: spawn with `detached: true` and `stdio: 'ignore'`.
+- Failure is non-fatal: falls back to printing the URL and prompting for code.
+
+### Dry-run design
+- Dry-run with `--code` returns the exchange request shape directly (no client object needed for `buildUrl`).
+- Dry-run without `--code` still creates a client to call `buildAuthorizationUrl()` (needs `baseUrl`/`clientId` from opts), but never touches the network.
+- The callback server is NEVER started in dry-run mode.
+
+### stdin mocking for tests
+- `promptForCode()` and `run()` accept optional `inputFunc` parameter (same pattern as `pingcode-ctx.js`).
+- This avoids the problem of `process.stdin` being a read-only getter in Node.js >= 18.
+
+### Parser flag validation order
+- Unknown flags are rejected BEFORE attempting to consume the next token as a value.
+- This prevents misleading "Flag requires a value" error when the flag itself is unrecognized.
+
+### Security: token secrecy
+- Success output only prints `User token saved for grant_type authorization_code` — never echoes `access_token` or `refresh_token`.
+- Dry-run output with `--code` includes the code in params (it's a one-time code about to be exchanged), but the real flow never prints it.

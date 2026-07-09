@@ -27,7 +27,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_config.js tests/test_work_item.js",
+    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_config.js tests/test_work_item.js tests/test_login.js",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {

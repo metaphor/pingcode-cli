@@ -15,6 +15,7 @@ module.exports = { ...core };
 // ./shared and ../core, never from ../pingcode.)
 require('./commands/config');
 require('./commands/work-item');
+require('./commands/login');
 
 const shared = require('./commands/shared');
 

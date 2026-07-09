@@ -68,3 +68,33 @@
 
 ### Total Tests
 - 146 tests pass (0 fail) including all 6 new callback server tests.
+
+## Wave 3 — Login Subcommand (2026-07-09)
+
+### Implementation
+- New `scripts/commands/login.js` module following the same command pattern as `work-item.js` and `config.js`.
+- Self-registers via `shared.registerModule('login', ...)`; loaded via `require('./commands/login')` side-effect in `scripts/pingcode.js`.
+
+### Flag Parsing
+- Own `parseLoginArgs()` with local `BOOLEAN_FLAGS` and `STRING_FLAGS` maps.
+- Default `grant_type` is `authorization_code` (login is specifically for user-token auth).
+- `--redirect-uri` defaults to `http://127.0.0.1:8765/callback`; `--port` defaults to `8765`.
+- Unknown flag detection happens before value consumption to avoid misleading "flag requires a value" error for unknown flags.
+- Supports env vars: `PINGCODE_REDIRECT_URI`, `PINGCODE_CALLBACK_PORT` in addition to existing credential env vars.
+
+### Browser Opening
+- Uses `node:child_process` spawn with `open` (macOS), `xdg-open` (Linux), or `start` (Windows).
+- Browser spawn failure gracefully falls back to printing the authorization URL and prompting for code from stdin.
+
+### Code-Paste Mode (`--no-browser`)
+- Prints the authorization URL and uses `node:readline` to prompt for the code on stdin.
+- `promptForCode()` accepts optional `inputFunc` parameter for testability (same pattern as `pingcode-ctx.js`).
+
+### Dry-Run Mode
+- With `--code`: returns `{dry_run: true, method: 'GET', path: '/v1/auth/token', params: {...}}` — no server, no browser, no network.
+- Without `--code`: prints the authorization URL (generated with real state) — no server, no browser.
+- Does not start the callback server and does not open the browser in any dry-run scenario.
+
+### Test Coverage
+- 32 new tests in `tests/test_login.js` covering: parser (all flags, defaults, env vars, error cases), dry-run with `--code` and `--no-browser`, credential errors, `--code` exchange with mocked fetch + cache verification, `--no-browser` with mocked stdin, dispatcher integration (help output, module listing), `createClient`, `buildDryRunExchange`.
+- All 178 tests pass (146 existing + 32 new).
