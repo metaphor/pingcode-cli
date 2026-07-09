@@ -245,15 +245,15 @@ function parseListArgs(tokens) {
 async function runList(client, opts, args) {
   const params = {};
   const cache = client.workspaceCache;
+  const defaultToCurrentUser = !opts.all_users && client.resolveGrantType() !== 'authorization_code';
 
-  // Apply default filters (assignee, project, sprint) unless --all-* flags are set
   const filtered = core.applyDefaultWorkItemFilters(
     '/v1/project/work_items',
     params,
     client,
     opts.user_id,
     opts.user_name,
-    !opts.all_users,
+    defaultToCurrentUser,
     opts.all_projects,
     opts.all_sprints,
   );

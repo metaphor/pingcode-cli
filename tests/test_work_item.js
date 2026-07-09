@@ -1225,9 +1225,9 @@ testInCleanTmp('work-item list --grant-type authorization_code --dry-run accepts
   assert.strictEqual(result.dry_run, true);
   assert.strictEqual(result.method, 'GET');
   assert.strictEqual(result.path, '/v1/project/work_items');
-  assert.strictEqual(result.params.assignee_ids, 'user-1');
   assert.strictEqual(result.params.project_ids, 'project-1');
   assert.strictEqual(result.params.sprint_ids, 'sprint-1');
+  assert.strictEqual('assignee_ids' in result.params, false, 'user token should not default to current-user filter');
 });
 
 testInCleanTmp('work-item list --grant-type authorization_code without cached token exits 1 with login guidance', async (t, tmpdir) => {
@@ -1329,6 +1329,52 @@ testInCleanTmp('work-item list --grant-type authorization_code with cached user 
   } finally {
     console.log = originalLog;
     global.fetch = originalFetch;
+    if (origTokenCacheEnv) process.env.PINGCODE_TOKEN_CACHE = origTokenCacheEnv;
+    else delete process.env.PINGCODE_TOKEN_CACHE;
+  }
+});
+
+testInCleanTmp('work-item list with cached user token and no current user does not require identity', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  const tokenCache = tmpFile(tmpdir, 'token.json');
+
+  const now = Math.floor(Date.now() / 1000);
+  const tokenPayload = {
+    grant_type: 'authorization_code',
+    access_token: 'cached-user-token',
+    refresh_token: 'rt-1',
+    expires_at: now + 3600,
+  };
+  fs.mkdirSync(path.dirname(tokenCache), { recursive: true });
+  fs.writeFileSync(tokenCache, JSON.stringify(tokenPayload));
+
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+
+  const origTokenCacheEnv = process.env.PINGCODE_TOKEN_CACHE;
+  process.env.PINGCODE_TOKEN_CACHE = tokenCache;
+
+  try {
+    await workItem.run([
+      'list', '--workspace-cache', cachePath, '--dry-run',
+      '--client-id', 'c', '--client-secret', 's',
+    ]);
+
+    const result = JSON.parse(output.trim());
+    assert.strictEqual(result.dry_run, true);
+    assert.strictEqual(result.params.project_ids, 'project-1');
+    assert.strictEqual(result.params.sprint_ids, 'sprint-1');
+    assert.strictEqual('assignee_ids' in result.params, false, 'should not default to current user with user token');
+  } finally {
+    console.log = originalLog;
     if (origTokenCacheEnv) process.env.PINGCODE_TOKEN_CACHE = origTokenCacheEnv;
     else delete process.env.PINGCODE_TOKEN_CACHE;
   }
