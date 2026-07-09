@@ -34,6 +34,25 @@
 - 18 new tests added covering: default grant_type, auth_code with/without cache, expired token refresh, old cache format backward compat, exchange/refresh/build methods, saveCachedToken/loadCachedToken format, grant type mismatch, error states.
 - All 130 tests pass (112 original + 18 new).
 
+## Wave 2 Implementation Decisions (2026-07-09)
+
+### startAuthCallbackServer design
+- **Location**: Added to `scripts/core.js` (not a separate `scripts/auth-server.js`). Keeps all auth primitives in one module.
+- **Dependencies**: `node:http` and `node:url` only. No Express, no external packages.
+- **Port handling**: Default listens on caller-specified port. No default port — caller picks (will be `login` subcommand in Wave 3).
+- **Binding**: Listens on `127.0.0.1` only (loopback) — never on `0.0.0.0`. This prevents the callback from being accessible from the network.
+- **Close guarantee**: Promise settles only after `server.close()` callback fires, ensuring the port is released before the Promise resolves/rejects. This avoids port-reuse races in the upcoming `login` flow.
+- **Keep-alive**: All responses include `Connection: close` header so the server doesn't wait 5s for keep-alive timeout before closing.
+- **HTML responses**: Each scenario (success, error, state mismatch, bad request) returns a user-friendly HTML page. Error descriptions are HTML-escaped.
+
+### escapeHtml helper
+- Small utility for HTML-escaping OAuth error messages in response bodies. Prevents XSS in error_description params.
+
+### Test methodology
+- Fixed port range (61701-61706) rather than dynamic port allocation, to avoid `getFreePort()` → `server.listen()` race conditions.
+- `Promise.allSettled` pattern for concurrent HTTP response + promise rejection tests.
+- All tests verify both the HTTP response (status code, body content) and the Promise outcome (resolve/reject).
+
 ## Wave 4 Implementation Decisions (2026-07-09)
 
 ### Flag scope

@@ -681,17 +681,20 @@ test('startAuthCallbackServer rejects on state mismatch', async () => {
 
   await new Promise(resolve => setTimeout(resolve, 60));
 
-  const result = await callbackRequest(port, '/callback', { code: 'code-1', state: 'wrong-state' });
-  assert.strictEqual(result.status, 400);
-  assert.ok(result.body.includes('State Mismatch'));
+  const [promiseSettled, httpResult] = await Promise.allSettled([
+    promise,
+    callbackRequest(port, '/callback', { code: 'code-1', state: 'wrong-state' }),
+  ]);
 
-  await assert.rejects(() => promise, (err) => {
-    assert.ok(err instanceof core.PingCodeError);
-    assert.ok(err.message.includes('State mismatch'));
-    assert.ok(err.message.includes('expected-state'));
-    assert.ok(err.message.includes('wrong-state'));
-    return true;
-  });
+  assert.strictEqual(httpResult.status, 'fulfilled');
+  assert.strictEqual(httpResult.value.status, 400);
+  assert.ok(httpResult.value.body.includes('State Mismatch'));
+
+  assert.strictEqual(promiseSettled.status, 'rejected');
+  assert.ok(promiseSettled.reason instanceof core.PingCodeError);
+  assert.ok(promiseSettled.reason.message.includes('State mismatch'));
+  assert.ok(promiseSettled.reason.message.includes('expected-state'));
+  assert.ok(promiseSettled.reason.message.includes('wrong-state'));
 });
 
 test('startAuthCallbackServer rejects on OAuth error', async () => {
@@ -706,23 +709,26 @@ test('startAuthCallbackServer rejects on OAuth error', async () => {
 
   await new Promise(resolve => setTimeout(resolve, 60));
 
-  const result = await callbackRequest(port, '/callback', {
-    error: 'access_denied',
-    error_description: 'User denied access',
-    state: 's',
-  });
-  assert.strictEqual(result.status, 400);
-  assert.ok(result.body.includes('Authentication Error'));
-  assert.ok(result.body.includes('access_denied'));
-  assert.ok(result.body.includes('User denied access'));
+  const [promiseSettled, httpResult] = await Promise.allSettled([
+    promise,
+    callbackRequest(port, '/callback', {
+      error: 'access_denied',
+      error_description: 'User denied access',
+      state: 's',
+    }),
+  ]);
 
-  await assert.rejects(() => promise, (err) => {
-    assert.ok(err instanceof core.PingCodeError);
-    assert.ok(err.message.includes('OAuth error'));
-    assert.ok(err.message.includes('access_denied'));
-    assert.ok(err.message.includes('User denied access'));
-    return true;
-  });
+  assert.strictEqual(httpResult.status, 'fulfilled');
+  assert.strictEqual(httpResult.value.status, 400);
+  assert.ok(httpResult.value.body.includes('Authentication Error'));
+  assert.ok(httpResult.value.body.includes('access_denied'));
+  assert.ok(httpResult.value.body.includes('User denied access'));
+
+  assert.strictEqual(promiseSettled.status, 'rejected');
+  assert.ok(promiseSettled.reason instanceof core.PingCodeError);
+  assert.ok(promiseSettled.reason.message.includes('OAuth error'));
+  assert.ok(promiseSettled.reason.message.includes('access_denied'));
+  assert.ok(promiseSettled.reason.message.includes('User denied access'));
 });
 
 test('startAuthCallbackServer rejects on timeout', async () => {
@@ -758,7 +764,6 @@ test('startAuthCallbackServer closes listener after resolving', async () => {
   await callbackRequest(port, '/callback', { code: 'c', state });
   await promise;
 
-  // Verify port is no longer listening
   await assert.rejects(() => callbackRequest(port, '/callback', { code: 'c2', state }), (err) => {
     assert.ok(err.message.includes('ECONNREFUSED') || (err.code && err.code === 'ECONNREFUSED'));
     return true;

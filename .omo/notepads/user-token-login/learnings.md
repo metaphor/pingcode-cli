@@ -40,3 +40,31 @@
 ### Test Coverage
 - 10 new tests across `test_work_item.js` (4), `test_config.js` (4), `test_pingcode.js` (2).
 - All 10 pass; existing 130 tests unchanged. Total: 146, of which 140 pass (6 pre-existing failures in Wave 2 callback server tests).
+
+## Wave 2 — Local OAuth Callback Server (2026-07-09)
+
+### Implementation
+- `startAuthCallbackServer({port, path, state, timeoutMs})` returns a Promise that resolves with `{code, state}` on success.
+- Uses only `node:http` and `node:url` — no external dependencies.
+- Responds with HTML pages for success, error, state mismatch, and bad-request scenarios.
+- All response paths include `Connection: close` header to avoid Node.js default 5s keep-alive delay.
+- Server fully closes (including `'close'` event) before the Promise settles — port is guaranteed released.
+
+### Cleanup Logic Bug
+- Initial `cleanup()` had inverted return values: returned `false` on first call (meaning "I handled it"), but callers checked `if (!cleanup()) return;` which skipped the resolve/reject. Fixed by returning `true` on first call.
+- Later refactored to `finish(action, value)` pattern that calls `server.close(callback)` and resolves/rejects inside the `'close'` callback — this ensures the Promise doesn't settle until the port is released.
+
+### Keep-Alive Trap
+- Node.js HTTP server defaults to 5s keep-alive. `server.close()` waits for all connections to end. Without `Connection: close`, tests took ~4s each waiting for keep-alive timeout. Setting `res.setHeader('Connection', 'close')` makes the server close immediately after response.
+
+### Test Approach
+- Used fixed high port numbers (61701-61706) to avoid race conditions between `getFreePort()` finding a port and the server listening on it.
+- Used `Promise.allSettled` for state-mismatch and OAuth-error tests to avoid unhandled promise rejection warnings (the HTTP response and promise rejection fire concurrently).
+- 6 new tests: happy path, state mismatch, OAuth error, timeout, server-close-verification, wrong-path-404.
+
+### Port Close Guarantee
+- The `finish()` function queues the resolve/reject action and executes it inside `server.close(callback)`, ensuring the `'close'` event fires before the Promise settles.
+- This means callers can immediately reuse the port after the Promise resolves — important for Wave 3's login flow.
+
+### Total Tests
+- 146 tests pass (0 fail) including all 6 new callback server tests.

@@ -1,9 +1,11 @@
 'use strict';
 
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const nodeUrl = require('node:url');
 
 const DEFAULT_BASE_URL = 'https://open.pingcode.com';
 const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode-skill/token.json';
@@ -1137,6 +1139,103 @@ function sortKeys(value) {
   return value;
 }
 
+function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 120000}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let pendingResult = null;
+
+    function finish(action, value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pendingResult = { action, value };
+      server.close(() => {
+        if (action === 'resolve') resolve(value);
+        else reject(value);
+      });
+    }
+
+    const server = http.createServer((req, res) => {
+      res.setHeader('Connection', 'close');
+      const parsed = nodeUrl.parse(req.url, true);
+
+      if (parsed.pathname !== callbackPath) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+
+      const query = parsed.query;
+      const code = query.code;
+      const oauthError = query.error;
+
+      if (oauthError) {
+        const errorDescription = query.error_description || '';
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(
+          '<html><body><h1>Authentication Error</h1>' +
+          `<p>${escapeHtml(oauthError)}${errorDescription ? ': ' + escapeHtml(errorDescription) : ''}</p>` +
+          '<p>You can close this window.</p></body></html>',
+        );
+        finish('reject', new PingCodeError(
+          `OAuth error: ${oauthError}${errorDescription ? ' - ' + errorDescription : ''}`,
+        ));
+        return;
+      }
+
+      if (query.state !== state) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(
+          '<html><body><h1>State Mismatch</h1>' +
+          '<p>The state parameter does not match.</p>' +
+          '<p>You can close this window.</p></body></html>',
+        );
+        finish('reject', new PingCodeError(
+          `State mismatch: expected '${state}', got '${query.state || 'none'}'`,
+        ));
+        return;
+      }
+
+      if (code) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(
+          '<html><body><h1>Authentication Successful</h1>' +
+          '<p>You can close this window.</p></body></html>',
+        );
+        finish('resolve', { code, state: query.state });
+        return;
+      }
+
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(
+        '<html><body><h1>Bad Request</h1>' +
+        '<p>Missing authorization code.</p>' +
+        '<p>You can close this window.</p></body></html>',
+      );
+      finish('reject', new PingCodeError('No authorization code in callback'));
+    });
+
+    const timer = setTimeout(() => {
+      finish('reject', new PingCodeError(`OAuth callback timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    server.on('error', (err) => {
+      finish('reject', new PingCodeError(`Callback server error: ${err.message}`));
+    });
+
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 module.exports = {
   PingCodeError,
   PingCodeClient,
@@ -1183,6 +1282,7 @@ module.exports = {
   cachedResponse,
   updateWorkspaceCacheForResponse,
   pathIsListWorkItems,
+  startAuthCallbackServer,
   refreshCommand,
   cacheProjects,
   cacheSprints,
