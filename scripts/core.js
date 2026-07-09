@@ -1162,6 +1162,9 @@ function startAuthCallbackServer({port, path: callbackPath, state, timeoutMs = 1
       settled = true;
       clearTimeout(timer);
       pendingResult = { action, value };
+      if (typeof server.closeAllConnections === 'function') {
+        server.closeAllConnections();
+      }
       server.close(() => {
         if (action === 'resolve') resolve(value);
         else reject(value);

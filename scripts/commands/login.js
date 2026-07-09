@@ -149,6 +149,7 @@ function openBrowser(url) {
         reject(new Error(`Browser process exited with code ${code}`));
       }
     });
+    child.unref();
   });
 }
 

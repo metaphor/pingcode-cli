@@ -36,11 +36,11 @@ async function dispatcherMain(argv) {
   if (mod) {
     try {
       await mod.run(tokens.slice(1));
+      process.exit(0);
     } catch (exc) {
       console.error(`error: ${exc.message}`);
-      process.exitCode = 1;
+      process.exit(1);
     }
-    return;
   }
 
   // (3) Unknown argument.
