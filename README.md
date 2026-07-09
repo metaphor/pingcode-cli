@@ -182,7 +182,7 @@ export PINGCODE_CLIENT_SECRET="..."
 
 ```bash
 export PINGCODE_BASE_URL="https://open.pingcode.com"
-export PINGCODE_TOKEN_CACHE="$HOME/.cache/pingcode-skill/token.json"
+export PINGCODE_TOKEN_CACHE="$HOME/.cache/pingcode-cli/token.json"
 export PINGCODE_WORKSPACE_CACHE=".pingcode-skill/cache.json"
 export PINGCODE_USER_NAME="你的 PingCode 用户名或显示名"
 export PINGCODE_USER_ID="你的 PingCode 用户 ID"

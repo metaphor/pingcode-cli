@@ -7,7 +7,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 
 const DEFAULT_BASE_URL = 'https://open.pingcode.com';
-const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode-skill/token.json';
+const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode-cli/token.json';
 const DEFAULT_WORKSPACE_CACHE = '.pingcode-skill/cache.json';
 const MAX_TOKEN_TTL_SECONDS = 29 * 24 * 60 * 60;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
