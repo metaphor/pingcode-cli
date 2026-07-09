@@ -127,6 +127,7 @@ function buildParser() {
         no_token_cache: false,
         workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || pingcode.DEFAULT_WORKSPACE_CACHE,
         refresh: false,
+        grant_type: 'client_credentials',
       };
 
       const booleanFlags = new Set(['--no-token-cache', '--refresh']);
@@ -136,6 +137,7 @@ function buildParser() {
         '--client-secret': 'client_secret',
         '--token': 'token',
         '--workspace-cache': 'workspace_cache',
+        '--grant-type': 'grant_type',
       };
 
       const tokens = argv || process.argv.slice(2);
@@ -188,6 +190,7 @@ function usageText() {
     '  --token TOKEN',
     '  --no-token-cache',
     '  --workspace-cache PATH',
+    '  --grant-type TYPE          OAuth grant type: client_credentials (default) or authorization_code',
     '  --refresh',
     '  -h, --help',
   ].join('\n');
@@ -202,6 +205,7 @@ async function run(args, inputFunc) {
     token: args.token,
     token_cache: tokenCache,
     workspace_cache: args.workspace_cache,
+    grant_type: args.grant_type,
   });
 
   let rl = null;

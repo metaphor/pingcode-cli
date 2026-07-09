@@ -33,3 +33,23 @@
 ### Testing
 - 18 new tests added covering: default grant_type, auth_code with/without cache, expired token refresh, old cache format backward compat, exchange/refresh/build methods, saveCachedToken/loadCachedToken format, grant type mismatch, error states.
 - All 130 tests pass (112 original + 18 new).
+
+## Wave 4 Implementation Decisions (2026-07-09)
+
+### Flag scope
+- `--grant-type` is a global flag on `work-item`, `config`, and `pingcode-ctx` commands, not a top-level dispatcher flag.
+- Each command module parses `--grant-type` independently alongside its other string flags (following existing per-module parser pattern).
+- Default is `'client_credentials'` everywhere — no behavior change when the flag is omitted.
+
+### Client construction
+- `grant_type: opts.grant_type` is passed directly to the `PingCodeClient` constructor from each module's client factory function.
+- No changes to `scripts/core.js` — `PingCodeClient` already accepted `grant_type` in its constructor from Wave 1.
+
+### Testing strategy
+- Parser unit tests verify flag parsing and default value in each module.
+- Integration tests verify:
+  - `--grant-type client_credentials` with `--dry-run` produces identical output to default (no flag).
+  - `--grant-type authorization_code` without cached token exits with `login` guidance (via `assert.rejects`).
+  - `--grant-type authorization_code` with cached token succeeds (via `global.fetch` mock).
+  - `config list` accepts both `client_credentials` and `authorization_code` grant types.
+  - `pingcode-ctx` parser accepts `--grant-type` and defaults correctly.

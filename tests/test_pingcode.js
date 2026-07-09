@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const http = require('node:http');
 const { test } = require('node:test');
+const crypto = require('node:crypto');
 const assert = require('node:assert');
 
 const pingcode = require('../scripts/pingcode');
@@ -625,6 +627,163 @@ testInCleanTmp('exchangeAuthorizationCode throws on missing access_token', async
   });
 });
 
+// ── Auth callback server tests ──────────────────────────────────────
+
+const AUTH_CALLBACK_PORT_BASE = 61700;
+
+function callbackRequest(port, path, params) {
+  return new Promise((resolve, reject) => {
+    const query = new URLSearchParams(params).toString();
+    const req = http.get(`http://127.0.0.1:${port}${path}?${query}`, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.setTimeout(3000, () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+  });
+}
+
+test('startAuthCallbackServer happy path resolves with code and state', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 1;
+  const state = crypto.randomUUID();
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state,
+    timeoutMs: 5000,
+  });
+
+  // Brief wait for server to start listening
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const result = await callbackRequest(port, '/callback', { code: 'code-1', state });
+  assert.strictEqual(result.status, 200);
+  assert.ok(result.body.includes('Authentication Successful'));
+
+  const resolved = await promise;
+  assert.deepStrictEqual(resolved, { code: 'code-1', state });
+});
+
+test('startAuthCallbackServer rejects on state mismatch', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 2;
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state: 'expected-state',
+    timeoutMs: 5000,
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const result = await callbackRequest(port, '/callback', { code: 'code-1', state: 'wrong-state' });
+  assert.strictEqual(result.status, 400);
+  assert.ok(result.body.includes('State Mismatch'));
+
+  await assert.rejects(() => promise, (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('State mismatch'));
+    assert.ok(err.message.includes('expected-state'));
+    assert.ok(err.message.includes('wrong-state'));
+    return true;
+  });
+});
+
+test('startAuthCallbackServer rejects on OAuth error', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 3;
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state: 's',
+    timeoutMs: 5000,
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const result = await callbackRequest(port, '/callback', {
+    error: 'access_denied',
+    error_description: 'User denied access',
+    state: 's',
+  });
+  assert.strictEqual(result.status, 400);
+  assert.ok(result.body.includes('Authentication Error'));
+  assert.ok(result.body.includes('access_denied'));
+  assert.ok(result.body.includes('User denied access'));
+
+  await assert.rejects(() => promise, (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('OAuth error'));
+    assert.ok(err.message.includes('access_denied'));
+    assert.ok(err.message.includes('User denied access'));
+    return true;
+  });
+});
+
+test('startAuthCallbackServer rejects on timeout', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 4;
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state: 's',
+    timeoutMs: 200,
+  });
+
+  await assert.rejects(() => promise, (err) => {
+    assert.ok(err instanceof core.PingCodeError);
+    assert.ok(err.message.includes('timed out'));
+    return true;
+  });
+});
+
+test('startAuthCallbackServer closes listener after resolving', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 5;
+  const state = crypto.randomUUID();
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/callback',
+    state,
+    timeoutMs: 5000,
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  await callbackRequest(port, '/callback', { code: 'c', state });
+  await promise;
+
+  // Verify port is no longer listening
+  await assert.rejects(() => callbackRequest(port, '/callback', { code: 'c2', state }), (err) => {
+    assert.ok(err.message.includes('ECONNREFUSED') || (err.code && err.code === 'ECONNREFUSED'));
+    return true;
+  });
+});
+
+test('startAuthCallbackServer returns 404 for wrong path', async () => {
+  const port = AUTH_CALLBACK_PORT_BASE + 6;
+
+  const promise = core.startAuthCallbackServer({
+    port,
+    path: '/oauth/callback',
+    state: 's',
+    timeoutMs: 5000,
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const result = await callbackRequest(port, '/wrong-path', { code: 'c', state: 's' });
+  assert.strictEqual(result.status, 404);
+
+  await callbackRequest(port, '/oauth/callback', { code: 'c', state: 's' });
+  await promise;
+});
+
 // ── pingcode-ctx integration test ───────────────────────────────────
 
 testInCleanTmp('pingcode ctx selects and caches workspace context', async (t, tmpdir) => {
@@ -670,6 +829,25 @@ testInCleanTmp('pingcode ctx selects and caches workspace context', async (t, tm
   } finally {
     console.log = originalLog;
   }
+});
+
+// ── pingcode-ctx --grant-type flag test ──────────────────────────────
+
+testInCleanTmp('pingcode-ctx parser accepts --grant-type', async (t, tmpdir) => {
+  const args = pingcodeCtx.buildParser().parseArgs([
+    '--workspace-cache', String(tmpFile(tmpdir, 'workspace.json')),
+    '--token', 'token-1',
+    '--grant-type', 'authorization_code',
+  ]);
+  assert.strictEqual(args.grant_type, 'authorization_code');
+});
+
+testInCleanTmp('pingcode-ctx parser defaults grant_type to client_credentials', async (t, tmpdir) => {
+  const args = pingcodeCtx.buildParser().parseArgs([
+    '--workspace-cache', String(tmpFile(tmpdir, 'workspace.json')),
+    '--token', 'token-1',
+  ]);
+  assert.strictEqual(args.grant_type, 'client_credentials');
 });
 
 // ── Dispatcher tests ────────────────────────────────────────────────

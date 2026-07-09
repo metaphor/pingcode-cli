@@ -17,6 +17,7 @@ const GLOBAL_STRING_FLAGS = {
   '--user-id': 'user_id',
   '--user-name': 'user_name',
   '--workspace-cache': 'workspace_cache',
+  '--grant-type': 'grant_type',
 };
 
 function defaultGlobalOpts() {
@@ -35,6 +36,7 @@ function defaultGlobalOpts() {
     all_users: false,
     all_projects: false,
     all_sprints: false,
+    grant_type: 'client_credentials',
   };
 }
 
@@ -94,6 +96,7 @@ function clientFromOpts(opts) {
     token: opts.token,
     token_cache: tokenCache,
     workspace_cache: workspaceCache,
+    grant_type: opts.grant_type,
   });
 }
 
@@ -680,6 +683,7 @@ function printHelp() {
     '  --no-token-cache            Disable token cache',
     '  --dry-run                   Show API request without executing',
     '  --compact                   Compact output',
+    '  --grant-type TYPE           OAuth grant type: client_credentials (default) or authorization_code',
     '  --help                      Show this help',
   ].join('\n'));
 }

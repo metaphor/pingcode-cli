@@ -105,6 +105,7 @@ function printHelp(subcommand) {
     '  --workspace-cache PATH   Workspace cache file path',
     '  --no-workspace-cache     Disable workspace cache',
     '  --dry-run                Show what would be done without executing',
+    '  --grant-type TYPE        OAuth grant type: client_credentials (default) or authorization_code',
     '  --help                   Show this help',
   ].join('\n'));
 }
@@ -122,6 +123,7 @@ const STRING_FLAGS = {
   '--client-secret': 'client_secret',
   '--token': 'token',
   '--workspace-cache': 'workspace_cache',
+  '--grant-type': 'grant_type',
 };
 
 function parseConfigArgs(tokens) {
@@ -135,6 +137,7 @@ function parseConfigArgs(tokens) {
     no_token_cache: false,
     dry_run: false,
     refresh: false,
+    grant_type: 'client_credentials',
   };
 
   const positionals = [];
@@ -197,6 +200,7 @@ function createClient(opts) {
     token: opts.token,
     token_cache: tokenCache,
     workspace_cache: workspaceCache,
+    grant_type: opts.grant_type,
   });
 }
 

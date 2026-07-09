@@ -20,3 +20,23 @@
 - Old format: `{access_token, expires_at}` — backward compatible, `loadCachedToken` defaults `grant_type` to `'client_credentials'`
 - New format: `{grant_type, access_token, refresh_token?, expires_at}` — `refresh_token` only present for `authorization_code`
 - `saveCachedToken` always writes `grant_type` (defaults to `'client_credentials'` for backward compat)
+
+## Wave 4 — --grant-type Global Flag (2026-07-09)
+
+### Flag Wiring Pattern
+- Each command module has its own flag parser with local string/boolean flag maps; `--grant-type` was added as a string flag with default `'client_credentials'` in each.
+- `work-item.js`: Added to `GLOBAL_STRING_FLAGS` (used in `parseGlobalOptions()`) and `defaultGlobalOpts()`, then passed via `clientFromOpts()` to `PingCodeClient`.
+- `config.js`: Added to `STRING_FLAGS` (used in `parseConfigArgs()`) and default opts, then passed via `createClient()` to `PingCodeClient`.
+- `pingcode-ctx.js`: Added to `stringFlags` in `buildParser().parseArgs()`, default args, and passed in `run()` to `PingCodeClient`.
+- `PingCodeClient` constructor already accepted `grant_type` from Wave 1 — no core.js changes needed.
+
+### Dry-Run Behavior
+- `client.request()` returns the dry_run shape immediately without calling `accessToken()`, so `--grant-type` with `--dry-run` always succeeds regardless of token cache state.
+- The `--grant-type authorization_code` without cached token test must use real (non-dry-run) requests to hit the `accessToken()` → "run login" error path.
+
+### Help Text
+- Each module's help text mentions `--grant-type TYPE` in the global options section with description: `OAuth grant type: client_credentials (default) or authorization_code`.
+
+### Test Coverage
+- 10 new tests across `test_work_item.js` (4), `test_config.js` (4), `test_pingcode.js` (2).
+- All 10 pass; existing 130 tests unchanged. Total: 146, of which 140 pass (6 pre-existing failures in Wave 2 callback server tests).

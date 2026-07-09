@@ -758,3 +758,60 @@ testInCleanTmp('config operations only modify cache file', async (t, tmpdir) => 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_user_id, 'new-user');
 });
+
+// ── --grant-type flag tests ─────────────────────────────────────────
+
+testInCleanTmp('config list --grant-type client_credentials exits 0', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_user_name: 'Alice',
+    },
+    users: [{ id: 'user-1', name: 'alice' }],
+  });
+
+  const capture = captureConsole();
+  try {
+    await config.run(['list', '--workspace-cache', cachePath, '--grant-type', 'client_credentials']);
+    const output = capture.logs();
+    assert.ok(output.length > 0, 'list should produce output');
+    assert.ok(output.includes('user-1'), 'should include user id');
+    assert.ok(output.includes('Alice'), 'should include user name');
+  } finally {
+    capture.done();
+  }
+});
+
+testInCleanTmp('config list --grant-type authorization_code accepts flag', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_user_name: 'Alice',
+    },
+    users: [{ id: 'user-1', name: 'alice' }],
+  });
+
+  const capture = captureConsole();
+  try {
+    await config.run(['list', '--workspace-cache', cachePath, '--grant-type', 'authorization_code']);
+    const output = capture.logs();
+    assert.ok(output.length > 0, 'list should produce output');
+    assert.ok(output.includes('user-1'), 'should include user id');
+  } finally {
+    capture.done();
+  }
+});
+
+test('parseConfigArgs parses --grant-type flag', () => {
+  const result = config.parseConfigArgs([
+    'list', '--grant-type', 'authorization_code',
+  ]);
+  assert.strictEqual(result.opts.grant_type, 'authorization_code');
+});
+
+test('parseConfigArgs defaults grant_type to client_credentials', () => {
+  const result = config.parseConfigArgs(['list']);
+  assert.strictEqual(result.opts.grant_type, 'client_credentials');
+});
