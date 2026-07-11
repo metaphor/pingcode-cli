@@ -204,6 +204,7 @@ function parseListArgs(tokens) {
     project: null,
     sprint: null,
     limit: null,
+    keywords: null,
   };
   const stringFlags = {
     '--state': 'state',
@@ -212,6 +213,7 @@ function parseListArgs(tokens) {
     '--project': 'project',
     '--sprint': 'sprint',
     '--limit': 'limit',
+    '--keywords': 'keywords',
   };
 
   for (let i = 0; i < tokens.length; i++) {
@@ -281,6 +283,9 @@ async function runList(client, opts, args) {
   }
   if (args.limit) {
     filtered.page_size = String(args.limit);
+  }
+  if (args.keywords) {
+    filtered.keywords = args.keywords;
   }
 
   return await client.request(
@@ -491,19 +496,127 @@ async function runShow(client, opts, args) {
   return result;
 }
 
+// ── Get subcommand ───────────────────────────────────────────────────
+
+function parseGetArgs(tokens) {
+  let workItemId = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      if (workItemId === null) {
+        workItemId = arg;
+        continue;
+      }
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item get --help for usage.`);
+    }
+    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+  }
+  if (!workItemId) {
+    throw new core.PingCodeError('A work item id or identifier is required. Use work-item get --help for usage.');
+  }
+  return { work_item_id: workItemId };
+}
+
+async function runGet(client, opts, args) {
+  if (isIdentifier(args.work_item_id)) {
+    const resolutionParams = { identifier: args.work_item_id };
+
+    if (opts.dry_run) {
+      return {
+        dry_run: true,
+        resolution: {
+          method: 'GET',
+          path: '/v1/project/work_items',
+          params: resolutionParams,
+        },
+        get: {
+          method: 'GET',
+          path: '/v1/project/work_items/{id}',
+        },
+      };
+    }
+
+    const resolved = await client.request(
+      'GET',
+      '/v1/project/work_items',
+      resolutionParams,
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+    const values = core.pageValues(resolved);
+    if (values.length === 0) {
+      throw new core.PingCodeError(`No work item found with identifier ${args.work_item_id}`);
+    }
+    const workItemId = values[0].id;
+    return await client.request(
+      'GET',
+      `/v1/project/work_items/${workItemId}`,
+      null,
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+  }
+
+  return await client.request(
+    'GET',
+    `/v1/project/work_items/${args.work_item_id}`,
+    null,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
 // ── Update subcommand ────────────────────────────────────────────────
 
 function parseUpdateArgs(tokens) {
   const args = {
     target: null,
+    title: null,
+    description: null,
+    type: null,
+    project: null,
+    sprint: null,
     state: null,
     priority: null,
     assignee: null,
+    parent: null,
+    version: null,
+    board: null,
+    entry: null,
+    swimlane: null,
+    startAt: null,
+    endAt: null,
+    participants: null,
+    storyPoints: null,
+    estimatedWorkload: null,
+    remainingWorkload: null,
+    properties: null,
   };
   const stringFlags = {
+    '--title': 'title',
+    '--description': 'description',
+    '--type': 'type',
+    '--project': 'project',
+    '--sprint': 'sprint',
     '--state': 'state',
     '--priority': 'priority',
     '--assignee': 'assignee',
+    '--parent': 'parent',
+    '--version': 'version',
+    '--board': 'board',
+    '--entry': 'entry',
+    '--swimlane': 'swimlane',
+    '--start-at': 'startAt',
+    '--end-at': 'endAt',
+    '--participants': 'participants',
+    '--story-points': 'storyPoints',
+    '--estimated-workload': 'estimatedWorkload',
+    '--remaining-workload': 'remainingWorkload',
+    '--properties': 'properties',
   };
 
   for (let i = 0; i < tokens.length; i++) {
@@ -542,9 +655,14 @@ function parseUpdateArgs(tokens) {
   if (!args.target) {
     throw new core.PingCodeError('A work item id or identifier is required. Use work-item update --help for usage.');
   }
-  if (!args.state) {
-    throw new core.PingCodeError('--state is required. Use work-item update --help for usage.');
+
+  const hasUpdateField = Object.entries(args).some(
+    ([key, value]) => key !== 'target' && value !== null,
+  );
+  if (!hasUpdateField) {
+    throw new core.PingCodeError('At least one field to update is required. Use work-item update --help for usage.');
   }
+
   return args;
 }
 
@@ -554,39 +672,90 @@ function isIdentifier(arg) {
   return /^[A-Z]{3,6}-\d+$/.test(arg);
 }
 
+function parseNumber(value, label) {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    throw new core.PingCodeError(`${label} must be a number`);
+  }
+  return parsed;
+}
+
+function parseTimestamp(value, label) {
+  const trimmed = String(value).trim();
+  if (/^\d+$/.test(trimmed)) {
+    return parseInt(trimmed, 10);
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    throw new core.PingCodeError(`${label} must be a Unix timestamp or ISO date string`);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+function resolveParticipants(value, cache) {
+  const items = value.split(',').map((s) => s.trim()).filter(Boolean);
+  return items.map((item) => {
+    if (item.startsWith('@user:')) {
+      return core.cachedUserId(item.slice(6), cache);
+    }
+    const user = findCachedUser(cache, item);
+    return user.id;
+  });
+}
+
 async function runUpdate(client, opts, args) {
   const cache = client.workspaceCache;
+  const body = {};
 
-  // Resolve state id
-  const stateItem = core.findCachedItem(findAllCachedStates(cache), args.state, 'state');
-  const stateId = stateItem.id;
+  if (args.title) body.title = args.title;
+  if (args.description) body.description = args.description;
 
-  // Build patch body
-  const body = { state_id: stateId };
-
-  // Resolve priority
+  if (args.project) {
+    const projectItem = findCachedProject(cache, args.project);
+    body.project_id = projectItem.id;
+  }
+  if (args.type) {
+    const typeItem = findCachedWorkItemType(cache, args.type);
+    body.type_id = typeItem.id;
+  }
+  if (args.sprint) {
+    const sprintItem = findCachedSprint(cache, args.sprint);
+    body.sprint_id = sprintItem.id;
+  }
+  if (args.state) {
+    const stateItem = core.findCachedItem(findAllCachedStates(cache), args.state, 'state');
+    body.state_id = stateItem.id;
+  }
   if (args.priority) {
     const priorityItem = findCachedPriority(cache, args.priority);
     body.priority_id = priorityItem.id;
   }
-
-  // Resolve assignee
   if (args.assignee) {
     const userItem = findCachedUser(cache, args.assignee);
     body.assignee_id = userItem.id;
   }
+  if (args.parent) body.parent_id = args.parent;
+  if (args.version) body.version_id = args.version;
+  if (args.board) body.board_id = args.board;
+  if (args.entry) body.entry_id = args.entry;
+  if (args.swimlane) body.swimlane_id = args.swimlane;
+  if (args.startAt) body.start_at = parseTimestamp(args.startAt, 'start_at');
+  if (args.endAt) body.end_at = parseTimestamp(args.endAt, 'end_at');
+  if (args.participants) body.participant_ids = resolveParticipants(args.participants, cache);
+  if (args.storyPoints) body.story_points = parseNumber(args.storyPoints, 'story_points');
+  if (args.estimatedWorkload) body.estimated_workload = parseNumber(args.estimatedWorkload, 'estimated_workload');
+  if (args.remainingWorkload) body.remaining_workload = parseNumber(args.remainingWorkload, 'remaining_workload');
+  if (args.properties) body.properties = core.parseJsonObject(args.properties, 'properties');
+
+  // Sort keys for deterministic dry-run output
+  const sortedBody = {};
+  for (const k of Object.keys(body).sort()) sortedBody[k] = body[k];
 
   // Determine if target is an identifier needing resolution, or a direct work item id
   if (isIdentifier(args.target)) {
-    // Identifier: need to resolve to work item id first
     const resolutionParams = { identifier: args.target };
 
     if (opts.dry_run) {
-      // Sort keys for deterministic output
-      const sorted = {};
-      const keys = Object.keys(body).sort();
-      for (const k of keys) sorted[k] = body[k];
-
       return {
         dry_run: true,
         resolution: {
@@ -597,7 +766,7 @@ async function runUpdate(client, opts, args) {
         patch: {
           method: 'PATCH',
           path: '/v1/project/work_items/{id}',
-          json: sorted,
+          json: sortedBody,
         },
       };
     }
@@ -644,14 +813,12 @@ function printHelp() {
     '',
     'Subcommands:',
     '  list [options]              List work items',
-    '    --all-users               Show work items from all users (skip current-user filter)',
-    '    --all-projects            Show work items from all projects (skip current-project filter)',
-    '    --all-sprints             Show work items from all sprints (skip current-sprint filter)',
     '    --state <name|id>         Filter by state',
     '    --type <name|id>          Filter by type',
     '    --assignee <name|id|@me>  Filter by assignee',
     '    --project <id|name>       Filter by project',
     '    --sprint <id|name>        Filter by sprint',
+    '    --keywords <text>         Search keywords (title, identifier, etc.)',
     '    --limit N                 Max results per page',
     '',
     '  create --title TITLE        Create a new work item',
@@ -666,10 +833,29 @@ function printHelp() {
     '',
     '  show <id|identifier>        Show a single work item',
     '',
+    '  get <id|identifier>         Get a single work item by id or identifier',
+    '',
     '  update <id|identifier>      Update a work item',
-    '    --state <name|id>         New state (required)',
+    '    --title TEXT              New title',
+    '    --description TEXT        New description',
+    '    --type <name|id>          New work item type',
+    '    --project <id|name>       New project',
+    '    --sprint <id|name>        New sprint',
+    '    --state <name|id>         New state',
     '    --priority <name|id>      New priority',
     '    --assignee <name|id|@me>  New assignee',
+    '    --parent <id|identifier>  New parent work item',
+    '    --version ID              New version id',
+    '    --board ID                New board id',
+    '    --entry ID                New entry id',
+    '    --swimlane ID             New swimlane id',
+    '    --start-at TIMESTAMP      New start time (Unix timestamp or ISO date)',
+    '    --end-at TIMESTAMP        New end time (Unix timestamp or ISO date)',
+    '    --participants LIST       Comma-separated participant user names/ids',
+    '    --story-points NUMBER     New story points',
+    '    --estimated-workload NUM  New estimated workload',
+    '    --remaining-workload NUM  New remaining workload',
+    '    --properties JSON         New custom properties as JSON object',
     '',
     'Global options:',
     '  --base-url URL              PingCode base URL',
@@ -681,6 +867,9 @@ function printHelp() {
     '  --workspace-cache PATH      Workspace cache file path',
     '  --no-workspace-cache        Disable workspace cache',
     '  --no-token-cache            Disable token cache',
+    '  --all-users                 Show work items from all users (skip current-user filter)',
+    '  --all-projects              Show work items from all projects (skip current-project filter)',
+    '  --all-sprints               Show work items from all sprints (skip current-sprint filter)',
     '  --dry-run                   Show API request without executing',
     '  --compact                   Compact output',
     '  --grant-type TYPE           OAuth grant type: client_credentials, authorization_code, or auto (default; uses cached token type)',
@@ -697,14 +886,12 @@ function printSubcommandHelp(subcommand) {
         'List work items from the current project/sprint/assignee.',
         '',
         'Options:',
-        '  --all-users               Show work items from all users (skip current-user filter)',
-        '  --all-projects            Show work items from all projects (skip current-project filter)',
-        '  --all-sprints             Show work items from all sprints (skip current-sprint filter)',
         '  --state <name|id>         Filter by state',
         '  --type <name|id>          Filter by type',
         '  --assignee <name|id|@me>  Filter by assignee',
         '  --project <id|name>       Filter by project',
         '  --sprint <id|name>        Filter by sprint',
+        '  --keywords <text>         Search keywords (title, identifier, etc.)',
         '  --limit N                 Max results per page',
       ].join('\n'));
       break;
@@ -733,16 +920,40 @@ function printSubcommandHelp(subcommand) {
         'Show a single work item by id or identifier.',
       ].join('\n'));
       break;
+    case 'get':
+      console.log([
+        'Usage: node scripts/pingcode.js work-item get <id|identifier>',
+        '',
+        'Get a single work item by id or identifier.',
+      ].join('\n'));
+      break;
     case 'update':
       console.log([
-        'Usage: node scripts/pingcode.js work-item update <id|identifier> --state <name|id> [options]',
+        'Usage: node scripts/pingcode.js work-item update <id|identifier> [options]',
         '',
-        'Update a work item.',
+        'Update a work item. At least one option must be provided.',
         '',
         'Options:',
-        '  --state <name|id>         New state (required)',
+        '  --title TEXT              New title',
+        '  --description TEXT        New description',
+        '  --type <name|id>          New work item type',
+        '  --project <id|name>       New project',
+        '  --sprint <id|name>        New sprint',
+        '  --state <name|id>         New state',
         '  --priority <name|id>      New priority',
         '  --assignee <name|id|@me>  New assignee',
+        '  --parent <id|identifier>  New parent work item',
+        '  --version ID              New version id',
+        '  --board ID                New board id',
+        '  --entry ID                New entry id',
+        '  --swimlane ID             New swimlane id',
+        '  --start-at TIMESTAMP      New start time (Unix timestamp or ISO date)',
+        '  --end-at TIMESTAMP        New end time (Unix timestamp or ISO date)',
+        '  --participants LIST       Comma-separated participant user names/ids',
+        '  --story-points NUMBER     New story points',
+        '  --estimated-workload NUM  New estimated workload',
+        '  --remaining-workload NUM  New remaining workload',
+        '  --properties JSON         New custom properties as JSON object',
       ].join('\n'));
       break;
     default:
@@ -789,6 +1000,11 @@ async function run(argv) {
       case 'show': {
         const args = parseShowArgs(subArgs);
         result = await runShow(client, opts, args);
+        break;
+      }
+      case 'get': {
+        const args = parseGetArgs(subArgs);
+        result = await runGet(client, opts, args);
         break;
       }
       case 'update': {

@@ -65,7 +65,7 @@ node scripts/pingcode.js config set-current-user USER_ID_OR_NAME
 # Work items — list
 node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
 node scripts/pingcode.js work-item list --type bug --assignee @me --compact
-node scripts/pingcode.js work-item list --assignee @me --all-sprints --compact
+node scripts/pingcode.js work-item list --keywords "登录页面" --compact
 
 # Work items — create
 node scripts/pingcode.js work-item create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
@@ -75,9 +75,14 @@ node scripts/pingcode.js work-item create --title "Bug fix" --type bug --assigne
 node scripts/pingcode.js work-item show SCR-123
 node scripts/pingcode.js work-item show WI-AbCdEf
 
-# Work items — update (by identifier or id)
+# Work items — get (single-item endpoint by id or identifier)
+node scripts/pingcode.js work-item get WORK_ITEM_ID
+node scripts/pingcode.js work-item get WYT-852
+
+# Work items — update (by identifier or id; supports --title, --description, --type, --project, --sprint, --state, --priority, --assignee, --parent, --version, --board, --entry, --swimlane, --start-at, --end-at, --participants, --story-points, --estimated-workload, --remaining-workload, --properties)
 node scripts/pingcode.js work-item update SCR-123 --state 已完成
 node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
+node scripts/pingcode.js work-item update SCR-123 --title "Updated title" --story-points 3 --start-at 1736985600
 ```
 
 ## Workflow
@@ -86,7 +91,7 @@ node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority
 2. Resolve names to IDs using list commands, with `--compact` by default for list/query output. PingCode write APIs usually require IDs.
 3. Execute write commands directly once the target project/product/work item and state IDs are unambiguous.
 4. Use `--dry-run` only when the target or payload is unusually risky and the user wants a manual preview.
-5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item update`). Consult [`references/api.md`](references/api.md) for API reference.
+5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item get`, `work-item update`). Consult [`references/api.md`](references/api.md) for API reference.
 
 ## Safety Rules
 

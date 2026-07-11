@@ -123,7 +123,8 @@ node scripts/pingcode.js config set-current-project my-project
 |---|---|---|
 | `work-item list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `node scripts/pingcode.js work-item list --assignee @me --state 进行中` |
 | `work-item create` | 创建工作项 | `node scripts/pingcode.js work-item create --title "新任务" --type task` |
-| `work-item show <id>` | 查看单个工作项 | `node scripts/pingcode.js work-item show SCR-123` |
+| `work-item show <id>` | 查看单个工作项（通过列表接口按 id 或 identifier 查询） | `node scripts/pingcode.js work-item show SCR-123` |
+| `work-item get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `node scripts/pingcode.js work-item get WORK_ITEM_ID` |
 | `work-item update <id>` | 更新工作项 | `node scripts/pingcode.js work-item update SCR-123 --state 已完成` |
 
 ```bash
@@ -133,14 +134,23 @@ node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compa
 # 按类型查询
 node scripts/pingcode.js work-item list --type bug --assignee @me --compact
 
+# 按关键词搜索
+node scripts/pingcode.js work-item list --keywords "登录页面" --compact
+
 # 创建工作项（默认负责人为当前用户）
 node scripts/pingcode.js work-item create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
 
 # 通过编号查看工作项
 node scripts/pingcode.js work-item show SCR-123
 
-# 通过编号更新状态（支持 identifier 或 id）
+# 通过 id 获取单个工作项（官方单个工作项接口）
+node scripts/pingcode.js work-item get WORK_ITEM_ID
+
+# 通过编号更新状态（支持 identifier 或 id；支持 --title/--description/--type/--project/--sprint/--priority/--assignee/--parent/--version/--board/--entry/--swimlane/--start-at/--end-at/--participants/--story-points/--estimated-workload/--remaining-workload/--properties）
 node scripts/pingcode.js work-item update SCR-123 --state 已完成
+
+# 更新工作项多个属性
+node scripts/pingcode.js work-item update SCR-123 --title "修正后的标题" --priority 高 --story-points 3 --start-at 1736985600
 
 # 通过 id 更新状态
 node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority 高

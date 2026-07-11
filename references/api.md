@@ -160,6 +160,21 @@ The response includes a new `access_token` and `expires_in`. If the response doe
 | Operation | Method | Path |
 |---|---|---:|
 | List work items | GET | `/v1/project/work_items` |
+| Get work item | GET | `/v1/project/work_items/{work_item_id}` |
+
+Query parameters for `GET /v1/project/work_items` include:
+
+* `project_ids` — Project IDs (comma-separated)
+* `sprint_ids` — Sprint/iteration IDs (comma-separated)
+* `assignee_ids` — Assignee user IDs (comma-separated)
+* `state_id` — State ID
+* `type_ids` — Work item type IDs (comma-separated)
+* `keywords` — Search keywords (matches title, identifier, etc.)
+* `page_size` — Page size (max 100)
+* `page_index` — Page index (0-based)
+
+| Operation | Method | Path |
+|---|---|---:|
 | Create work item | POST | `/v1/project/work_items` |
 | Update work item | PATCH | `/v1/project/work_items/{work_item_id}` |
 | Bulk property update | PATCH | `/v1/project/work_items` |
