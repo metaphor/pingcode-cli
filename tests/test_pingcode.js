@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const assert = require('node:assert');
 
 const pingcode = require('../scripts/pingcode');
-const pingcodeCtx = require('../scripts/pingcode-ctx');
+const context = require('../scripts/commands/context');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -869,14 +869,10 @@ test('startAuthCallbackServer returns 404 for wrong path', async () => {
   await promise;
 });
 
-// ── pingcode-ctx integration test ───────────────────────────────────
+// ── context init integration test ───────────────────────────────────
 
-testInCleanTmp('pingcode ctx selects and caches workspace context', async (t, tmpdir) => {
+testInCleanTmp('context init selects and caches workspace context', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
-  const args = pingcodeCtx.buildParser().parseArgs([
-    '--workspace-cache', String(cachePath),
-    '--token', 'token-1',
-  ]);
   const responses = [
     { values: [{ id: 'project-1', name: 'Core Project' }] },
     { values: [{ id: 'sprint-1', name: 'Sprint 1' }] },
@@ -899,12 +895,25 @@ testInCleanTmp('pingcode ctx selects and caches workspace context', async (t, tm
   const outputs = [];
   const originalLog = console.log;
   console.log = (...args) => outputs.push(args.join(' '));
+
+  // Mock readline so handleInit uses our canned answers.
+  const readline = require('node:readline');
+  const originalCreateInterface = readline.createInterface;
+  readline.createInterface = () => ({
+    question: (_, cb) => cb(selections.shift()),
+    close: () => {},
+  });
+
   try {
-    const result = await pingcodeCtx.run(args, async () => selections.shift());
+    await context.run([
+      'init',
+      '--workspace-cache', String(cachePath),
+      '--token', 'token-1',
+    ]);
     const payload = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    assert.strictEqual(result.preferences.current_project_id, 'project-1');
-    assert.strictEqual(result.preferences.current_sprint_id, 'sprint-1');
-    assert.strictEqual(result.preferences.current_user_id, 'user-1');
+    assert.strictEqual(payload.preferences.current_project_id, 'project-1');
+    assert.strictEqual(payload.preferences.current_sprint_id, 'sprint-1');
+    assert.strictEqual(payload.preferences.current_user_id, 'user-1');
     assert.strictEqual(payload.preferences.current_project_name, 'Core Project');
     assert.strictEqual(payload.preferences.current_sprint_name, 'Sprint 1');
     assert.strictEqual(payload.preferences.current_user_name, '司徒');
@@ -913,26 +922,27 @@ testInCleanTmp('pingcode ctx selects and caches workspace context', async (t, tm
     assert.ok(outputText.includes('situjunjie'));
   } finally {
     console.log = originalLog;
+    readline.createInterface = originalCreateInterface;
   }
 });
 
-// ── pingcode-ctx --grant-type flag test ──────────────────────────────
+// ── context parser tests ─────────────────────────────────────────────
 
-testInCleanTmp('pingcode-ctx parser accepts --grant-type', async (t, tmpdir) => {
-  const args = pingcodeCtx.buildParser().parseArgs([
+testInCleanTmp('context parser accepts --grant-type', async (t, tmpdir) => {
+  const parsed = context.parseContextArgs([
     '--workspace-cache', String(tmpFile(tmpdir, 'workspace.json')),
     '--token', 'token-1',
     '--grant-type', 'authorization_code',
   ]);
-  assert.strictEqual(args.grant_type, 'authorization_code');
+  assert.strictEqual(parsed.opts.grant_type, 'authorization_code');
 });
 
-testInCleanTmp('pingcode-ctx parser defaults grant_type to auto', async (t, tmpdir) => {
-  const args = pingcodeCtx.buildParser().parseArgs([
+testInCleanTmp('context parser defaults grant_type to auto', async (t, tmpdir) => {
+  const parsed = context.parseContextArgs([
     '--workspace-cache', String(tmpFile(tmpdir, 'workspace.json')),
     '--token', 'token-1',
   ]);
-  assert.strictEqual(args.grant_type, 'auto');
+  assert.strictEqual(parsed.opts.grant_type, 'auto');
 });
 
 // ── Dispatcher tests ────────────────────────────────────────────────
@@ -944,7 +954,7 @@ testInCleanEnv('main prints help', async () => {
     cwd: REPO_ROOT,
   });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('context'));
   assert.ok(result.stdout.includes('work-item'));
 });
 
@@ -954,7 +964,7 @@ testInCleanEnv('dispatcher prints module list with --help', async () => {
     path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '--help',
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('context'));
   assert.ok(result.stdout.includes('work-item'));
   assert.ok(result.stdout.includes('Usage:'));
 });
@@ -965,7 +975,7 @@ testInCleanEnv('dispatcher prints module list with -h', async () => {
     path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '-h',
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('context'));
   assert.ok(result.stdout.includes('work-item'));
 });
 
@@ -982,13 +992,13 @@ testInCleanEnv('dispatcher prints work-item help', async () => {
   assert.ok(result.stdout.includes('update'));
 });
 
-testInCleanEnv('dispatcher prints config help', async () => {
+testInCleanEnv('dispatcher prints context help', async () => {
   const { spawnSync } = require('node:child_process');
   const result = spawnSync('node', [
-    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'config', '--help',
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'context', '--help',
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('context'));
   assert.ok(result.stdout.includes('init'));
   assert.ok(result.stdout.includes('set-current-user'));
   assert.ok(result.stdout.includes('set-current-project'));
@@ -1022,7 +1032,7 @@ testInCleanEnv('dispatcher no args prints help', async () => {
     path.join(REPO_ROOT, 'scripts', 'pingcode.js'),
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('config'));
+  assert.ok(result.stdout.includes('context'));
   assert.ok(result.stdout.includes('work-item'));
 });
 

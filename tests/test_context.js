@@ -7,7 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 const core = require('../scripts/core');
-const config = require('../scripts/commands/config');
+const context = require('../scripts/commands/context');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -112,15 +112,15 @@ function readCacheJson(cachePath) {
 
 // ── Parser tests ───────────────────────────────────────────────────
 
-test('parseConfigArgs extracts subcommand and value', () => {
-  const result = config.parseConfigArgs(['set-current-user', '@me']);
+test('parseContextArgs extracts subcommand and value', () => {
+  const result = context.parseContextArgs(['set-current-user', '@me']);
   assert.strictEqual(result.subcommand, 'set-current-user');
   assert.strictEqual(result.value, '@me');
   assert.strictEqual(result.helpRequested, false);
 });
 
-test('parseConfigArgs handles flags after positionals', () => {
-  const result = config.parseConfigArgs([
+test('parseContextArgs handles flags after positionals', () => {
+  const result = context.parseContextArgs([
     'set-current-user', '@me',
     '--workspace-cache', '/tmp/ws.json',
     '--dry-run',
@@ -131,42 +131,42 @@ test('parseConfigArgs handles flags after positionals', () => {
   assert.strictEqual(result.opts.dry_run, true);
 });
 
-test('parseConfigArgs detects --help', () => {
-  const result = config.parseConfigArgs(['set-current-user', '--help']);
+test('parseContextArgs detects --help', () => {
+  const result = context.parseContextArgs(['set-current-user', '--help']);
   assert.strictEqual(result.helpRequested, true);
   assert.strictEqual(result.subcommand, 'set-current-user');
 });
 
-test('parseConfigArgs detects -h', () => {
-  const result = config.parseConfigArgs(['set-current-user', '-h']);
+test('parseContextArgs detects -h', () => {
+  const result = context.parseContextArgs(['set-current-user', '-h']);
   assert.strictEqual(result.helpRequested, true);
 });
 
-test('parseConfigArgs --no-workspace-cache boolean flag', () => {
-  const result = config.parseConfigArgs(['list', '--no-workspace-cache']);
+test('parseContextArgs --no-workspace-cache boolean flag', () => {
+  const result = context.parseContextArgs(['list', '--no-workspace-cache']);
   assert.strictEqual(result.opts.no_workspace_cache, true);
 });
 
-test('parseConfigArgs unknown flag throws', () => {
-  assert.throws(() => config.parseConfigArgs(['list', '--unknown-flag']), core.PingCodeError);
+test('parseContextArgs unknown flag throws', () => {
+  assert.throws(() => context.parseContextArgs(['list', '--unknown-flag']), core.PingCodeError);
 });
 
-test('parseConfigArgs flag without value throws', () => {
-  assert.throws(() => config.parseConfigArgs(['list', '--workspace-cache']), core.PingCodeError);
+test('parseContextArgs flag without value throws', () => {
+  assert.throws(() => context.parseContextArgs(['list', '--workspace-cache']), core.PingCodeError);
 });
 
-test('parseConfigArgs empty tokens returns null subcommand', () => {
-  const result = config.parseConfigArgs([]);
+test('parseContextArgs empty tokens returns null subcommand', () => {
+  const result = context.parseContextArgs([]);
   assert.strictEqual(result.subcommand, null);
   assert.strictEqual(result.value, null);
 });
 
 // ── Help tests ─────────────────────────────────────────────────────
 
-testInCleanEnv('config --help lists all subcommands', () => {
+testInCleanEnv('context --help lists all subcommands', () => {
   const capture = captureConsole();
   try {
-    config.printHelp();
+    context.printHelp();
     const output = capture.logs();
     assert.ok(output.includes('init'), 'help should mention init');
     assert.ok(output.includes('set-current-user'), 'help should mention set-current-user');
@@ -178,10 +178,10 @@ testInCleanEnv('config --help lists all subcommands', () => {
   }
 });
 
-testInCleanEnv('config set-current-user --help shows specific help', () => {
+testInCleanEnv('context set-current-user --help shows specific help', () => {
   const capture = captureConsole();
   try {
-    config.printHelp('set-current-user');
+    context.printHelp('set-current-user');
     const output = capture.logs();
     assert.ok(output.includes('set-current-user'), 'should include subcommand name');
     assert.ok(output.includes('@me'), 'should mention @me');
@@ -190,10 +190,10 @@ testInCleanEnv('config set-current-user --help shows specific help', () => {
   }
 });
 
-testInCleanEnv('config init --help shows specific help', () => {
+testInCleanEnv('context init --help shows specific help', () => {
   const capture = captureConsole();
   try {
-    config.printHelp('init');
+    context.printHelp('init');
     const output = capture.logs();
     assert.ok(output.includes('init'), 'should include subcommand name');
     assert.ok(output.includes('Interactively'), 'should describe interactive setup');
@@ -202,10 +202,10 @@ testInCleanEnv('config init --help shows specific help', () => {
   }
 });
 
-testInCleanEnv('config list --help shows specific help', () => {
+testInCleanEnv('context list --help shows specific help', () => {
   const capture = captureConsole();
   try {
-    config.printHelp('list');
+    context.printHelp('list');
     const output = capture.logs();
     assert.ok(output.includes('list'), 'should include subcommand name');
     assert.ok(output.includes('preferences'), 'should mention preferences');
@@ -216,45 +216,45 @@ testInCleanEnv('config list --help shows specific help', () => {
 
 // ── set-current-user tests ─────────────────────────────────────────
 
-testInCleanTmp('config set-current-user @me resolves and writes preferences', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user @me resolves and writes preferences', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1', current_user_name: 'situ' },
     users: [{ id: 'user-1', name: 'situjunjie', display_name: '司徒' }],
   });
 
-  await config.run(['set-current-user', '@me', '--workspace-cache', cachePath]);
+  await context.run(['set-current-user', '@me', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_user_id, 'user-1',
     '@me should resolve to cached current_user_id');
 });
 
-testInCleanTmp('config set-current-user with explicit id writes preferences', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user with explicit id writes preferences', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     users: [{ id: 'user-2', name: 'alice', display_name: 'Alice' }],
   });
 
-  await config.run(['set-current-user', 'user-2', '--workspace-cache', cachePath]);
+  await context.run(['set-current-user', 'user-2', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_user_id, 'user-2');
 });
 
-testInCleanTmp('config set-current-user with name resolves from cache', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user with name resolves from cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     users: [{ id: 'user-3', name: 'bob', display_name: 'Bob' }],
   });
 
-  await config.run(['set-current-user', 'bob', '--workspace-cache', cachePath]);
+  await context.run(['set-current-user', 'bob', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_user_id, 'user-3');
 });
 
-testInCleanTmp('config set-current-user @me --dry-run shows resolved user id without writing', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user @me --dry-run shows resolved user id without writing', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -263,7 +263,7 @@ testInCleanTmp('config set-current-user @me --dry-run shows resolved user id wit
 
   const capture = captureConsole();
   try {
-    await config.run(['set-current-user', '@me', '--workspace-cache', cachePath, '--dry-run']);
+    await context.run(['set-current-user', '@me', '--workspace-cache', cachePath, '--dry-run']);
     const output = capture.logs();
     const parsed = JSON.parse(output);
     assert.strictEqual(parsed.dry_run, true);
@@ -278,10 +278,10 @@ testInCleanTmp('config set-current-user @me --dry-run shows resolved user id wit
   assert.strictEqual(afterContent, originalContent, 'dry-run should not write to cache');
 });
 
-testInCleanTmp('config set-current-user @me --no-workspace-cache throws identity guidance', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user @me --no-workspace-cache throws identity guidance', async (t, tmpdir) => {
   // With no env vars and no workspace cache, @me cannot be resolved.
   await assert.rejects(
-    async () => config.run(['set-current-user', '@me', '--no-workspace-cache']),
+    async () => context.run(['set-current-user', '@me', '--no-workspace-cache']),
     (err) => {
       return err instanceof core.PingCodeError &&
         (err.message.includes('PINGCODE_USER_ID') || err.message.includes('identity'));
@@ -290,9 +290,9 @@ testInCleanTmp('config set-current-user @me --no-workspace-cache throws identity
   );
 });
 
-testInCleanTmp('config set-current-user with no value throws usage error', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user with no value throws usage error', async (t, tmpdir) => {
   await assert.rejects(
-    async () => config.run(['set-current-user']),
+    async () => context.run(['set-current-user']),
     (err) => {
       return err instanceof core.PingCodeError &&
         err.message.includes('Usage');
@@ -302,30 +302,30 @@ testInCleanTmp('config set-current-user with no value throws usage error', async
 
 // ── set-current-project tests ──────────────────────────────────────
 
-testInCleanTmp('config set-current-project writes preferences', async (t, tmpdir) => {
+testInCleanTmp('context set-current-project writes preferences', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     projects: [{ id: 'project-1', name: 'Core Project' }],
   });
 
-  await config.run(['set-current-project', 'Core Project', '--workspace-cache', cachePath]);
+  await context.run(['set-current-project', 'Core Project', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_project_id, 'project-1');
   assert.strictEqual(cache.preferences.current_project_name, 'Core Project');
 });
 
-testInCleanTmp('config set-current-project with id works without cache', async (t, tmpdir) => {
+testInCleanTmp('context set-current-project with id works without cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {});
 
-  await config.run(['set-current-project', 'project-2', '--workspace-cache', cachePath]);
+  await context.run(['set-current-project', 'project-2', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_project_id, 'project-2');
 });
 
-testInCleanTmp('config set-current-project --dry-run shows resolved id', async (t, tmpdir) => {
+testInCleanTmp('context set-current-project --dry-run shows resolved id', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     projects: [{ id: 'project-3', name: 'My Project' }],
@@ -333,7 +333,7 @@ testInCleanTmp('config set-current-project --dry-run shows resolved id', async (
 
   const capture = captureConsole();
   try {
-    await config.run(['set-current-project', 'My Project', '--workspace-cache', cachePath, '--dry-run']);
+    await context.run(['set-current-project', 'My Project', '--workspace-cache', cachePath, '--dry-run']);
     const output = capture.logs();
     const parsed = JSON.parse(output);
     assert.strictEqual(parsed.dry_run, true);
@@ -343,16 +343,16 @@ testInCleanTmp('config set-current-project --dry-run shows resolved id', async (
   }
 });
 
-testInCleanTmp('config set-current-project with no value throws usage error', async (t, tmpdir) => {
+testInCleanTmp('context set-current-project with no value throws usage error', async (t, tmpdir) => {
   await assert.rejects(
-    async () => config.run(['set-current-project']),
+    async () => context.run(['set-current-project']),
     (err) => err instanceof core.PingCodeError && err.message.includes('Usage'),
   );
 });
 
 // ── set-current-sprint tests ──────────────────────────────────────
 
-testInCleanTmp('config set-current-sprint writes preferences', async (t, tmpdir) => {
+testInCleanTmp('context set-current-sprint writes preferences', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     sprints: {
@@ -360,24 +360,24 @@ testInCleanTmp('config set-current-sprint writes preferences', async (t, tmpdir)
     },
   });
 
-  await config.run(['set-current-sprint', 'Sprint 1', '--workspace-cache', cachePath]);
+  await context.run(['set-current-sprint', 'Sprint 1', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_sprint_id, 'sprint-1');
   assert.strictEqual(cache.preferences.current_sprint_name, 'Sprint 1');
 });
 
-testInCleanTmp('config set-current-sprint with id works without cache', async (t, tmpdir) => {
+testInCleanTmp('context set-current-sprint with id works without cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {});
 
-  await config.run(['set-current-sprint', 'sprint-2', '--workspace-cache', cachePath]);
+  await context.run(['set-current-sprint', 'sprint-2', '--workspace-cache', cachePath]);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_sprint_id, 'sprint-2');
 });
 
-testInCleanTmp('config set-current-sprint --dry-run shows resolved id', async (t, tmpdir) => {
+testInCleanTmp('context set-current-sprint --dry-run shows resolved id', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     sprints: {
@@ -387,7 +387,7 @@ testInCleanTmp('config set-current-sprint --dry-run shows resolved id', async (t
 
   const capture = captureConsole();
   try {
-    await config.run(['set-current-sprint', 'Sprint 3', '--workspace-cache', cachePath, '--dry-run']);
+    await context.run(['set-current-sprint', 'Sprint 3', '--workspace-cache', cachePath, '--dry-run']);
     const output = capture.logs();
     const parsed = JSON.parse(output);
     assert.strictEqual(parsed.dry_run, true);
@@ -397,16 +397,16 @@ testInCleanTmp('config set-current-sprint --dry-run shows resolved id', async (t
   }
 });
 
-testInCleanTmp('config set-current-sprint with no value throws usage error', async (t, tmpdir) => {
+testInCleanTmp('context set-current-sprint with no value throws usage error', async (t, tmpdir) => {
   await assert.rejects(
-    async () => config.run(['set-current-sprint']),
+    async () => context.run(['set-current-sprint']),
     (err) => err instanceof core.PingCodeError && err.message.includes('Usage'),
   );
 });
 
-// ── config list tests ─────────────────────────────────────────────
+// ── context list tests ─────────────────────────────────────────────
 
-testInCleanTmp('config list prints preferences and dictionary counts', async (t, tmpdir) => {
+testInCleanTmp('context list prints preferences and dictionary counts', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -426,7 +426,7 @@ testInCleanTmp('config list prints preferences and dictionary counts', async (t,
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
     assert.ok(output.includes('Preferences:'), 'should print Preferences header');
     assert.ok(output.includes('current_user_id'), 'should include current_user_id');
@@ -441,13 +441,13 @@ testInCleanTmp('config list prints preferences and dictionary counts', async (t,
   }
 });
 
-testInCleanTmp('config list with empty cache prints (none) for preferences', async (t, tmpdir) => {
+testInCleanTmp('context list with empty cache prints (none) for preferences', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {});
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
     assert.ok(output.includes('(none)'), 'should show (none) for empty preferences');
     assert.ok(output.includes('users: 0 items'), 'should show 0 users');
@@ -457,7 +457,7 @@ testInCleanTmp('config list with empty cache prints (none) for preferences', asy
   }
 });
 
-testInCleanTmp('config list with rich cache shows all dictionary counts', async (t, tmpdir) => {
+testInCleanTmp('context list with rich cache shows all dictionary counts', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -486,7 +486,7 @@ testInCleanTmp('config list with rich cache shows all dictionary counts', async 
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
     assert.ok(output.includes('users: 2 items'));
     assert.ok(output.includes('projects: 3 items'));
@@ -499,9 +499,9 @@ testInCleanTmp('config list with rich cache shows all dictionary counts', async 
   }
 });
 
-// ── config list dictionary edge case tests ─────────────────────────
+// ── context list dictionary edge case tests ─────────────────────────
 
-testInCleanTmp('config list sorts preference keys alphabetically', async (t, tmpdir) => {
+testInCleanTmp('context list sorts preference keys alphabetically', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -513,7 +513,7 @@ testInCleanTmp('config list sorts preference keys alphabetically', async (t, tmp
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
     // Verify all three keys appear
     assert.ok(output.includes('current_project_id'), 'should include current_project_id');
@@ -524,7 +524,7 @@ testInCleanTmp('config list sorts preference keys alphabetically', async (t, tmp
   }
 });
 
-testInCleanTmp('config list with null/undefined cache fields shows 0 items', async (t, tmpdir) => {
+testInCleanTmp('context list with null/undefined cache fields shows 0 items', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   // Write a minimal cache that explicitly nulls out fields
   const payload = core.emptyWorkspaceCache();
@@ -543,7 +543,7 @@ testInCleanTmp('config list with null/undefined cache fields shows 0 items', asy
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
     assert.ok(output.includes('users: 0 items'));
     assert.ok(output.includes('projects: 0 items'));
@@ -559,17 +559,17 @@ testInCleanTmp('config list with null/undefined cache fields shows 0 items', asy
   }
 });
 
-testInCleanTmp('config list stale state — modified cache between reads', async (t, tmpdir) => {
+testInCleanTmp('context list stale state — modified cache between reads', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'original-user' },
   });
 
-  // Simulate external modification of the cache file while config list reads it.
+  // Simulate external modification of the cache file while context list reads it.
   // The list handler creates a client which loads the cache once.
   // Then we modify the file on disk before list prints — list should still
   // reflect the originally-loaded content (atomic snapshot at load time).
-  const client = config.createClient({
+  const client = context.createClient({
     workspace_cache: cachePath,
     base_url: core.DEFAULT_BASE_URL,
   });
@@ -589,10 +589,10 @@ testInCleanTmp('config list stale state — modified cache between reads', async
 
 // ── Error handling / adversarial tests ─────────────────────────────
 
-testInCleanTmp('config with no subcommand prints help', async (t, tmpdir) => {
+testInCleanTmp('context with no subcommand prints help', async (t, tmpdir) => {
   const capture = captureConsole();
   try {
-    await config.run([]);
+    await context.run([]);
     const output = capture.logs();
     assert.ok(output.includes('init'), 'should print help listing subcommands');
   } finally {
@@ -600,10 +600,10 @@ testInCleanTmp('config with no subcommand prints help', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('config with --help as first arg prints module help', async (t, tmpdir) => {
+testInCleanTmp('context with --help as first arg prints module help', async (t, tmpdir) => {
   const capture = captureConsole();
   try {
-    await config.run(['--help']);
+    await context.run(['--help']);
     const output = capture.logs();
     assert.ok(output.includes('Subcommands:'), 'should print Subcommands header');
     assert.ok(output.includes('init'), 'should list init');
@@ -612,18 +612,18 @@ testInCleanTmp('config with --help as first arg prints module help', async (t, t
   }
 });
 
-testInCleanTmp('config unknown-subcommand throws', async (t, tmpdir) => {
+testInCleanTmp('context unknown-subcommand throws', async (t, tmpdir) => {
   await assert.rejects(
-    async () => config.run(['unknown-subcommand']),
+    async () => context.run(['unknown-subcommand']),
     (err) => err instanceof core.PingCodeError &&
-      err.message.includes('Unknown config subcommand'),
+      err.message.includes('Unknown context subcommand'),
   );
 });
 
-testInCleanTmp('config init with --help shows init-specific help', async (t, tmpdir) => {
+testInCleanTmp('context init with --help shows init-specific help', async (t, tmpdir) => {
   const capture = captureConsole();
   try {
-    await config.run(['init', '--help']);
+    await context.run(['init', '--help']);
     const output = capture.logs();
     assert.ok(output.includes('Interactively'), 'should describe interactive mode');
   } finally {
@@ -634,7 +634,7 @@ testInCleanTmp('config init with --help shows init-specific help', async (t, tmp
 // ── createClient tests ─────────────────────────────────────────────
 
 testInCleanTmp('createClient sets workspaceCachePath to null with no_workspace_cache', (t, tmpdir) => {
-  const client = config.createClient({
+  const client = context.createClient({
     base_url: core.DEFAULT_BASE_URL,
     no_workspace_cache: true,
   });
@@ -647,7 +647,7 @@ testInCleanTmp('createClient loads cache from path', (t, tmpdir) => {
     preferences: { current_user_id: 'user-from-cache' },
   });
 
-  const client = config.createClient({
+  const client = context.createClient({
     base_url: core.DEFAULT_BASE_URL,
     workspace_cache: cachePath,
   });
@@ -655,16 +655,21 @@ testInCleanTmp('createClient loads cache from path', (t, tmpdir) => {
   assert.strictEqual(client.workspaceCache.preferences.current_user_id, 'user-from-cache');
 });
 
+test('core exposes default cache paths', () => {
+  assert.strictEqual(core.DEFAULT_WORKSPACE_CACHE, '.pingcode/cache.json');
+  assert.strictEqual(core.DEFAULT_TOKEN_CACHE, '~/.cache/pingcode/token.json');
+});
+
 // ── Dry-run non-write verification ─────────────────────────────────
 
-testInCleanTmp('config set-current-user --dry-run does not modify cache file', async (t, tmpdir) => {
+testInCleanTmp('context set-current-user --dry-run does not modify cache file', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'existing-user' },
   });
   const beforeContent = fs.readFileSync(cachePath, 'utf8');
 
-  await config.run(['set-current-user', 'new-user', '--workspace-cache', cachePath, '--dry-run']);
+  await context.run(['set-current-user', 'new-user', '--workspace-cache', cachePath, '--dry-run']);
 
   const afterContent = fs.readFileSync(cachePath, 'utf8');
   assert.strictEqual(afterContent, beforeContent, 'cache file should be unchanged after dry-run');
@@ -674,25 +679,25 @@ testInCleanTmp('config set-current-user --dry-run does not modify cache file', a
   assert.strictEqual(cache.preferences.current_user_id, 'existing-user');
 });
 
-testInCleanTmp('config set-current-project --dry-run does not modify cache file', async (t, tmpdir) => {
+testInCleanTmp('context set-current-project --dry-run does not modify cache file', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_project_id: 'existing-proj' },
   });
 
-  await config.run(['set-current-project', 'new-proj', '--workspace-cache', cachePath, '--dry-run']);
+  await context.run(['set-current-project', 'new-proj', '--workspace-cache', cachePath, '--dry-run']);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_project_id, 'existing-proj');
 });
 
-testInCleanTmp('config set-current-sprint --dry-run does not modify cache file', async (t, tmpdir) => {
+testInCleanTmp('context set-current-sprint --dry-run does not modify cache file', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_sprint_id: 'existing-sprint' },
   });
 
-  await config.run(['set-current-sprint', 'new-sprint', '--workspace-cache', cachePath, '--dry-run']);
+  await context.run(['set-current-sprint', 'new-sprint', '--workspace-cache', cachePath, '--dry-run']);
 
   const cache = readCacheJson(cachePath);
   assert.strictEqual(cache.preferences.current_sprint_id, 'existing-sprint');
@@ -700,7 +705,7 @@ testInCleanTmp('config set-current-sprint --dry-run does not modify cache file',
 
 // ── Misleading output checks ───────────────────────────────────────
 
-testInCleanTmp('config list prints meaningful data not just exits 0', async (t, tmpdir) => {
+testInCleanTmp('context list prints meaningful data not just exits 0', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -715,7 +720,7 @@ testInCleanTmp('config list prints meaningful data not just exits 0', async (t, 
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath]);
+    await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
 
     // Verify meaningful content (not just empty output)
@@ -737,7 +742,7 @@ testInCleanTmp('config list prints meaningful data not just exits 0', async (t, 
 
 // ── Dirty worktree verification (no unexpected file changes) ───────
 
-testInCleanTmp('config operations only modify cache file', async (t, tmpdir) => {
+testInCleanTmp('context operations only modify cache file', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
 
   // Create some other files in tmpdir to ensure they are not touched
@@ -748,7 +753,7 @@ testInCleanTmp('config operations only modify cache file', async (t, tmpdir) => 
     preferences: { current_user_id: 'old-user' },
   });
 
-  await config.run(['set-current-user', 'new-user', '--workspace-cache', cachePath]);
+  await context.run(['set-current-user', 'new-user', '--workspace-cache', cachePath]);
 
   // Other file should be untouched
   const otherContent = fs.readFileSync(otherFile, 'utf8');
@@ -761,7 +766,7 @@ testInCleanTmp('config operations only modify cache file', async (t, tmpdir) => 
 
 // ── --grant-type flag tests ─────────────────────────────────────────
 
-testInCleanTmp('config list --grant-type client_credentials exits 0', async (t, tmpdir) => {
+testInCleanTmp('context list --grant-type client_credentials exits 0', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -773,7 +778,7 @@ testInCleanTmp('config list --grant-type client_credentials exits 0', async (t, 
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath, '--grant-type', 'client_credentials']);
+    await context.run(['list', '--workspace-cache', cachePath, '--grant-type', 'client_credentials']);
     const output = capture.logs();
     assert.ok(output.length > 0, 'list should produce output');
     assert.ok(output.includes('user-1'), 'should include user id');
@@ -783,7 +788,7 @@ testInCleanTmp('config list --grant-type client_credentials exits 0', async (t, 
   }
 });
 
-testInCleanTmp('config list --grant-type authorization_code accepts flag', async (t, tmpdir) => {
+testInCleanTmp('context list --grant-type authorization_code accepts flag', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -795,7 +800,7 @@ testInCleanTmp('config list --grant-type authorization_code accepts flag', async
 
   const capture = captureConsole();
   try {
-    await config.run(['list', '--workspace-cache', cachePath, '--grant-type', 'authorization_code']);
+    await context.run(['list', '--workspace-cache', cachePath, '--grant-type', 'authorization_code']);
     const output = capture.logs();
     assert.ok(output.length > 0, 'list should produce output');
     assert.ok(output.includes('user-1'), 'should include user id');
@@ -804,14 +809,14 @@ testInCleanTmp('config list --grant-type authorization_code accepts flag', async
   }
 });
 
-test('parseConfigArgs parses --grant-type flag', () => {
-  const result = config.parseConfigArgs([
+test('parseContextArgs parses --grant-type flag', () => {
+  const result = context.parseContextArgs([
     'list', '--grant-type', 'authorization_code',
   ]);
   assert.strictEqual(result.opts.grant_type, 'authorization_code');
 });
 
-test('parseConfigArgs defaults grant_type to auto', () => {
-  const result = config.parseConfigArgs([]);
+test('parseContextArgs defaults grant_type to auto', () => {
+  const result = context.parseContextArgs([]);
   assert.strictEqual(result.opts.grant_type, 'auto');
 });

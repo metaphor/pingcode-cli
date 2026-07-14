@@ -19,10 +19,6 @@ function expectedCli(target) {
   return 'node ' + shellQuote(path.join(target, 'scripts', 'pingcode.js'));
 }
 
-function expectedCtx(target) {
-  return 'node ' + shellQuote(path.join(target, 'scripts', 'pingcode-ctx.js'));
-}
-
 function runInstall(args, env = process.env) {
   return spawnSync('node', ['bin/install.js', ...args], {
     cwd: REPO_ROOT,
@@ -81,9 +77,7 @@ function assertInstalled(target) {
   assert.ok(fs.existsSync(path.join(target, 'SKILL.md')), `SKILL.md missing in ${target}`);
   const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
   const expectedCliCmd = expectedCli(target);
-  const expectedCtxCmd = expectedCtx(target);
   assert.ok(skillDoc.includes(expectedCliCmd), `Expected CLI command ${expectedCliCmd} not found in SKILL.md`);
-  assert.ok(skillDoc.includes(expectedCtxCmd), `Expected CTX command ${expectedCtxCmd} not found in SKILL.md`);
   assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false, 'Old python command should be removed');
   assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false, 'Old python ctx command should be removed');
 }
@@ -112,18 +106,12 @@ test('installed docs use absolute cli path', () => {
     const workflows = fs.readFileSync(path.join(target, 'references', 'workflows.md'), 'utf8');
     const aliasDoc = fs.readFileSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md'), 'utf8');
     const expected = expectedCli(target);
-    const expectedCtxCmd = expectedCtx(target);
-    const ctxBinExists = fs.existsSync(path.join(target, 'bin', 'pingcode-ctx.js'));
 
     assert.ok(result.stdout.includes('Installed PingCode skill'));
     assert.ok(skillDoc.includes(expected), 'skill doc should contain installed CLI path');
     assert.ok(readme.includes(expected), 'readme should contain installed CLI path');
     assert.ok(workflows.includes(expected), 'workflows should contain installed CLI path');
-    assert.ok(skillDoc.includes(expectedCtxCmd), 'skill doc should contain installed CTX path');
-    assert.ok(readme.includes(expectedCtxCmd), 'readme should contain installed CTX path');
     assert.ok(aliasDoc.includes(expected), 'alias doc should contain installed CLI path');
-    assert.ok(aliasDoc.includes(expectedCtxCmd), 'alias doc should contain installed CTX path');
-    assert.ok(ctxBinExists, 'ctx bin should be installed');
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(readme.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(workflows.includes('python3 scripts/pingcode.py'), false);
