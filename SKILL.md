@@ -33,7 +33,7 @@ The CLI also supports user tokens via `node scripts/pingcode.js login` with `--g
 
 ## Workspace Cache
 
-The CLI owns workspace-cache discovery and validation. Run the requested query/create command first; if cached user/project/sprint context is incomplete, the script exits with guidance. Then invoke `$pingcode-ctx` when available, or run `node scripts/pingcode-ctx.js`, and retry the original command.
+The CLI owns workspace-cache discovery and validation. Run the requested query/create command first; if cached user/project/sprint context is incomplete, the script exits with guidance. Then invoke `$pingcode-ctx` when available, or run `node scripts/pingcode.js context init`, and retry the original command.
 
 For work item queries, the CLI automatically applies cached current user/project/sprint filters unless explicit params or `--all-users`, `--all-projects`, or `--all-sprints` are supplied.
 
@@ -52,15 +52,15 @@ prefix; a stable installed path is more likely to reuse a prior approval than a 
 
 ### Subcommand Mode (Preferred)
 
-Prefer the structured subcommands for common work item and config operations:
+Prefer the structured subcommands for common work item and context operations:
 
 ```bash
-# Config — workspace management
-node scripts/pingcode.js config list
-node scripts/pingcode.js config init
-node scripts/pingcode.js config set-current-project PROJECT_ID
-node scripts/pingcode.js config set-current-sprint SPRINT_ID
-node scripts/pingcode.js config set-current-user USER_ID_OR_NAME
+# Context — workspace management
+node scripts/pingcode.js context list
+node scripts/pingcode.js context init
+node scripts/pingcode.js context set-current-project PROJECT_ID
+node scripts/pingcode.js context set-current-sprint SPRINT_ID
+node scripts/pingcode.js context set-current-user USER_ID_OR_NAME
 
 # Work items — list
 node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
@@ -98,7 +98,7 @@ node scripts/pingcode.js work-item update SCR-123 --title "Updated title" --stor
 * Never guess `state_id`, `type_id`, `priority_id`, `project_id`, or `product_id`.
 * Never infer a human user from an enterprise token. For work item create/query requests, default to `@me` only when a current user is configured; if the user explicitly asks for "所有人" / all users, do not add `assignee_ids=@me` or `assignee_id=@me`.
 * For status changes, use cached states when present; otherwise fetch valid states for the work item project and type before patching.
-* For work item creates/updates that need `priority_id` or custom `properties`, refresh dictionaries with `config init`.
+* For work item creates/updates that need `priority_id` or custom `properties`, refresh dictionaries with `context init`.
 * Prefer `--compact` for list/query responses before showing data to the model. Do not pipe raw PingCode JSON through `jq` only to reduce length; let `scripts/pingcode.js` keep useful business fields and drop bulky raw fields.
 * Treat HTTP 429 as rate limit. Wait for `x-pc-retry-after` seconds before retrying.
 * Prefer the narrowest query possible. Pagination defaults to 30 and maxes at 100.
