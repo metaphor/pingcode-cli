@@ -352,8 +352,8 @@ function parseCreateArgs(tokens) {
 }
 
 async function runCreate(client, opts, args) {
-  if (args.title === null) {
-    throw new core.PingCodeError('--title is required. Use work-item create --help for usage.');
+  if (typeof args.title !== 'string' || !args.title.trim()) {
+    throw new core.PingCodeError('--title is required and must be non-empty. Use work-item create --help for usage.');
   }
 
   // Ensure workspace context for defaults

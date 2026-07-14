@@ -6,29 +6,9 @@ const assert = require('node:assert');
 
 const core = require('../scripts/core');
 const workItem = require('../scripts/commands/work-item');
+const { tmpFile, clearEnv, restoreEnv, writeWorkspaceCache } = require('./helpers');
 
 // ── Test infrastructure ───────────────────────────────────────────────
-
-function clearEnv() {
-  const original = {};
-  for (const key of Object.keys(process.env)) {
-    original[key] = process.env[key];
-  }
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  process.env.PATH = original.PATH || '';
-  return original;
-}
-
-function restoreEnv(original) {
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  for (const [key, value] of Object.entries(original)) {
-    process.env[key] = value;
-  }
-}
 
 function testInCleanEnv(name, fn) {
   test(name, async () => {
@@ -56,31 +36,6 @@ function testInCleanTmp(name, fn) {
       fs.rmSync(tmpdir, { recursive: true, force: true });
     }
   });
-}
-
-function tmpFile(tmpdir, name) {
-  return path.join(tmpdir, name);
-}
-
-function writeWorkspaceCache(cachePath, {
-  preferences = {},
-  users = null,
-  projects = null,
-  sprints = null,
-  work_item_types = null,
-  work_item_states = null,
-  work_item_priorities = null,
-} = {}) {
-  const payload = core.emptyWorkspaceCache();
-  payload.preferences = preferences;
-  if (users !== null) payload.users = { values: users };
-  if (projects !== null) payload.projects = { values: projects };
-  if (sprints !== null) payload.sprints = sprints;
-  if (work_item_types !== null) payload.work_item_types = work_item_types;
-  if (work_item_states !== null) payload.work_item_states = work_item_states;
-  if (work_item_priorities !== null) payload.work_item_priorities = work_item_priorities;
-  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-  fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
 }
 
 function captureOutput(fn) {
@@ -1134,7 +1089,7 @@ testInCleanTmp('work-item unknown subcommand errors', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('work-item create --title empty string still passes', async (t, tmpdir) => {
+testInCleanTmp('work-item create --title empty string errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1144,21 +1099,18 @@ testInCleanTmp('work-item create --title empty string still passes', async (t, t
     },
   });
 
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
   try {
     await workItem.run([
       'create',
       '--title', '',
       '--workspace-cache', cachePath, '--dry-run',
     ]);
-  } finally {
-    console.log = originalLog;
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('title'));
+    assert.ok(exc.message.includes('non-empty'));
+    process.exitCode = 0;
   }
-
-  const result = JSON.parse(output.trim());
-  assert.strictEqual(result.json.title, '');
 });
 
 testInCleanTmp('work-item show with id param (non-identifier) uses id filter', async (t, tmpdir) => {
