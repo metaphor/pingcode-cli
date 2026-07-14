@@ -30,15 +30,15 @@ Use `--compact` by default for PingCode list/query commands before showing resul
 
 Use the workspace cache before routine queries so repeated API calls stay low. Setup can be explicit:
 
-Before routine work item queries or creates, ensure `.pingcode-skill/cache.json` has `preferences.current_user_id`, `preferences.current_project_id`, and `preferences.current_sprint_id`. If any of them is missing, run the interactive setup first, then retry the original operation.
+Before routine work item queries or creates, ensure `.pingcode/cache.json` has `preferences.current_user_id`, `preferences.current_project_id`, and `preferences.current_sprint_id`. If any of them is missing, run the interactive setup first, then retry the original operation.
 
 ### Agent Frontend Setup
 
-In Codex, Claude Code, or another agent frontend, prefer `$pingcode-ctx` when available. The agent should not run a blocking Node.js readline flow unless the user explicitly asks for terminal interaction.
+In Codex, Claude Code, or another agent frontend, prefer `$pingcode context init` when available. The `$pingcode-ctx` skill invokes `context init` underneath. The agent should not run a blocking Node.js readline flow unless the user explicitly asks for terminal interaction.
 
 1. Run the interactive setup skill:
    ```text
-   使用 $pingcode-ctx 初始化 PingCode 当前项目、迭代和用户
+   使用 $pingcode context init 初始化 PingCode 当前项目、迭代和用户
    ```
    The skill guides the user through selecting a project, sprint, and user via the agent's frontend chat.
 
@@ -47,12 +47,12 @@ In Codex, Claude Code, or another agent frontend, prefer `$pingcode-ctx` when av
 For terminal interactive setup, run:
 
 ```bash
-node scripts/pingcode-ctx.js
+node scripts/pingcode.js context init
 ```
 
 This guides the user to choose a project, sprint/iteration, and current user, then caches those choices.
 
-If a work item query or create command needs current user/project/sprint defaults and the workspace cache is incomplete, run `node scripts/pingcode-ctx.js` before retrying.
+If a work item query or create command needs current user/project/sprint defaults and the workspace cache is incomplete, run `node scripts/pingcode.js context init` before retrying.
 
 For `GET /v1/project/work_items`, the CLI automatically applies cached defaults:
 
