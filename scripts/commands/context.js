@@ -5,30 +5,7 @@ const readline = require('node:readline');
 const core = require('../core');
 const shared = require('./shared');
 
-// ── Reusable helpers (copied from pingcode-ctx.js for init) ────────────
-
-function pageValues(payload) {
-  return core.pageValues(payload);
-}
-
-function displayName(item) {
-  const entity = core.normalizedEntity(item);
-  for (const key of ['display_name', 'name', 'identifier', 'email', 'id']) {
-    const value = entity[key];
-    if (typeof value === 'string' && value) {
-      return value;
-    }
-  }
-  return '<unnamed>';
-}
-
-function itemId(item, label) {
-  const value = core.normalizedEntity(item).id;
-  if (typeof value !== 'string' || !value) {
-    throw new core.PingCodeError(`Selected ${label} has no id`);
-  }
-  return value;
-}
+// ── Interactive selection ──────────────────────────────────────────
 
 async function promptChoice(label, items, inputFunc) {
   if (!items || items.length === 0) {
@@ -45,14 +22,14 @@ async function promptChoice(label, items, inputFunc) {
     if (typeof itemIdentifier === 'string' && itemIdentifier) {
       details.push(itemIdentifier);
     }
-    if (typeof itemName === 'string' && itemName && itemName !== displayName(item)) {
+    if (typeof itemName === 'string' && itemName && itemName !== core.displayName(item)) {
       details.push(itemName);
     }
     if (typeof itemEmail === 'string' && itemEmail) {
       details.push(itemEmail);
     }
     const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
-    console.log(`  ${index + 1}. ${displayName(item)} [${itemId(item, label)}]${suffix}`);
+    console.log(`  ${index + 1}. ${core.displayName(item)} [${core.itemId(item, label)}]${suffix}`);
   }
 
   while (true) {
@@ -104,12 +81,12 @@ async function fetchUsers(client, projectId, refresh = false) {
 async function cacheContext(client, project, sprint, user) {
   if (!client.workspaceCache.preferences) client.workspaceCache.preferences = {};
   const preferences = client.workspaceCache.preferences;
-  preferences.current_project_id = itemId(project, 'project');
-  preferences.current_project_name = displayName(project);
-  preferences.current_sprint_id = itemId(sprint, 'sprint');
-  preferences.current_sprint_name = displayName(sprint);
-  preferences.current_user_id = itemId(user, 'user');
-  preferences.current_user_name = displayName(user);
+  preferences.current_project_id = core.itemId(project, 'project');
+  preferences.current_project_name = core.displayName(project);
+  preferences.current_sprint_id = core.itemId(sprint, 'sprint');
+  preferences.current_sprint_name = core.displayName(sprint);
+  preferences.current_user_id = core.itemId(user, 'user');
+  preferences.current_user_name = core.displayName(user);
   client.saveWorkspaceCache();
   return {
     message: 'PingCode workspace context cached',
@@ -391,10 +368,10 @@ async function handleInit(opts, inputFunc) {
   }
 
   try {
-    const project = await promptChoice('project', pageValues(await fetchProjects(client, refresh)), inputFunc);
-    const projectId = itemId(project, 'project');
-    const sprint = await promptChoice('sprint', pageValues(await fetchSprints(client, projectId, refresh)), inputFunc);
-    const user = await promptChoice('user', pageValues(await fetchUsers(client, projectId, refresh)), inputFunc);
+  const project = await promptChoice('project', core.pageValues(await fetchProjects(client, refresh)), inputFunc);
+  const projectId = core.itemId(project, 'project');
+  const sprint = await promptChoice('sprint', core.pageValues(await fetchSprints(client, projectId, refresh)), inputFunc);
+  const user = await promptChoice('user', core.pageValues(await fetchUsers(client, projectId, refresh)), inputFunc);
     const result = await cacheContext(client, project, sprint, user);
     core.printJson(result);
   } finally {
