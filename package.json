@@ -13,17 +13,12 @@
   },
   "files": [
     "SKILL.md",
+    "README.md",
     "skills/pingcode-ctx/SKILL.md",
     "agents/openai.yaml",
-    "references/api.md",
-    "references/workflows.md",
-    "scripts/pingcode.js",
-    "scripts/core.js",
-    "scripts/commands/",
-    "scripts/commands/login.js",
-    "bin/install.js",
-    "tests/test_login.js",
-    "README.md"
+    "references/",
+    "scripts/",
+    "bin/install.js"
   ],
   "scripts": {
     "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_work_item.js tests/test_login.js",
