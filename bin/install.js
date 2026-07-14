@@ -138,7 +138,7 @@ function shellQuote(value) {
 
 function rewriteInstalledDocs(destinationRoot) {
   const cliCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode.js"))}`;
-  const ctxCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode-ctx.js"))}`;
+  const ctxCommand = `${cliCommand} context init`;
   const docs = [
     path.join(destinationRoot, "SKILL.md"),
     path.join(destinationRoot, "README.md"),
@@ -171,7 +171,7 @@ function installAliasSkill(destinationRoot) {
     fs.copyFileSync(source, destination);
   }
   const cliCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode.js"))}`;
-  const ctxCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode-ctx.js"))}`;
+  const ctxCommand = `${cliCommand} context init`;
   const skillDoc = path.join(aliasRoot, "SKILL.md");
   const original = fs.readFileSync(skillDoc, "utf8");
   fs.writeFileSync(
