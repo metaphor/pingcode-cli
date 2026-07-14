@@ -20,6 +20,11 @@ require('./commands/login');
 const shared = require('./commands/shared');
 
 // ── Dispatcher ───────────────────────────────────────────────────────
+function fatal(message) {
+  console.error(`error: ${message}`);
+  process.exit(1);
+}
+
 async function dispatcherMain(argv) {
   const tokens = argv || process.argv.slice(2);
 
@@ -38,14 +43,12 @@ async function dispatcherMain(argv) {
       await mod.run(tokens.slice(1));
       process.exit(0);
     } catch (exc) {
-      console.error(`error: ${exc.message}`);
-      process.exit(1);
+      fatal(exc.message);
     }
   }
 
   // (3) Unknown argument.
-  console.error(`error: Unknown module: ${firstArg}`);
-  process.exit(1);
+  fatal(`Unknown module: ${firstArg}`);
 }
 
 // ── Entry point ──────────────────────────────────────────────────────
