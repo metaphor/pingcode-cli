@@ -46,7 +46,7 @@ token.json
 .omo/
 
 # Workspace cache
-.pingcode-skill/
+.pingcode/
 
 # OS / editor
 .DS_Store

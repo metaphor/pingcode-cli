@@ -7,8 +7,8 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 
 const DEFAULT_BASE_URL = 'https://open.pingcode.com';
-const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode-cli/token.json';
-const DEFAULT_WORKSPACE_CACHE = '.pingcode-skill/cache.json';
+const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode/token.json';
+const DEFAULT_WORKSPACE_CACHE = '.pingcode/cache.json';
 const MAX_TOKEN_TTL_SECONDS = 29 * 24 * 60 * 60;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const USER_LOOKUP_RE = /@user:([^,]+)/g;
@@ -23,7 +23,7 @@ function shellQuote(value) {
 }
 
 const CLI_COMMAND = 'node scripts/pingcode.js';
-const CTX_COMMAND = 'node scripts/pingcode-ctx.js';
+const CTX_COMMAND = 'node scripts/pingcode.js context init';
 const CTX_COMMAND_ALIAS = 'pingcode-ctx';
 
 const AUTH_ENV_GUIDANCE = (
@@ -42,21 +42,17 @@ const USER_ENV_GUIDANCE = (
   '  export PINGCODE_USER_NAME="..."\n' +
   'Use @me for current-user-id fields; use @me_name when a name lookup is needed.\n' +
   'To discover IDs, run:\n' +
-  `  ${CLI_COMMAND} --cache-users\n` +
+  `  ${CLI_COMMAND} context list\n` +
   'Then save your current user with:\n' +
-  `  ${CLI_COMMAND} --set-current-user USER_ID\n` +
+  `  ${CLI_COMMAND} context set-current-user USER_ID\n` +
   'For guided workspace setup, run:\n' +
-  `  ${CTX_COMMAND_ALIAS}\n` +
-  'Or use the bundled script directly:\n' +
   `  ${CTX_COMMAND}`
 );
 
 const WORKSPACE_DEFAULT_GUIDANCE = (
   'PingCode workspace context is incomplete. Run the interactive setup command first:\n' +
-  `  ${CTX_COMMAND_ALIAS}\n` +
-  'Or use the bundled script directly:\n' +
-  `  ${CTX_COMMAND}\n` +
-  'It caches the current user, project, and sprint/iteration in .pingcode-skill/cache.json.\n' +
+  `  Run: ${CTX_COMMAND}\n` +
+  'It caches the current user, project, and sprint/iteration in .pingcode/cache.json.\n' +
   'Use --all-projects or --all-sprints when the user explicitly asks for all projects or all iterations.'
 );
 
