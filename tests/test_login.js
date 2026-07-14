@@ -8,36 +8,15 @@ const assert = require('node:assert');
 
 const core = require('../scripts/core');
 const loginModule = require('../scripts/commands/login');
+const { tmpFile, clearEnv, restoreEnv, fakeResponse, mockFetch } = require('./helpers');
 
 // ── Test helpers ───────────────────────────────────────────────────────
 
-function tmpFile(tmpdir, name) {
-  return path.join(tmpdir, name);
-}
-
-function clearEnv() {
-  const original = {};
-  for (const key of Object.keys(process.env)) {
-    original[key] = process.env[key];
-  }
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  process.env.PATH = original.PATH || '';
-  return original;
-}
-
-function restoreEnv(original) {
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  for (const [key, value] of Object.entries(original)) {
-    process.env[key] = value;
-  }
-}
-
 function testInCleanTmp(name, fn) {
   test(name, async (t) => {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const path = require('node:path');
     const original = clearEnv();
     const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-test-'));
     try {
@@ -47,30 +26,6 @@ function testInCleanTmp(name, fn) {
       fs.rmSync(tmpdir, { recursive: true, force: true });
     }
   });
-}
-
-function fakeResponse(payload, status = 200) {
-  const content = JSON.stringify(payload);
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 200 ? 'OK' : 'Error',
-    headers: { get: () => null },
-    text: async () => content,
-  };
-}
-
-function mockFetch(response) {
-  global.fetch = async (url, options) => {
-    if (typeof response === 'function') {
-      return response(url, options);
-    }
-    if (Array.isArray(response)) {
-      const next = response.shift();
-      return next;
-    }
-    return response;
-  };
 }
 
 // ── Parser tests ───────────────────────────────────────────────────────

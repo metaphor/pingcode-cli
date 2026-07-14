@@ -5,15 +5,9 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { spawnSync } = require('node:child_process');
 
-const REPO_ROOT = path.resolve(__dirname, '..');
-const SAFE_SHELL_RE = /^[A-Za-z0-9_/:=.,+-]+$/;
+const { shellQuote } = require('./helpers');
 
-function shellQuote(value) {
-  if (SAFE_SHELL_RE.test(value)) {
-    return value;
-  }
-  return "'" + value.replace(/'/g, "'\\''") + "'";
-}
+const REPO_ROOT = path.resolve(__dirname, '..');
 
 function expectedCli(target) {
   return 'node ' + shellQuote(path.join(target, 'scripts', 'pingcode.js'));

@@ -8,35 +8,11 @@ const assert = require('node:assert');
 
 const core = require('../scripts/core');
 const context = require('../scripts/commands/context');
+const { tmpFile, clearEnv, restoreEnv, writeWorkspaceCache } = require('./helpers');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function tmpFile(tmpdir, name) {
-  return path.join(tmpdir, name);
-}
-
-function clearEnv() {
-  const original = {};
-  for (const key of Object.keys(process.env)) {
-    original[key] = process.env[key];
-  }
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  process.env.PATH = original.PATH || '';
-  return original;
-}
-
-function restoreEnv(original) {
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  for (const [key, value] of Object.entries(original)) {
-    process.env[key] = value;
-  }
-}
 
 function testInCleanEnv(name, fn) {
   test(name, async () => {
@@ -60,33 +36,6 @@ function testInCleanTmp(name, fn) {
       fs.rmSync(tmpdir, { recursive: true, force: true });
     }
   });
-}
-
-function writeWorkspaceCache(cachePath, {
-  preferences = {},
-  users = null,
-  projects = null,
-  sprints = null,
-  work_item_types = null,
-  work_item_states = null,
-  work_item_priorities = null,
-  work_item_properties = null,
-  idea_states = null,
-  idea_priorities = null,
-} = {}) {
-  const payload = core.emptyWorkspaceCache();
-  payload.preferences = preferences;
-  if (users !== null) payload.users = { values: users };
-  if (projects !== null) payload.projects = { values: projects };
-  if (sprints !== null) payload.sprints = sprints;
-  if (work_item_types !== null) payload.work_item_types = work_item_types;
-  if (work_item_states !== null) payload.work_item_states = work_item_states;
-  if (work_item_priorities !== null) payload.work_item_priorities = work_item_priorities;
-  if (work_item_properties !== null) payload.work_item_properties = work_item_properties;
-  if (idea_states !== null) payload.idea_states = idea_states;
-  if (idea_priorities !== null) payload.idea_priorities = idea_priorities;
-  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-  fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
 }
 
 function captureConsole(fn) {
