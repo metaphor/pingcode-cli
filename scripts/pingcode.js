@@ -4,7 +4,7 @@
 // ── Library layer ────────────────────────────────────────────────────
 // Import everything from the shared core module and re-export it
 // so that require('./pingcode') remains fully backward-compatible
-// for scripts/pingcode-ctx.js and existing tests.
+// for the pingcode-ctx alias skill and existing tests.
 const core = require('./core');
 
 module.exports = { ...core };
@@ -13,7 +13,7 @@ module.exports = { ...core };
 // Import command modules so they self-register with the shared registry.
 // (Side-effect imports; no circular dependency because these import from
 // ./shared and ../core, never from ../pingcode.)
-require('./commands/config');
+require('./commands/context');
 require('./commands/work-item');
 require('./commands/login');
 

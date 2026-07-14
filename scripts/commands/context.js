@@ -1,15 +1,158 @@
 'use strict';
 
-const pingcodeCtx = require('../pingcode-ctx');
+const readline = require('node:readline');
+
 const core = require('../core');
 const shared = require('./shared');
+
+// ── Reusable helpers (copied from pingcode-ctx.js for init) ────────────
+
+function pageValues(payload) {
+  return core.pageValues(payload);
+}
+
+function displayName(item) {
+  const entity = core.normalizedEntity(item);
+  for (const key of ['display_name', 'name', 'identifier', 'email', 'id']) {
+    const value = entity[key];
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+  return '<unnamed>';
+}
+
+function itemId(item, label) {
+  const value = core.normalizedEntity(item).id;
+  if (typeof value !== 'string' || !value) {
+    throw new core.PingCodeError(`Selected ${label} has no id`);
+  }
+  return value;
+}
+
+async function promptChoice(label, items, inputFunc) {
+  if (!items || items.length === 0) {
+    throw new core.PingCodeError(`No ${label} options are available`);
+  }
+  console.log(`\nSelect current ${label}:`);
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const entity = core.normalizedEntity(item);
+    const details = [];
+    const itemIdentifier = entity.identifier;
+    const itemEmail = entity.email;
+    const itemName = entity.name;
+    if (typeof itemIdentifier === 'string' && itemIdentifier) {
+      details.push(itemIdentifier);
+    }
+    if (typeof itemName === 'string' && itemName && itemName !== displayName(item)) {
+      details.push(itemName);
+    }
+    if (typeof itemEmail === 'string' && itemEmail) {
+      details.push(itemEmail);
+    }
+    const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+    console.log(`  ${index + 1}. ${displayName(item)} [${itemId(item, label)}]${suffix}`);
+  }
+
+  while (true) {
+    const raw = await inputFunc(`Enter ${label} number, id, or name: `);
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    if (/^\d+$/.test(trimmed)) {
+      const index = parseInt(trimmed, 10);
+      if (index >= 1 && index <= items.length) {
+        return items[index - 1];
+      }
+    }
+    try {
+      return core.findCachedItem(items, trimmed, label);
+    } catch (exc) {
+      console.log(`Invalid ${label} selection: ${exc.message}`);
+    }
+  }
+}
+
+async function fetchProjects(client, refresh = false) {
+  if (refresh || !client.workspaceCache.projects || typeof client.workspaceCache.projects !== 'object') {
+    return await core.cacheProjects(client);
+  }
+  return client.workspaceCache.projects;
+}
+
+async function fetchSprints(client, projectId, refresh = false) {
+  const sprintsCache = client.workspaceCache.sprints || {};
+  if (refresh || !sprintsCache[projectId] || typeof sprintsCache[projectId] !== 'object') {
+    return await core.cacheSprints(client, projectId);
+  }
+  return sprintsCache[projectId];
+}
+
+async function fetchUsers(client, projectId, refresh = false) {
+  const usersCache = client.workspaceCache.users;
+  if (
+    refresh ||
+    !usersCache ||
+    typeof usersCache !== 'object' ||
+    (usersCache.project_id !== null && usersCache.project_id !== undefined && usersCache.project_id !== projectId)
+  ) {
+    return await core.cacheUsers(client, projectId);
+  }
+  return usersCache;
+}
+
+async function cacheContext(client, project, sprint, user) {
+  if (!client.workspaceCache.preferences) client.workspaceCache.preferences = {};
+  const preferences = client.workspaceCache.preferences;
+  preferences.current_project_id = itemId(project, 'project');
+  preferences.current_project_name = displayName(project);
+  preferences.current_sprint_id = itemId(sprint, 'sprint');
+  preferences.current_sprint_name = displayName(sprint);
+  preferences.current_user_id = itemId(user, 'user');
+  preferences.current_user_name = displayName(user);
+  client.saveWorkspaceCache();
+  return {
+    message: 'PingCode workspace context cached',
+    workspace_cache: client.workspaceCachePath || null,
+    preferences,
+  };
+}
 
 // ── Help ───────────────────────────────────────────────────────────
 
 function printHelp(subcommand) {
+  if (subcommand === 'init') {
+    console.log([
+      'Usage: node scripts/pingcode.js context init [options]',
+      '',
+      'Interactively configure PingCode workspace context.',
+      'Prompts for project, sprint/iteration, and user selection,',
+      'then writes the results to the workspace cache.',
+      '',
+      'Options:',
+      '  --workspace-cache PATH   Cache file path',
+      '  --no-workspace-cache     Disable workspace cache',
+      '  --refresh                Re-fetch dictionaries from API',
+    ].join('\n'));
+    return;
+  }
+
+  if (subcommand === 'list') {
+    console.log([
+      'Usage: node scripts/pingcode.js context list [options]',
+      '',
+      'Print current workspace preferences and a summary of cached dictionaries.',
+      '',
+      'Options:',
+      '  --workspace-cache PATH   Cache file path',
+      '  --no-workspace-cache     Disable workspace cache',
+    ].join('\n'));
+    return;
+  }
+
   if (subcommand === 'set-current-user') {
     console.log([
-      'Usage: node scripts/pingcode.js config set-current-user <id|name|@me> [options]',
+      'Usage: node scripts/pingcode.js context set-current-user <id|name|@me> [options]',
       '',
       'Set the current PingCode user for this workspace.',
       '',
@@ -27,7 +170,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'set-current-project') {
     console.log([
-      'Usage: node scripts/pingcode.js config set-current-project <id|name> [options]',
+      'Usage: node scripts/pingcode.js context set-current-project <id|name> [options]',
       '',
       'Set the current PingCode project for this workspace.',
       '',
@@ -44,7 +187,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'set-current-sprint') {
     console.log([
-      'Usage: node scripts/pingcode.js config set-current-sprint <id|name> [options]',
+      'Usage: node scripts/pingcode.js context set-current-sprint <id|name> [options]',
       '',
       'Set the current PingCode sprint/iteration for this workspace.',
       '',
@@ -59,39 +202,11 @@ function printHelp(subcommand) {
     return;
   }
 
-  if (subcommand === 'init') {
-    console.log([
-      'Usage: node scripts/pingcode.js config init [options]',
-      '',
-      'Interactively configure PingCode workspace context.',
-      'Prompts for project, sprint/iteration, and user selection,',
-      'then writes the results to the workspace cache.',
-      '',
-      'Options:',
-      '  --workspace-cache PATH   Cache file path',
-      '  --refresh                Re-fetch dictionaries from API',
-    ].join('\n'));
-    return;
-  }
-
-  if (subcommand === 'list') {
-    console.log([
-      'Usage: node scripts/pingcode.js config list [options]',
-      '',
-      'Print current workspace preferences and a summary of cached dictionaries.',
-      '',
-      'Options:',
-      '  --workspace-cache PATH   Cache file path',
-      '  --no-workspace-cache     Disable workspace cache',
-    ].join('\n'));
-    return;
-  }
-
   // Default: module-level help
   console.log([
-    'PingCode config — Manage workspace configuration',
+    'PingCode context — Manage workspace context',
     '',
-    'Usage: node scripts/pingcode.js config <subcommand> [options]',
+    'Usage: node scripts/pingcode.js context <subcommand> [options]',
     '',
     'Subcommands:',
     '  init                     Initialize workspace context (interactive)',
@@ -126,7 +241,7 @@ const STRING_FLAGS = {
   '--grant-type': 'grant_type',
 };
 
-function parseConfigArgs(tokens) {
+function parseContextArgs(tokens) {
   const opts = {
     base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
     client_id: process.env.PINGCODE_CLIENT_ID || null,
@@ -204,120 +319,7 @@ function createClient(opts) {
   });
 }
 
-// ── Handlers ───────────────────────────────────────────────────────
-
-async function handleInit(opts) {
-  const args = {
-    base_url: opts.base_url,
-    client_id: opts.client_id,
-    client_secret: opts.client_secret,
-    token: opts.token,
-    no_token_cache: opts.no_token_cache,
-    workspace_cache: opts.no_workspace_cache ? null : opts.workspace_cache,
-    refresh: Boolean(opts.refresh),
-  };
-  const result = await pingcodeCtx.run(args);
-  core.printJson(result);
-}
-
-async function handleSetCurrentUser(value, opts) {
-  if (!value) {
-    throw new core.PingCodeError(
-      'Usage: config set-current-user <id|name|@me>\n' +
-      '  <id>         Direct user ID\n' +
-      '  <name>       Cached user name or display name\n' +
-      '  @me          Use the already-cached current user ID',
-    );
-  }
-
-  const client = createClient(opts);
-
-  // Expand @me placeholder to the cached current user ID.
-  let userId = value;
-  if (value === '@me') {
-    userId = core.currentUserId(null, client.workspaceCache);
-  }
-
-  if (opts.dry_run) {
-    core.printJson({
-      dry_run: true,
-      action: 'set-current-user',
-      input: value,
-      resolved_user_id: userId,
-    });
-    return;
-  }
-
-  const result = await core.setCurrentUser(client, userId);
-  core.printJson(result);
-}
-
-async function handleSetCurrentProject(value, opts) {
-  if (!value) {
-    throw new core.PingCodeError(
-      'Usage: config set-current-project <id|name>',
-    );
-  }
-
-  const client = createClient(opts);
-
-  if (opts.dry_run) {
-    // Try to resolve the project ID from the cache for dry-run display.
-    let resolvedId = value;
-    const projects = core.pageValues(client.workspaceCache.projects);
-    try {
-      const found = core.findCachedItem(projects, value, 'project');
-      if (found && found.id) resolvedId = found.id;
-    } catch (_) {
-      // Keep the raw value if resolution fails.
-    }
-    core.printJson({
-      dry_run: true,
-      action: 'set-current-project',
-      input: value,
-      resolved_project_id: resolvedId,
-    });
-    return;
-  }
-
-  const result = await core.setCurrentProject(client, value);
-  core.printJson(result);
-}
-
-async function handleSetCurrentSprint(value, opts) {
-  if (!value) {
-    throw new core.PingCodeError(
-      'Usage: config set-current-sprint <id|name>',
-    );
-  }
-
-  const client = createClient(opts);
-
-  if (opts.dry_run) {
-    // Try to resolve the sprint ID from the cache for dry-run display.
-    let resolvedId = value;
-    const allSprints = [];
-    for (const payload of Object.values(client.workspaceCache.sprints || {})) {
-      allSprints.push(...core.pageValues(payload));
-    }
-    try {
-      const found = core.findCachedItem(allSprints, value, 'sprint');
-      if (found && found.id) resolvedId = found.id;
-    } catch (_) {
-      // Keep the raw value if resolution fails.
-    }
-    core.printJson({
-      dry_run: true,
-      action: 'set-current-sprint',
-      input: value,
-      resolved_sprint_id: resolvedId,
-    });
-    return;
-  }
-
-  const result = await core.setCurrentSprint(client, value);
-  core.printJson(result);
-}
+// ── Dictionary counts (copied from config.js; not exported from core) ──
 
 function countDictionaryEntries(cache) {
   const counts = {};
@@ -373,6 +375,132 @@ function countDictionaryEntries(cache) {
   return counts;
 }
 
+// ── Handlers ───────────────────────────────────────────────────────
+
+async function handleInit(opts, inputFunc) {
+  const client = createClient(opts);
+  const refresh = Boolean(opts.refresh);
+
+  let rl = null;
+  if (!inputFunc) {
+    rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    inputFunc = (prompt) => new Promise((resolve) => rl.question(prompt, resolve));
+  }
+
+  try {
+    const project = await promptChoice('project', pageValues(await fetchProjects(client, refresh)), inputFunc);
+    const projectId = itemId(project, 'project');
+    const sprint = await promptChoice('sprint', pageValues(await fetchSprints(client, projectId, refresh)), inputFunc);
+    const user = await promptChoice('user', pageValues(await fetchUsers(client, projectId, refresh)), inputFunc);
+    const result = await cacheContext(client, project, sprint, user);
+    core.printJson(result);
+  } finally {
+    if (rl) rl.close();
+  }
+}
+
+async function handleSetCurrentUser(value, opts) {
+  if (!value) {
+    throw new core.PingCodeError(
+      'Usage: context set-current-user <id|name|@me>\n' +
+      '  <id>         Direct user ID\n' +
+      '  <name>       Cached user name or display name\n' +
+      '  @me          Use the already-cached current user ID',
+    );
+  }
+
+  const client = createClient(opts);
+
+  // Expand @me placeholder to the cached current user ID.
+  let userId = value;
+  if (value === '@me') {
+    userId = core.currentUserId(null, client.workspaceCache);
+  }
+
+  if (opts.dry_run) {
+    core.printJson({
+      dry_run: true,
+      action: 'set-current-user',
+      input: value,
+      resolved_user_id: userId,
+    });
+    return;
+  }
+
+  const result = await core.setCurrentUser(client, userId);
+  core.printJson(result);
+}
+
+async function handleSetCurrentProject(value, opts) {
+  if (!value) {
+    throw new core.PingCodeError(
+      'Usage: context set-current-project <id|name>',
+    );
+  }
+
+  const client = createClient(opts);
+
+  if (opts.dry_run) {
+    // Try to resolve the project ID from the cache for dry-run display.
+    let resolvedId = value;
+    const projects = core.pageValues(client.workspaceCache.projects);
+    try {
+      const found = core.findCachedItem(projects, value, 'project');
+      if (found && found.id) resolvedId = found.id;
+    } catch (_) {
+      // Keep the raw value if resolution fails.
+    }
+    core.printJson({
+      dry_run: true,
+      action: 'set-current-project',
+      input: value,
+      resolved_project_id: resolvedId,
+    });
+    return;
+  }
+
+  const result = await core.setCurrentProject(client, value);
+  core.printJson(result);
+}
+
+async function handleSetCurrentSprint(value, opts) {
+  if (!value) {
+    throw new core.PingCodeError(
+      'Usage: context set-current-sprint <id|name>',
+    );
+  }
+
+  const client = createClient(opts);
+
+  if (opts.dry_run) {
+    // Try to resolve the sprint ID from the cache for dry-run display.
+    let resolvedId = value;
+    const allSprints = [];
+    for (const payload of Object.values(client.workspaceCache.sprints || {})) {
+      allSprints.push(...core.pageValues(payload));
+    }
+    try {
+      const found = core.findCachedItem(allSprints, value, 'sprint');
+      if (found && found.id) resolvedId = found.id;
+    } catch (_) {
+      // Keep the raw value if resolution fails.
+    }
+    core.printJson({
+      dry_run: true,
+      action: 'set-current-sprint',
+      input: value,
+      resolved_sprint_id: resolvedId,
+    });
+    return;
+  }
+
+  const result = await core.setCurrentSprint(client, value);
+  core.printJson(result);
+}
+
 async function handleList(opts) {
   const client = createClient(opts);
   const cache = client.workspaceCache;
@@ -421,7 +549,7 @@ async function run(argv) {
     return;
   }
 
-  const parsed = parseConfigArgs(tokens);
+  const parsed = parseContextArgs(tokens);
 
   // If --help was found anywhere, show help for the subcommand if known.
   if (parsed.helpRequested) {
@@ -433,7 +561,7 @@ async function run(argv) {
 
   if (!subcommand || !(subcommand in SUBCOMMAND_ALIASES)) {
     throw new core.PingCodeError(
-      `Unknown config subcommand: ${subcommand || '(none)'}. ` +
+      `Unknown context subcommand: ${subcommand || '(none)'}. ` +
       'Valid subcommands: init, set-current-user, set-current-project, set-current-sprint, list.',
     );
   }
@@ -455,16 +583,16 @@ async function run(argv) {
       await handleList(parsed.opts);
       break;
     default:
-      throw new core.PingCodeError(`Unknown config subcommand: ${subcommand}`);
+      throw new core.PingCodeError(`Unknown context subcommand: ${subcommand}`);
   }
 }
 
 // ── Register ───────────────────────────────────────────────────────
 
-shared.registerModule('config', {
-  name: 'config',
-  description: 'Manage PingCode workspace configuration',
+shared.registerModule('context', {
+  name: 'context',
+  description: 'Manage PingCode workspace context',
   run,
 });
 
-module.exports = { run, printHelp, parseConfigArgs, createClient };
+module.exports = { run, printHelp, parseContextArgs, createClient };

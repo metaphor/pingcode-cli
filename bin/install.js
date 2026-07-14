@@ -13,7 +13,6 @@ const sourceEntries = [
   "agents",
   "references",
   "scripts",
-  "bin/pingcode-ctx.js",
 ];
 const aliasSkillEntries = ["skills/pingcode-ctx/SKILL.md"];
 

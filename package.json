@@ -9,8 +9,7 @@
   },
   "bin": {
     "pingcode": "./scripts/pingcode.js",
-    "pingcode-skill": "./bin/install.js",
-    "pingcode-ctx": "./bin/pingcode-ctx.js"
+    "pingcode-skill": "./bin/install.js"
   },
   "files": [
     "SKILL.md",
@@ -19,17 +18,15 @@
     "references/api.md",
     "references/workflows.md",
     "scripts/pingcode.js",
-    "scripts/pingcode-ctx.js",
     "scripts/core.js",
     "scripts/commands/",
     "scripts/commands/login.js",
     "bin/install.js",
-    "bin/pingcode-ctx.js",
     "tests/test_login.js",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_config.js tests/test_work_item.js tests/test_login.js",
+    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_work_item.js tests/test_login.js",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {
