@@ -1,14 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-coverage.xml
-htmlcov/
-
 # Node / npm
 node_modules/
 npm-debug.log*
