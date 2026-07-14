@@ -8,33 +8,9 @@ const assert = require('node:assert');
 
 const pingcode = require('../scripts/pingcode');
 const context = require('../scripts/commands/context');
+const { tmpFile, clearEnv, restoreEnv, fakeResponse, mockFetch } = require('./helpers');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-
-function tmpFile(tmpdir, name) {
-  return path.join(tmpdir, name);
-}
-
-function clearEnv() {
-  const original = {};
-  for (const key of Object.keys(process.env)) {
-    original[key] = process.env[key];
-  }
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  process.env.PATH = original.PATH || '';
-  return original;
-}
-
-function restoreEnv(original) {
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key];
-  }
-  for (const [key, value] of Object.entries(original)) {
-    process.env[key] = value;
-  }
-}
 
 function testInCleanEnv(name, fn) {
   test(name, async () => {
@@ -60,30 +36,6 @@ function testInCleanTmp(name, fn) {
   });
 }
 
-function fakeResponse(payload, status = 200) {
-  const content = JSON.stringify(payload);
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 200 ? 'OK' : 'Error',
-    headers: { get: () => null },
-    text: async () => content,
-  };
-}
-
-function mockFetch(response) {
-  global.fetch = async (url, options) => {
-    if (typeof response === 'function') {
-      return response(url, options);
-    }
-    if (Array.isArray(response)) {
-      const next = response.shift();
-      return next;
-    }
-    return response;
-  };
-}
-
 // ── Core library tests ──────────────────────────────────────────────
 
 const core = require('../scripts/core');
@@ -98,6 +50,37 @@ testInCleanEnv('build_url merges query parameters', () => {
     url,
     'https://open.pingcode.com/v1/project/work_items?identifier=SCR-1&page_size=20&project_ids=p1%2Cp2',
   );
+});
+
+testInCleanTmp('cache refreshers paginate through multi-page responses', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'cache.json');
+  const tokenCache = tmpFile(tmpdir, 'token.json');
+  const client = new pingcode.PingCodeClient({
+    base_url: 'https://open.pingcode.com',
+    client_id: 'client',
+    client_secret: 'secret',
+    token_cache: tokenCache,
+    workspace_cache: cachePath,
+    grant_type: 'client_credentials',
+  });
+  let tokenRequested = false;
+  mockFetch((url) => {
+    const u = new URL(url);
+    if (u.pathname.includes('/v1/auth/token')) {
+      tokenRequested = true;
+      return fakeResponse({ access_token: 'token-1', expires_in: 3600 });
+    }
+    const index = Number(u.searchParams.get('page_index'));
+    if (index === 0) {
+      return fakeResponse({ values: [{ id: 'p1' }, { id: 'p2' }], total: 3, count: 2 });
+    }
+    return fakeResponse({ values: [{ id: 'p3' }], total: 3, count: 1 });
+  });
+  const response = await pingcode.cacheProjects(client);
+  assert.ok(tokenRequested);
+  assert.deepStrictEqual(response.values.map((p) => p.id), ['p1', 'p2', 'p3']);
+  const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.deepStrictEqual(cached.projects.values.map((p) => p.id), ['p1', 'p2', 'p3']);
 });
 
 testInCleanEnv('compact work item response keeps business fields', () => {

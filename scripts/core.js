@@ -13,14 +13,6 @@ const MAX_TOKEN_TTL_SECONDS = 29 * 24 * 60 * 60;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const USER_LOOKUP_RE = /@user:([^,]+)/g;
 const MAX_SELECTION_OPTIONS = 20;
-const SAFE_SHELL_RE = /^[A-Za-z0-9_/:=.,+-]+$/;
-
-function shellQuote(value) {
-  if (SAFE_SHELL_RE.test(value)) {
-    return value;
-  }
-  return "'" + value.replace(/'/g, "'\\''") + "'";
-}
 
 const CLI_COMMAND = 'node scripts/pingcode.js';
 const CTX_COMMAND = 'node scripts/pingcode.js context init';
@@ -329,6 +321,25 @@ function itemNames(item) {
     }
   }
   return names;
+}
+
+function displayName(item) {
+  const entity = normalizedEntity(item);
+  for (const key of ['display_name', 'name', 'identifier', 'email', 'id']) {
+    const value = entity[key];
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+  return '<unnamed>';
+}
+
+function itemId(item, label) {
+  const value = normalizedEntity(item).id;
+  if (typeof value !== 'string' || !value) {
+    throw new PingCodeError(`Selected ${label} has no id`);
+  }
+  return value;
 }
 
 function selectionItem(item) {
@@ -911,39 +922,86 @@ class PingCodeClient {
   async fetchProjectUsers(projectId) {
     const encoded = encodeURIComponent(projectId);
     const rawPath = `/v1/project/projects/${encoded}/members`;
-    const response = await this.request('GET', rawPath, { page_size: 100 }, null, { use_workspace_cache: false });
-    updateWorkspaceCacheForResponse(
+    const response = await fetchAllPages(this, rawPath, {});
+    if (this.workspaceCachePath !== null && updateWorkspaceCacheForResponse(
       'GET',
       rawPath,
-      { page_size: 100 },
+      {},
       response,
       this.workspaceCache,
       this.baseUrl,
-    );
-    this.saveWorkspaceCache();
+    )) {
+      saveWorkspaceCache(this.workspaceCachePath, this.workspaceCache);
+    }
     return response;
   }
 }
 
+const DEFAULT_PAGE_SIZE = 100;
+
+async function fetchAllPages(client, rawPath, params = {}) {
+  const allValues = [];
+  let pageIndex = 0;
+  let lastResponse = null;
+  while (true) {
+    const pageParams = { ...params, page_size: DEFAULT_PAGE_SIZE, page_index: pageIndex };
+    const response = await client.rawRequest('GET', rawPath, pageParams);
+    if (!response || typeof response !== 'object' || Array.isArray(response)) break;
+    const values = pageValues(response);
+    if (values.length === 0) break;
+    allValues.push(...values);
+    lastResponse = response;
+    const total = response.total;
+    if (typeof total === 'number') {
+      if (total <= allValues.length) break;
+    } else if (values.length < DEFAULT_PAGE_SIZE) {
+      break;
+    }
+    pageIndex += 1;
+  }
+  if (lastResponse) {
+    return {
+      ...lastResponse,
+      page_size: DEFAULT_PAGE_SIZE,
+      page_index: pageIndex,
+      total: lastResponse.total || allValues.length,
+      count: allValues.length,
+      values: allValues,
+    };
+  }
+  return { values: allValues };
+}
+
 async function refreshCommand(client, rawPath, params = null) {
-  return await client.request('GET', rawPath, params || {}, null, { use_workspace_cache: false });
+  const response = await fetchAllPages(client, rawPath, params || {});
+  if (client.workspaceCachePath !== null && updateWorkspaceCacheForResponse(
+    'GET',
+    rawPath,
+    params || {},
+    response,
+    client.workspaceCache,
+    client.baseUrl,
+  )) {
+    saveWorkspaceCache(client.workspaceCachePath, client.workspaceCache);
+  }
+  return response;
 }
 
 async function cacheProjects(client) {
-  return await refreshCommand(client, '/v1/project/projects', { page_size: 100 });
+  return await refreshCommand(client, '/v1/project/projects', {});
 }
 
 async function cacheSprints(client, projectId) {
   const encoded = encodeURIComponent(projectId);
-  return await refreshCommand(client, `/v1/project/projects/${encoded}/sprints`, { page_size: 100 });
+  return await refreshCommand(client, `/v1/project/projects/${encoded}/sprints`, {});
 }
 
 async function cacheWorkItemTypes(client, projectId) {
-  return await refreshCommand(client, '/v1/project/work_item/types', { project_id: projectId, page_size: 100 });
+  return await refreshCommand(client, '/v1/project/work_item/types', { project_id: projectId });
 }
 
 async function cacheWorkItemPriorities(client, projectId) {
-  return await refreshCommand(client, '/v1/project/work_item/priorities', { project_id: projectId, page_size: 100 });
+  return await refreshCommand(client, '/v1/project/work_item/priorities', { project_id: projectId });
 }
 
 async function cacheWorkItemStates(client, projectId, workItemTypeId) {
@@ -951,7 +1009,7 @@ async function cacheWorkItemStates(client, projectId, workItemTypeId) {
 }
 
 async function cacheWorkItemProperties(client, projectId, workItemTypeId) {
-  return await refreshCommand(client, '/v1/project/work_item/properties', { project_id: projectId, work_item_type_id: workItemTypeId, page_size: 100 });
+  return await refreshCommand(client, '/v1/project/work_item/properties', { project_id: projectId, work_item_type_id: workItemTypeId });
 }
 
 async function cacheUsers(client, projectId = null) {
@@ -960,7 +1018,7 @@ async function cacheUsers(client, projectId = null) {
     return await client.fetchProjectUsers(selectedProjectId);
   }
   try {
-    return await refreshCommand(client, '/v1/directory/users', { page_size: 100 });
+    return await refreshCommand(client, '/v1/directory/users', {});
   } catch (exc) {
     throw new PingCodeError(
       `${exc.message}\n` +
@@ -1276,6 +1334,8 @@ module.exports = {
   compactResponse,
   normalizedEntity,
   itemNames,
+  displayName,
+  itemId,
   selectionItem,
   selectionOptions,
   selectionGuidance,
