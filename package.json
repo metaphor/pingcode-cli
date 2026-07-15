@@ -9,7 +9,7 @@
   },
   "bin": {
     "pingcode": "./scripts/pingcode.js",
-    "pingcode-skill": "./bin/install.js"
+    "pingcode-cli": "./bin/install.js"
   },
   "files": [
     "SKILL.md",

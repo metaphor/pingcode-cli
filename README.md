@@ -8,18 +8,19 @@
 npx pingcode-cli@latest
 ```
 
-一条命令会检测当前用户已存在的 Codex / Claude Code / OpenClaw / Hermes 目录，并只安装到这些已有 Agent：
+一条命令会检测当前用户已存在的 Codex / Claude Code / OpenClaw / Hermes / OpenCode 目录，并只安装到这些已有 Agent：
 
 ```text
 ~/.codex/skills/pingcode
 ~/.claude/skills/pingcode
 ~/.openclaw/skills/pingcode
 ~/.hermes/skills/project-management/pingcode
+~/.config/opencode/skills/pingcode
 ```
 
-任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
+默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
 
-如果设置了 `CODEX_HOME`，Codex 目录会变成 `$CODEX_HOME/skills/pingcode`；其他三个目录的位置不受该变量影响。
+如果设置了 `CODEX_HOME`，Codex 目录会变成 `$CODEX_HOME/skills/pingcode`；其他 Agent 的目录位置不受该变量影响。
 
 安装完成后，配置 PingCode 凭证：
 
@@ -33,6 +34,46 @@ export PINGCODE_CLIENT_SECRET="..."
 ```bash
 export PINGCODE_USER_NAME="你的 PingCode 用户名或显示名"
 export PINGCODE_USER_ID="你的 PingCode 用户 ID"
+```
+
+### 交互式安装（默认）
+
+直接运行安装命令会进入交互式向导：
+
+```bash
+npx pingcode-cli@latest
+```
+
+流程：
+1. 选择安装范围：
+   - **Global**（全局，安装到 `~/.codex`、`~/.claude`、`~/.config/opencode` 等）
+   - **Project-level**（项目级，安装到当前目录的 `.codex`、`.claude`、`.opencode` 等）
+2. 选择要安装的 Agent（可多选）
+3. 安装完成后会打印摘要和凭证配置提示
+
+示例输入（全局安装 OpenCode）：
+
+```text
+Select install scope:
+  1) Global
+  2) Project-level
+Enter choice (1-2, default: 1): 1
+
+Select agents to install (comma-separated numbers, default: all):
+  1) Codex
+  2) Claude Code
+  3) OpenClaw
+  4) Hermes
+  5) OpenCode
+Enter choices (1-5): 5
+```
+
+### 非交互式安装（CI/脚本）
+
+在自动化环境中使用 `--non-interactive`，会保持原来的自动检测并安装到已有 Agent 目录的逻辑：
+
+```bash
+npx pingcode-cli@latest --non-interactive --force
 ```
 
 ### 更新
@@ -52,13 +93,15 @@ npx pingcode-cli@latest --codex-only --force
 npx pingcode-cli@latest --claude-only --force
 npx pingcode-cli@latest --openclaw-only --force
 npx pingcode-cli@latest --hermes-only --force
+npx pingcode-cli@latest --opencode-only --force
 ```
 
-安装到自定义目录（例如项目本地的 `.claude/skills/pingcode`）：
+安装到自定义目录（例如项目本地的 `.claude/skills/pingcode` 或 OpenCode 项目级 `.opencode/skills/pingcode`）：
 
 ```bash
 npx pingcode-cli@latest --target ".claude/skills/pingcode" --force
-npx pingcode-cli@latest --target "$HOME/.codex/skills/pingcode" --force
+npx pingcode-cli@latest --target "$HOME/.config/opencode/skills/pingcode" --force
+npx pingcode-cli@latest --target ".opencode/skills/pingcode" --force
 ```
 
 `--target` 与 `--codex-only` / `--claude-only` / `--openclaw-only` / `--hermes-only` 互斥；指定 `--target` 后只会安装到给定目录，不再走多 Agent 默认流程。
@@ -72,12 +115,13 @@ npx pingcode-cli@latest --target "$HOME/.codex/skills/pingcode" --force
 
 安装要求：
 1. 直接运行：npx pingcode-cli@latest --force
-   该命令会检测当前用户已存在的 Codex、Claude Code、OpenClaw 和 Hermes 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
+   该命令会检测当前用户已存在的 Codex、Claude Code、OpenClaw、Hermes 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
 2. 安装结束后请检查下列 SKILL.md 入口文件是否存在（按你当前使用的 Agent 选择对应路径即可）：
    - ~/.codex/skills/pingcode/SKILL.md
    - ~/.claude/skills/pingcode/SKILL.md
    - ~/.openclaw/skills/pingcode/SKILL.md
    - ~/.hermes/skills/project-management/pingcode/SKILL.md
+   - ~/.config/opencode/skills/pingcode/SKILL.md
 3. 安装完成后，引导我配置环境变量 PINGCODE_CLIENT_ID 和 PINGCODE_CLIENT_SECRET；不要把 secret 写入仓库文件，也不要在对话里回显完整 secret。
 4. 如果我还需要默认查询“我的任务”，请继续引导我配置 PINGCODE_USER_NAME 或 PINGCODE_USER_ID。
 ```

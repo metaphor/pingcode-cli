@@ -45,7 +45,7 @@ Use the bundled CLI:
 node scripts/pingcode.js --help
 ```
 
-When installed by `npx pingcode-skill`, the installer rewrites these examples to the installed
+When installed by `npx pingcode-cli`, the installer rewrites these examples to the installed
 absolute script path, such as `node ~/.codex/skills/pingcode/scripts/pingcode.js`. In Codex,
 prefer that installed absolute command because sandbox/network approvals are matched by command
 prefix; a stable installed path is more likely to reuse a prior approval than a relative repo path.

@@ -13,11 +13,12 @@ function expectedCli(target) {
   return 'node ' + shellQuote(path.join(target, 'scripts', 'pingcode.js'));
 }
 
-function runInstall(args, env = process.env) {
-  return spawnSync('node', ['bin/install.js', ...args], {
-    cwd: REPO_ROOT,
+function runInstall(args, env = process.env, input = null, cwd = REPO_ROOT) {
+  return spawnSync('node', [path.join(REPO_ROOT, 'bin/install.js'), ...args], {
+    cwd,
     encoding: 'utf8',
     env,
+    input,
   });
 }
 
@@ -51,6 +52,10 @@ function expectedPaths(home, codexHome = null) {
     hermes: {
       main: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode'),
       alias: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-ctx'),
+    },
+    opencode: {
+      main: path.join(home, '.config', 'opencode', 'skills', 'pingcode'),
+      alias: path.join(home, '.config', 'opencode', 'skills', 'pingcode-ctx'),
     },
   };
 }
@@ -146,7 +151,7 @@ test('default install writes existing agent roots', () => {
       assert.ok(aliasDoc.includes(expectedCli(paths[key].main)));
       assert.ok(result.stdout.includes('[ok]'));
     }
-    for (const label of ['Codex', 'Claude Code', 'OpenClaw', 'Hermes']) {
+    for (const label of ['Codex', 'Claude Code', 'OpenClaw', 'Hermes', 'OpenCode']) {
       assert.ok(result.stdout.includes(label));
     }
   } finally {
@@ -169,12 +174,13 @@ test('default install skips missing agent roots', () => {
     assert.ok(fs.existsSync(paths.codex.alias));
     assertInstalled(paths.claude.main);
     assert.ok(fs.existsSync(paths.claude.alias));
-    for (const key of ['openclaw', 'hermes']) {
+    for (const key of ['openclaw', 'hermes', 'opencode']) {
       assertNotInstalled(paths[key].main);
       assertNotInstalled(paths[key].alias);
     }
     assert.ok(result.stdout.includes('[skip] OpenClaw'));
     assert.ok(result.stdout.includes('[skip] Hermes'));
+    assert.ok(result.stdout.includes('[skip] OpenCode'));
   } finally {
     rmDir(tmpdir);
   }
@@ -279,6 +285,119 @@ test('hermes only scope', () => {
       assertNotInstalled(paths[key].main);
       assertNotInstalled(paths[key].alias);
     }
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('opencode only scope', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--opencode-only'], env);
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    const paths = expectedPaths(home);
+    assertInstalled(paths.opencode.main);
+    assert.ok(fs.existsSync(paths.opencode.alias));
+    for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
+      assertNotInstalled(paths[key].main);
+      assertNotInstalled(paths[key].alias);
+    }
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('opencode project-level target install', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const target = path.join(home, 'project', '.opencode', 'skills', 'pingcode');
+    const result = runInstall(['--target', target, '--force'], env);
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    assertInstalled(target);
+    assert.ok(fs.existsSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md')));
+    const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
+    assert.ok(skillDoc.includes(expectedCli(target)));
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('interactive global install', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--interactive', '--force'], env, '1\n5\n');
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    const paths = expectedPaths(home);
+    assertInstalled(paths.opencode.main);
+    assert.ok(fs.existsSync(paths.opencode.alias));
+    assert.ok(result.stdout.includes('Install summary (global)'));
+    assert.ok(result.stdout.includes('OpenCode'));
+    for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
+      assertNotInstalled(paths[key].main);
+    }
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('interactive project-level install', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    const projectDir = path.join(home, 'project');
+    fs.mkdirSync(projectDir, { recursive: true });
+    const resolvedProjectDir = fs.realpathSync(projectDir);
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--interactive', '--force'], env, '2\n1,5\n', resolvedProjectDir);
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    const codexTarget = path.join(resolvedProjectDir, '.codex', 'skills', 'pingcode');
+    const opencodeTarget = path.join(resolvedProjectDir, '.opencode', 'skills', 'pingcode');
+    assertInstalled(codexTarget);
+    assertInstalled(opencodeTarget);
+    assert.ok(result.stdout.includes('Install summary (project)'));
+    assert.ok(result.stdout.includes('Codex'));
+    assert.ok(result.stdout.includes('OpenCode'));
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('interactive invalid scope errors', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--interactive', '--force'], env, '9\n');
+    assert.notStrictEqual(result.status, 0);
+    assert.ok(result.stderr.includes('Invalid scope choice') || result.stderr.includes('error:'));
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('interactive invalid agent selection errors', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--interactive', '--force'], env, '1\n9\n');
+    assert.notStrictEqual(result.status, 0);
+    assert.ok(result.stderr.includes('No valid agents selected') || result.stderr.includes('error:'));
   } finally {
     rmDir(tmpdir);
   }

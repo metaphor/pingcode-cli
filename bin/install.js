@@ -3,6 +3,8 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const readline = require("node:readline");
+const { stdin, stdout } = require("node:process");
 
 const packageRoot = path.resolve(__dirname, "..");
 const skillName = process.env.PINGCODE_SKILL_NAME || "pingcode";
@@ -16,7 +18,7 @@ const sourceEntries = [
 ];
 const aliasSkillEntries = ["skills/pingcode-ctx/SKILL.md"];
 
-const AGENT_KEYS = ["codex", "claude", "openclaw", "hermes"];
+const AGENT_KEYS = ["codex", "claude", "openclaw", "hermes", "opencode"];
 
 function defaultAgentRoots() {
   const home = os.homedir();
@@ -44,13 +46,45 @@ function defaultAgentRoots() {
       agentHome: path.join(home, ".hermes"),
       skillsRoot: path.join(home, ".hermes", "skills", "project-management"),
     },
+    opencode: {
+      label: "OpenCode",
+      agentHome: path.join(home, ".config", "opencode"),
+      skillsRoot: path.join(home, ".config", "opencode", "skills"),
+    },
+  };
+}
+
+function projectAgentRoots() {
+  const cwd = process.cwd();
+  return {
+    codex: {
+      label: "Codex",
+      skillsRoot: path.join(cwd, ".codex", "skills"),
+    },
+    claude: {
+      label: "Claude Code",
+      skillsRoot: path.join(cwd, ".claude", "skills"),
+    },
+    openclaw: {
+      label: "OpenClaw",
+      skillsRoot: path.join(cwd, ".openclaw", "skills"),
+    },
+    hermes: {
+      label: "Hermes",
+      skillsRoot: path.join(cwd, ".hermes", "skills", "project-management"),
+    },
+    opencode: {
+      label: "OpenCode",
+      skillsRoot: path.join(cwd, ".opencode", "skills"),
+    },
   };
 }
 
 function usage() {
   return [
-    "Usage: npx pingcode-skill [--force] [--target <dir>]",
-    "                          [--codex-only|--claude-only|--openclaw-only|--hermes-only]",
+    "Usage: npx pingcode-cli [--force] [--target <dir>]",
+    "                        [--codex-only|--claude-only|--openclaw-only|--hermes-only|--opencode-only]",
+    "                        [--interactive|--non-interactive]",
     "",
     "Default behavior installs the PingCode skill and pingcode-ctx alias",
     "only into supported agent homes that already exist for the current user:",
@@ -58,6 +92,16 @@ function usage() {
     "  Claude:    ~/.claude/skills/pingcode (and pingcode-ctx)",
     "  OpenClaw:  ~/.openclaw/skills/pingcode (and pingcode-ctx)",
     "  Hermes:    ~/.hermes/skills/project-management/pingcode (and pingcode-ctx)",
+    "  OpenCode:  ~/.config/opencode/skills/pingcode (and pingcode-ctx)",
+    "",
+    "Project-level OpenCode install is supported via --target:",
+    "  npx pingcode-cli --target \".opencode/skills/pingcode\" --force",
+    "",
+    "Interactive install lets you choose global/project scope and agents:",
+    "  npx pingcode-cli --interactive",
+    "",
+    "Non-interactive auto-install (useful for CI/scripts):",
+    "  npx pingcode-cli --non-interactive",
     "",
     "Options:",
     "  --force            Overwrite existing installs in every selected root",
@@ -66,6 +110,9 @@ function usage() {
     "  --claude-only      Install only into the Claude Code skills root",
     "  --openclaw-only    Install only into the OpenClaw skills root",
     "  --hermes-only      Install only into the Hermes project-management root",
+    "  --opencode-only    Install only into the OpenCode skills root",
+    "  --interactive      Prompt for install scope and agent selection",
+    "  --non-interactive  Skip prompts and use the default auto-install behavior",
     "  -h, --help         Show this help",
     "",
     "CODEX_HOME overrides the Codex root only.",
@@ -78,12 +125,15 @@ function parseArgs(argv) {
     target: null,
     only: null,
     help: false,
+    interactive: false,
+    nonInteractive: false,
   };
   const onlyFlags = {
     "--codex-only": "codex",
     "--claude-only": "claude",
     "--openclaw-only": "openclaw",
     "--hermes-only": "hermes",
+    "--opencode-only": "opencode",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -98,10 +148,14 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
       options.help = true;
+    } else if (arg === "--interactive") {
+      options.interactive = true;
+    } else if (arg === "--non-interactive") {
+      options.nonInteractive = true;
     } else if (Object.prototype.hasOwnProperty.call(onlyFlags, arg)) {
       if (options.only && options.only !== onlyFlags[arg]) {
         throw new Error(
-          "Only one of --codex-only / --claude-only / --openclaw-only / --hermes-only may be set",
+          "Only one of --codex-only / --claude-only / --openclaw-only / --hermes-only / --opencode-only may be set",
         );
       }
       options.only = onlyFlags[arg];
@@ -110,7 +164,13 @@ function parseArgs(argv) {
     }
   }
   if (options.target && options.only) {
-    throw new Error("--target cannot be combined with --codex-only / --claude-only / --openclaw-only / --hermes-only");
+    throw new Error("--target cannot be combined with --codex-only / --claude-only / --openclaw-only / --hermes-only / --opencode-only");
+  }
+  if (options.interactive && (options.target || options.only)) {
+    throw new Error("--interactive cannot be combined with --target or --*-only flags");
+  }
+  if (options.interactive && options.nonInteractive) {
+    throw new Error("--interactive and --non-interactive cannot be combined");
   }
   return options;
 }
@@ -294,23 +354,164 @@ function runSingleTargetInstall(options) {
   }
 }
 
-function main() {
+function agentRootsForScope(scope) {
+  if (scope === "project") {
+    return projectAgentRoots();
+  }
+  return defaultAgentRoots();
+}
+
+function buildTargets(scope, keys) {
+  const roots = agentRootsForScope(scope);
+  return keys.map((key) => ({
+    key,
+    label: roots[key].label,
+    mainTarget: path.join(roots[key].skillsRoot, skillName),
+  }));
+}
+
+function printInteractiveSummary(successes, failures, scope) {
+  console.log("");
+  console.log(`Install summary (${scope}):`);
+  for (const item of successes) {
+    console.log(`  [ok]   ${item.label}: ${item.mainTarget}`);
+    console.log(`         ${item.label} (pingcode-ctx): ${item.aliasTarget}`);
+  }
+  for (const item of failures) {
+    console.error(`  [fail] ${item.label}: ${item.target}`);
+    console.error(`         ${item.message}`);
+  }
+  if (successes.length > 0) {
+    printCredentialGuidance();
+  }
+}
+
+function runInteractiveInstall(options) {
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  return new Promise((resolve, reject) => {
+    let scope = null;
+    let selectedKeys = null;
+
+    function finish(error, code) {
+      rl.close();
+      if (error) {
+        reject(error);
+      } else {
+        resolve(code);
+      }
+    }
+
+    function doInstall() {
+      try {
+        const targets = buildTargets(scope, selectedKeys);
+        const successes = [];
+        const failures = [];
+
+        console.log("");
+        console.log("Installing...");
+        for (const target of targets) {
+          try {
+            const result = installToTarget(target.mainTarget, options);
+            successes.push({ ...target, aliasTarget: result.aliasTarget });
+          } catch (err) {
+            failures.push({ ...target, message: err.message });
+          }
+        }
+
+        printInteractiveSummary(successes, failures, scope);
+
+        if (successes.length === 0) {
+          finish(null, 1);
+        } else if (failures.length === 0) {
+          finish(null, 0);
+        } else {
+          finish(null, 2);
+        }
+      } catch (err) {
+        finish(err);
+      }
+    }
+
+    function askAgents() {
+      const roots = defaultAgentRoots();
+      console.log("");
+      console.log("Select agents to install (comma-separated numbers, default: all):");
+      AGENT_KEYS.forEach((key, index) => {
+        console.log(`  ${index + 1}) ${roots[key].label}`);
+      });
+      rl.question("Enter choices (1-5): ", (answer) => {
+        const trimmed = answer.trim();
+        if (!trimmed) {
+          selectedKeys = [...AGENT_KEYS];
+          doInstall();
+          return;
+        }
+        const selected = new Set();
+        for (const part of trimmed.split(",")) {
+          const num = parseInt(part.trim(), 10);
+          if (Number.isNaN(num) || num < 1 || num > AGENT_KEYS.length) {
+            continue;
+          }
+          selected.add(AGENT_KEYS[num - 1]);
+        }
+        if (selected.size === 0) {
+          finish(new Error("No valid agents selected"));
+          return;
+        }
+        selectedKeys = [...selected];
+        doInstall();
+      });
+    }
+
+    function askScope() {
+      console.log("");
+      console.log("Select install scope:");
+      console.log("  1) Global      - install under home directory (e.g. ~/.config/opencode/skills)");
+      console.log("  2) Project-level - install under current directory (e.g. ./.opencode/skills)");
+      rl.question("Enter choice (1-2, default: 1): ", (answer) => {
+        const trimmed = answer.trim();
+        if (!trimmed || trimmed === "1") {
+          scope = "global";
+        } else if (trimmed === "2") {
+          scope = "project";
+        } else {
+          finish(new Error(`Invalid scope choice: ${trimmed}`));
+          return;
+        }
+        askAgents();
+      });
+    }
+
+    askScope();
+  });
+}
+
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     console.log(usage());
     return 0;
   }
-  if (options.target) {
-    return runSingleTargetInstall(options);
+  if (options.interactive) {
+    return await runInteractiveInstall(options);
+  }
+  if (options.target || options.only || options.nonInteractive) {
+    if (options.target) {
+      return runSingleTargetInstall(options);
+    }
+    return runMultiRootInstall(options);
+  }
+  if (process.stdin.isTTY) {
+    return await runInteractiveInstall(options);
   }
   return runMultiRootInstall(options);
 }
 
-try {
-  process.exitCode = main();
-} catch (error) {
+main().then((code) => {
+  process.exitCode = code;
+}).catch((error) => {
   console.error(`error: ${error.message}`);
   console.error("");
   console.error(usage());
   process.exitCode = 1;
-}
+});
