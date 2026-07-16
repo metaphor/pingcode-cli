@@ -11,12 +11,11 @@ const skillName = process.env.PINGCODE_SKILL_NAME || "pingcode";
 const aliasName = "pingcode-ctx";
 const sourceEntries = [
   "SKILL.md",
-  "README.md",
-  "agents",
   "references",
-  "scripts",
 ];
 const aliasSkillEntries = ["skills/pingcode-ctx/SKILL.md"];
+
+const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
 const AGENT_KEYS = ["codex", "claude", "openclaw", "hermes", "opencode"];
 
@@ -197,11 +196,10 @@ function shellQuote(value) {
 }
 
 function rewriteInstalledDocs(destinationRoot) {
-  const cliCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode.js"))}`;
-  const ctxCommand = `${cliCommand} context init`;
+  const cliCommand = "pingcode";
+  const ctxCommand = "pingcode context init";
   const docs = [
     path.join(destinationRoot, "SKILL.md"),
-    path.join(destinationRoot, "README.md"),
     path.join(destinationRoot, "references", "workflows.md"),
   ];
 
@@ -211,8 +209,13 @@ function rewriteInstalledDocs(destinationRoot) {
     }
     const original = fs.readFileSync(file, "utf8");
     const rewritten = original
+      // Defensive: absolute paths from historical installs
+      .replace(/node\s+\S*\/scripts\/pingcode-ctx\.js/g, ctxCommand)
+      .replace(/node\s+\S*\/scripts\/pingcode\.js/g, cliCommand)
+      // Python3 legacy
       .replaceAll("python3 scripts/pingcode_ctx.py", ctxCommand)
       .replaceAll("python3 scripts/pingcode.py", cliCommand)
+      // Literal node scripts references (relative paths)
       .replaceAll("node scripts/pingcode-ctx.js", ctxCommand)
       .replaceAll("node scripts/pingcode.js", cliCommand);
     if (rewritten !== original) {
@@ -230,13 +233,15 @@ function installAliasSkill(destinationRoot) {
     const destination = path.join(aliasRoot, path.basename(entry));
     fs.copyFileSync(source, destination);
   }
-  const cliCommand = `node ${shellQuote(path.join(destinationRoot, "scripts", "pingcode.js"))}`;
-  const ctxCommand = `${cliCommand} context init`;
+  const cliCommand = "pingcode";
+  const ctxCommand = "pingcode context init";
   const skillDoc = path.join(aliasRoot, "SKILL.md");
   const original = fs.readFileSync(skillDoc, "utf8");
   fs.writeFileSync(
     skillDoc,
     original
+      .replace(/node\s+\S*\/scripts\/pingcode-ctx\.js/g, ctxCommand)
+      .replace(/node\s+\S*\/scripts\/pingcode\.js/g, cliCommand)
       .replaceAll("python3 scripts/pingcode_ctx.py", ctxCommand)
       .replaceAll("python3 scripts/pingcode.py", cliCommand)
       .replaceAll("node scripts/pingcode-ctx.js", ctxCommand)
@@ -260,6 +265,7 @@ function installToTarget(targetDir, options) {
   }
   rewriteInstalledDocs(targetDir);
   const aliasTarget = installAliasSkill(targetDir);
+  installGlobalWrapper();
   return { mainTarget: targetDir, aliasTarget };
 }
 
@@ -268,6 +274,85 @@ function printCredentialGuidance() {
   console.log("Configure PingCode credentials before use:");
   console.log('  export PINGCODE_CLIENT_ID="..."');
   console.log('  export PINGCODE_CLIENT_SECRET="..."');
+}
+
+function installGlobalWrapper() {
+  // On Windows, only print guidance — global wrapper via npm install -g
+  if (process.platform === "win32") {
+    console.log("");
+    console.log("For a global pingcode command on Windows, run:");
+    console.log("  npm install -g pingcode-cli");
+    return;
+  }
+
+  const home = os.homedir();
+  const binDir = path.join(home, ".local", "bin");
+  const wrapperPath = path.join(binDir, "pingcode");
+  const pingcodeScript = path.join(packageRoot, "scripts", "pingcode.js");
+
+  // Create ~/.local/bin if it does not exist
+  try {
+    fs.mkdirSync(binDir, { recursive: true });
+  } catch (err) {
+    console.warn(`Could not create ${binDir}: ${err.message}`);
+    console.warn("Skipping global pingcode wrapper.");
+    return;
+  }
+
+  // Write the POSIX wrapper script
+  const wrapperContent = [
+    "#!/bin/sh",
+    `exec node ${shellQuote(pingcodeScript)} "$@"`,
+    "",
+  ].join("\n");
+
+  try {
+    fs.writeFileSync(wrapperPath, wrapperContent, { mode: 0o755 });
+  } catch (err) {
+    console.warn(`Could not write ${wrapperPath}: ${err.message}`);
+    console.warn("Skipping global pingcode wrapper.");
+    return;
+  }
+
+  console.log("");
+  console.log(`Global wrapper installed: ${wrapperPath}`);
+
+  // Append ~/.local/bin to existing shell profiles behind a guard comment
+  const pathLine = 'export PATH="$HOME/.local/bin:$PATH"';
+  const block = [
+    WRAPPER_PATH_BLOCK,
+    pathLine,
+  ].join("\n");
+
+  const profiles = [".bashrc", ".zshrc", ".bash_profile", ".zprofile"];
+  let anyUpdated = false;
+
+  for (const profile of profiles) {
+    const profilePath = path.join(home, profile);
+    if (!fs.existsSync(profilePath)) {
+      continue;
+    }
+    try {
+      const content = fs.readFileSync(profilePath, "utf8");
+      if (content.includes(WRAPPER_PATH_BLOCK)) {
+        // Already present, skip
+        anyUpdated = true;
+        continue;
+      }
+      const newContent = content.trimEnd() + "\n\n" + block + "\n";
+      fs.writeFileSync(profilePath, newContent);
+      console.log(`  Added ~/.local/bin to ${profile}`);
+      anyUpdated = true;
+    } catch (err) {
+      console.warn(`  Could not update ${profile}: ${err.message}`);
+    }
+  }
+
+  if (!anyUpdated) {
+    console.log("");
+    console.log("No writable shell profile found. Add this line to your shell profile manually:");
+    console.log(`  ${pathLine}`);
+  }
 }
 
 function existingAgentKeys(roots) {
@@ -492,19 +577,22 @@ async function main() {
     console.log(usage());
     return 0;
   }
+  let code;
   if (options.interactive) {
-    return await runInteractiveInstall(options);
-  }
-  if (options.target || options.only || options.nonInteractive) {
+    code = await runInteractiveInstall(options);
+  } else if (options.target || options.only || options.nonInteractive) {
     if (options.target) {
-      return runSingleTargetInstall(options);
+      code = runSingleTargetInstall(options);
+    } else {
+      code = runMultiRootInstall(options);
     }
-    return runMultiRootInstall(options);
+  } else if (process.stdin.isTTY) {
+    code = await runInteractiveInstall(options);
+  } else {
+    code = runMultiRootInstall(options);
   }
-  if (process.stdin.isTTY) {
-    return await runInteractiveInstall(options);
-  }
-  return runMultiRootInstall(options);
+  installGlobalWrapper();
+  return code;
 }
 
 main().then((code) => {
