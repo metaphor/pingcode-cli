@@ -632,7 +632,7 @@ testInCleanEnv('work-item get --help shows get-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item get <id|identifier>'));
+  assert.ok(output.includes('Usage: pingcode work-item get <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
   assert.ok(!output.includes('create --title TITLE'));
 });
@@ -1339,7 +1339,7 @@ testInCleanEnv('list --help shows list-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item list [options]'));
+  assert.ok(output.includes('Usage: pingcode work-item list [options]'));
   assert.ok(output.includes('--keywords'));
   assert.ok(output.includes('--state <name|id>'));
   assert.ok(!output.includes('--all-users'));
@@ -1355,7 +1355,7 @@ testInCleanEnv('create --help shows create-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item create --title TITLE [options]'));
+  assert.ok(output.includes('Usage: pingcode work-item create --title TITLE [options]'));
   assert.ok(output.includes('--title TITLE'));
   assert.ok(output.includes('--parent <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
@@ -1370,7 +1370,7 @@ testInCleanEnv('show --help shows show-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item show <id|identifier>'));
+  assert.ok(output.includes('Usage: pingcode work-item show <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
   assert.ok(!output.includes('create --title TITLE'));
 });
@@ -1384,7 +1384,7 @@ testInCleanEnv('update --help shows update-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: node scripts/pingcode.js work-item update <id|identifier> [options]'));
+  assert.ok(output.includes('Usage: pingcode work-item update <id|identifier> [options]'));
   assert.ok(output.includes('--title TEXT'));
   assert.ok(output.includes('--state <name|id>'));
   assert.ok(output.includes('--priority <name|id>'));
