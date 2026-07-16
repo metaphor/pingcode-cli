@@ -13,7 +13,7 @@
 
 This skill uses `client_credentials`, so the token is an enterprise token and does not represent a specific human user. For work item create/query requests, default to the configured current user unless the user explicitly says "所有人" / all users or names another assignee. Use `PINGCODE_USER_ID` / `PINGCODE_USER_NAME`, the matching CLI flags, or the workspace cache if present. If none is set, cache users first and ask the user to choose their PingCode user before filtering or assigning.
 
-User-token login is available for human-user operations when a browser login is acceptable. Run `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`) to obtain a user token. After `login`, the CLI automatically detects the cached user token, so subsequent commands do not need `--grant-type` unless you want to override the detected type. This does not change the `@me` identity resolution workflow: `@me` still expands from the workspace cache, `PINGCODE_USER_ID`, or `PINGCODE_USER_NAME`, and is never inferred from the token itself.
+User-token login is available for human-user operations when a browser login is acceptable. Run `pingcode login` with `--grant-type authorization_code` (the default for `login`) to obtain a user token. After `login`, the CLI automatically detects the cached user token, so subsequent commands do not need `--grant-type` unless you want to override the detected type. This does not change the `@me` identity resolution workflow: `@me` still expands from the workspace cache, `PINGCODE_USER_ID`, or `PINGCODE_USER_NAME`, and is never inferred from the token itself.
 
 The CLI accepts identity placeholders:
 
@@ -47,12 +47,12 @@ In Codex, Claude Code, or another agent frontend, prefer `$pingcode context init
 For terminal interactive setup, run:
 
 ```bash
-node scripts/pingcode.js context init
+pingcode context init
 ```
 
 This guides the user to choose a project, sprint/iteration, and current user, then caches those choices.
 
-If a work item query or create command needs current user/project/sprint defaults and the workspace cache is incomplete, run `node scripts/pingcode.js context init` before retrying.
+If a work item query or create command needs current user/project/sprint defaults and the workspace cache is incomplete, run `pingcode context init` before retrying.
 
 For `GET /v1/project/work_items`, the CLI automatically applies cached defaults:
 
@@ -65,13 +65,13 @@ If the user explicitly asks for all users, all projects, or all iterations, pass
 ## View My Current Unfinished Tasks
 
 ```bash
-node scripts/pingcode.js work-item list --assignee @me --compact
+pingcode work-item list --assignee @me --compact
 ```
 
 Filter by type, state, etc.:
 
 ```bash
-node scripts/pingcode.js work-item list --assignee @me --type task --state 进行中 --compact
+pingcode work-item list --assignee @me --type task --state 进行中 --compact
 ```
 
 Use this same current-user filter for generic work item queries unless the user explicitly asks for "所有人" / all users.
@@ -81,7 +81,7 @@ The model should treat state types `pending` and `in_progress` as unfinished unl
 ## View My Unresolved Defects
 
 ```bash
-node scripts/pingcode.js work-item list --type bug --assignee @me --compact
+pingcode work-item list --type bug --assignee @me --compact
 ```
 
 This returns assigned bugs whose state type is `pending` or `in_progress`.
@@ -91,13 +91,13 @@ This returns assigned bugs whose state type is `pending` or `in_progress`.
 1. Find the parent story by identifier:
 
    ```bash
-   node scripts/pingcode.js work-item show MND-123 --compact
+   pingcode work-item show MND-123 --compact
    ```
 
 2. Create the child work item:
 
    ```bash
-   node scripts/pingcode.js work-item create --title "Child task" --type task --parent MND-123
+   pingcode work-item create --title "Child task" --type task --parent MND-123
    ```
 
 Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
@@ -107,26 +107,26 @@ Omit `assignee_id` only when the user explicitly asks for "所有人" / unassign
 Update by identifier (resolves to id automatically):
 
 ```bash
-node scripts/pingcode.js work-item update SCR-123 --state 已完成
+pingcode work-item update SCR-123 --state 已完成
 ```
 
 Or by id:
 
 ```bash
-node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
+pingcode work-item update WI-AbCdEf --state 进行中 --priority high
 ```
 
 Use `--dry-run` to preview before executing:
 
 ```bash
-node scripts/pingcode.js work-item update SCR-123 --state 已完成 --dry-run
+pingcode work-item update SCR-123 --state 已完成 --dry-run
 ```
 
 ## Create a Work Item or Story
 
 ```bash
-node scripts/pingcode.js work-item create --title "New story" --type story --project PROJECT_ID
-node scripts/pingcode.js work-item create --title "Bug fix" --type bug --assignee @me --priority high
+pingcode work-item create --title "New story" --type story --project PROJECT_ID
+pingcode work-item create --title "Bug fix" --type bug --assignee @me --priority high
 ```
 
 The subcommand resolves names to IDs from the workspace cache automatically. Add `--dry-run` to preview the request.

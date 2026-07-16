@@ -7,7 +7,7 @@ description: Use this skill when the user wants to initialize or change PingCode
 
 Use this skill to configure `.pingcode/cache.json` from an agent frontend such as Codex or Claude Code.
 
-Do not run the terminal-interactive `node scripts/pingcode.js context init` command by default. Instead, use the agent frontend Q&A protocol below so the user chooses in chat and the agent writes choices with non-interactive CLI commands.
+Do not run the terminal-interactive `pingcode context init` command by default. Instead, use the agent frontend Q&A protocol below so the user chooses in chat and the agent writes choices with non-interactive CLI commands.
 
 ## Setup
 
@@ -43,45 +43,45 @@ Ask only one selection question at a time. Never ask the user to paste credentia
 Show current workspace preferences and cached dictionary counts:
 
 ```bash
-node scripts/pingcode.js context list
+pingcode context list
 ```
 
 Set current project:
 
 ```bash
-node scripts/pingcode.js context set-current-project PROJECT_ID_OR_NAME
+pingcode context set-current-project PROJECT_ID_OR_NAME
 ```
 
 Set current sprint/iteration for the cached current project:
 
 ```bash
-node scripts/pingcode.js context set-current-sprint SPRINT_ID_OR_NAME
+pingcode context set-current-sprint SPRINT_ID_OR_NAME
 ```
 
 Set current user:
 
 ```bash
-node scripts/pingcode.js context set-current-user USER_ID_OR_NAME
+pingcode context set-current-user USER_ID_OR_NAME
 ```
 
 Initialize all three preferences interactively:
 
 ```bash
-node scripts/pingcode.js context init
+pingcode context init
 ```
 
-If the workspace cache is empty, run `node scripts/pingcode.js context init` first to populate it before setting individual preferences.
+If the workspace cache is empty, run `pingcode context init` first to populate it before setting individual preferences.
 
 ## Completion
 
-When all three preferences are cached, report the selected current project, sprint, and user from `node scripts/pingcode.js context list`. The normal `$pingcode` skill can then run routine work item queries and creates with cached defaults.
+When all three preferences are cached, report the selected current project, sprint, and user from `pingcode context list`. The normal `$pingcode` skill can then run routine work item queries and creates with cached defaults.
 
 ## Terminal Fallback
 
 If the user explicitly asks for terminal interaction, run:
 
 ```bash
-node scripts/pingcode.js context init
+pingcode context init
 ```
 
 This uses Node.js readline and may appear in the tool terminal instead of the agent chat frontend.

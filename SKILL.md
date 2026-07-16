@@ -29,11 +29,11 @@ Run the requested CLI command directly. If credentials or identity settings are 
 
 `client_credentials` returns an enterprise token and does not identify a human user. For work item create/query requests, let the CLI apply cached current-user defaults unless the user explicitly asks for "所有人" / all users or names another assignee.
 
-The CLI also supports user tokens via `node scripts/pingcode.js login` with `--grant-type authorization_code` (the default for `login`). User tokens represent a specific human user and can be used for commands that require a user identity. After `login`, the CLI automatically detects the cached user token grant type, so subsequent commands do not need `--grant-type` unless you want to override it. `client_credentials` remains the fallback when no user token is cached.
+The CLI also supports user tokens via `pingcode login` with `--grant-type authorization_code` (the default for `login`). User tokens represent a specific human user and can be used for commands that require a user identity. After `login`, the CLI automatically detects the cached user token grant type, so subsequent commands do not need `--grant-type` unless you want to override it. `client_credentials` remains the fallback when no user token is cached.
 
 ## Workspace Cache
 
-The CLI owns workspace-cache discovery and validation. Run the requested query/create command first; if cached user/project/sprint context is incomplete, the script exits with guidance. Then invoke `$pingcode-ctx` when available, or run `node scripts/pingcode.js context init`, and retry the original command.
+The CLI owns workspace-cache discovery and validation. Run the requested query/create command first; if cached user/project/sprint context is incomplete, the script exits with guidance. Then invoke `$pingcode-ctx` when available, or run `pingcode context init`, and retry the original command.
 
 For work item queries, the CLI automatically applies cached current user/project/sprint filters unless explicit params or `--all-users`, `--all-projects`, or `--all-sprints` are supplied.
 
@@ -42,13 +42,10 @@ For work item queries, the CLI automatically applies cached current user/project
 Use the bundled CLI:
 
 ```bash
-node scripts/pingcode.js --help
+pingcode --help
 ```
 
-When installed by `npx pingcode-cli`, the installer rewrites these examples to the installed
-absolute script path, such as `node ~/.codex/skills/pingcode/scripts/pingcode.js`. In Codex,
-prefer that installed absolute command because sandbox/network approvals are matched by command
-prefix; a stable installed path is more likely to reuse a prior approval than a relative repo path.
+When installed by `npx pingcode-cli`, the installer creates a global `pingcode` command on POSIX and rewrites these examples to use `pingcode`. In Codex, prefer the installed global command `pingcode` because sandbox/network approvals are matched by command prefix; a stable global command is more likely to reuse a prior approval than a relative repo path.
 
 ### Subcommand Mode (Preferred)
 
@@ -56,33 +53,33 @@ Prefer the structured subcommands for common work item and context operations:
 
 ```bash
 # Context — workspace management
-node scripts/pingcode.js context list
-node scripts/pingcode.js context init
-node scripts/pingcode.js context set-current-project PROJECT_ID
-node scripts/pingcode.js context set-current-sprint SPRINT_ID
-node scripts/pingcode.js context set-current-user USER_ID_OR_NAME
+pingcode context list
+pingcode context init
+pingcode context set-current-project PROJECT_ID
+pingcode context set-current-sprint SPRINT_ID
+pingcode context set-current-user USER_ID_OR_NAME
 
 # Work items — list
-node scripts/pingcode.js work-item list --assignee @me --state 进行中 --compact
-node scripts/pingcode.js work-item list --type bug --assignee @me --compact
-node scripts/pingcode.js work-item list --keywords "登录页面" --compact
+pingcode work-item list --assignee @me --state 进行中 --compact
+pingcode work-item list --type bug --assignee @me --compact
+pingcode work-item list --keywords "登录页面" --compact
 
 # Work items — create
-node scripts/pingcode.js work-item create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
-node scripts/pingcode.js work-item create --title "Bug fix" --type bug --assignee @me --priority high
+pingcode work-item create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
+pingcode work-item create --title "Bug fix" --type bug --assignee @me --priority high
 
 # Work items — show
-node scripts/pingcode.js work-item show SCR-123
-node scripts/pingcode.js work-item show WI-AbCdEf
+pingcode work-item show SCR-123
+pingcode work-item show WI-AbCdEf
 
 # Work items — get (single-item endpoint by id or identifier)
-node scripts/pingcode.js work-item get WORK_ITEM_ID
-node scripts/pingcode.js work-item get WYT-852
+pingcode work-item get WORK_ITEM_ID
+pingcode work-item get WYT-852
 
 # Work items — update (by identifier or id; supports --title, --description, --type, --project, --sprint, --state, --priority, --assignee, --parent, --version, --board, --entry, --swimlane, --start-at, --end-at, --participants, --story-points, --estimated-workload, --remaining-workload, --properties)
-node scripts/pingcode.js work-item update SCR-123 --state 已完成
-node scripts/pingcode.js work-item update WI-AbCdEf --state 进行中 --priority high
-node scripts/pingcode.js work-item update SCR-123 --title "Updated title" --story-points 3 --start-at 1736985600
+pingcode work-item update SCR-123 --state 已完成
+pingcode work-item update WI-AbCdEf --state 进行中 --priority high
+pingcode work-item update SCR-123 --title "Updated title" --story-points 3 --start-at 1736985600
 ```
 
 ## Workflow
