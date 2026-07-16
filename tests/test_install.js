@@ -5,13 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { spawnSync } = require('node:child_process');
 
-const { shellQuote } = require('./helpers');
-
 const REPO_ROOT = path.resolve(__dirname, '..');
-
-function expectedCli(target) {
-  return 'node ' + shellQuote(path.join(target, 'scripts', 'pingcode.js'));
-}
 
 function runInstall(args, env = process.env, input = null, cwd = REPO_ROOT) {
   return spawnSync('node', [path.join(REPO_ROOT, 'bin/install.js'), ...args], {
@@ -75,10 +69,14 @@ function createAgentHomes(home, codexHome = null, keys = null) {
 function assertInstalled(target) {
   assert.ok(fs.existsSync(path.join(target, 'SKILL.md')), `SKILL.md missing in ${target}`);
   const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
-  const expectedCliCmd = expectedCli(target);
-  assert.ok(skillDoc.includes(expectedCliCmd), `Expected CLI command ${expectedCliCmd} not found in SKILL.md`);
+  assert.ok(skillDoc.includes('pingcode'), `Expected 'pingcode' command in SKILL.md at ${target}`);
   assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false, 'Old python command should be removed');
   assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false, 'Old python ctx command should be removed');
+  // Skill-only payload: these directories/files should NOT be installed
+  assert.strictEqual(fs.existsSync(path.join(target, 'scripts')), false, `unexpected scripts/ dir in ${target}`);
+  assert.strictEqual(fs.existsSync(path.join(target, 'README.md')), false, `unexpected README.md in ${target}`);
+  assert.strictEqual(fs.existsSync(path.join(target, 'agents')), false, `unexpected agents/ dir in ${target}`);
+  assert.strictEqual(fs.existsSync(path.join(target, 'skills')), false, `unexpected skills/ dir in ${target}`);
 }
 
 function assertNotInstalled(target) {
@@ -93,7 +91,7 @@ function rmDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-test('installed docs use absolute cli path', () => {
+test('installed docs use pingcode command', () => {
   const tmpdir = tmpDir();
   try {
     const target = path.join(tmpdir, 'pingcode skill');
@@ -101,21 +99,22 @@ test('installed docs use absolute cli path', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
-    const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
     const workflows = fs.readFileSync(path.join(target, 'references', 'workflows.md'), 'utf8');
     const aliasDoc = fs.readFileSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md'), 'utf8');
-    const expected = expectedCli(target);
 
     assert.ok(result.stdout.includes('Installed PingCode skill'));
-    assert.ok(skillDoc.includes(expected), 'skill doc should contain installed CLI path');
-    assert.ok(readme.includes(expected), 'readme should contain installed CLI path');
-    assert.ok(workflows.includes(expected), 'workflows should contain installed CLI path');
-    assert.ok(aliasDoc.includes(expected), 'alias doc should contain installed CLI path');
+    assert.ok(skillDoc.includes('pingcode'), 'skill doc should contain pingcode command');
+    assert.ok(workflows.includes('pingcode'), 'workflows should contain pingcode command');
+    assert.ok(aliasDoc.includes('pingcode'), 'alias doc should contain pingcode command');
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false);
-    assert.strictEqual(readme.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(workflows.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false);
-    assert.strictEqual(readme.includes('python3 scripts/pingcode_ctx.py'), false);
+
+    // README.md is no longer installed; scripts/ / agents/ / skills/ should not exist
+    assert.strictEqual(fs.existsSync(path.join(target, 'README.md')), false);
+    assert.strictEqual(fs.existsSync(path.join(target, 'scripts')), false);
+    assert.strictEqual(fs.existsSync(path.join(target, 'agents')), false);
+    assert.strictEqual(fs.existsSync(path.join(target, 'skills')), false);
   } finally {
     rmDir(tmpdir);
   }
@@ -148,7 +147,7 @@ test('default install writes existing agent roots', () => {
       assertInstalled(paths[key].main);
       assert.ok(fs.existsSync(paths[key].alias), `alias missing for ${key}`);
       const aliasDoc = fs.readFileSync(path.join(paths[key].alias, 'SKILL.md'), 'utf8');
-      assert.ok(aliasDoc.includes(expectedCli(paths[key].main)));
+      assert.ok(aliasDoc.includes('pingcode'));
       assert.ok(result.stdout.includes('[ok]'));
     }
     for (const label of ['Codex', 'Claude Code', 'OpenClaw', 'Hermes', 'OpenCode']) {
@@ -324,7 +323,7 @@ test('opencode project-level target install', () => {
     assertInstalled(target);
     assert.ok(fs.existsSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md')));
     const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
-    assert.ok(skillDoc.includes(expectedCli(target)));
+    assert.ok(skillDoc.includes('pingcode'));
   } finally {
     rmDir(tmpdir);
   }
@@ -457,6 +456,53 @@ test('per root failure does not abort others', () => {
     assert.ok(result.stderr.includes('[fail]'));
     assert.ok(result.stderr.includes('Claude Code'));
     assert.ok(result.stdout.includes('[ok]'));
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('windows platform prints npm install guidance', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+
+    // Preload script that patches process.platform check in install.js
+    // so the child process behaves as if running on Windows
+    const preloadPath = path.join(tmpdir, 'preload-win32.js');
+    fs.writeFileSync(preloadPath, [
+      "'use strict';",
+      "const Module = require('module');",
+      "const origCompile = Module.prototype._compile;",
+      "Module.prototype._compile = function(content, filename) {",
+      "  if (filename.includes('bin/install.js')) {",
+      "    content = content.replace('process.platform === \"win32\"', 'true');",
+      "  }",
+      "  return origCompile.call(this, content, filename);",
+      "};",
+      "",
+    ].join('\n'));
+
+    const target = path.join(home, 'pingcode');
+    const result = spawnSync('node', [
+      '--require', preloadPath,
+      path.join(REPO_ROOT, 'bin/install.js'),
+      '--target', target, '--force',
+    ], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      env,
+    });
+
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    // On Windows, no ~/.local/bin/pingcode POSIX wrapper should be created
+    const wrapperPath = path.join(home, '.local', 'bin', 'pingcode');
+    assert.strictEqual(fs.existsSync(wrapperPath), false, 'Windows should not create POSIX wrapper');
+
+    // Windows guidance should be printed
+    assert.ok(result.stdout.includes('npm install -g pingcode-cli'), `Expected Windows guidance, got: ${result.stdout.substring(0, 500)}`);
   } finally {
     rmDir(tmpdir);
   }
