@@ -159,7 +159,7 @@ function printHelp() {
   console.log([
     'PingCode login — Authenticate with your PingCode user account',
     '',
-    'Usage: node scripts/pingcode.js login [options]',
+    'Usage: pingcode login [options]',
     '',
     'Options:',
     '  --redirect-uri URI         Redirect URI for OAuth callback',

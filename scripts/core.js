@@ -14,8 +14,8 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const USER_LOOKUP_RE = /@user:([^,]+)/g;
 const MAX_SELECTION_OPTIONS = 20;
 
-const CLI_COMMAND = 'node scripts/pingcode.js';
-const CTX_COMMAND = 'node scripts/pingcode.js context init';
+const CLI_COMMAND = 'pingcode';
+const CTX_COMMAND = 'pingcode context init';
 const CTX_COMMAND_ALIAS = 'pingcode-ctx';
 
 const AUTH_ENV_GUIDANCE = (

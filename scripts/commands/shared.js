@@ -27,7 +27,7 @@ function printModulesHelp() {
   const modules = listModules();
   const maxLen = Math.max(...modules.map(m => m.name.length));
   const lines = [
-    'Usage: node scripts/pingcode.js <module> [subcommand] [options]',
+    'Usage: pingcode <module> [subcommand] [options]',
     '',
     'Modules:',
   ];

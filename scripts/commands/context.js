@@ -100,7 +100,7 @@ async function cacheContext(client, project, sprint, user) {
 function printHelp(subcommand) {
   if (subcommand === 'init') {
     console.log([
-      'Usage: node scripts/pingcode.js context init [options]',
+      'Usage: pingcode context init [options]',
       '',
       'Interactively configure PingCode workspace context.',
       'Prompts for project, sprint/iteration, and user selection,',
@@ -116,7 +116,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'list') {
     console.log([
-      'Usage: node scripts/pingcode.js context list [options]',
+      'Usage: pingcode context list [options]',
       '',
       'Print current workspace preferences and a summary of cached dictionaries.',
       '',
@@ -129,7 +129,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'set-current-user') {
     console.log([
-      'Usage: node scripts/pingcode.js context set-current-user <id|name|@me> [options]',
+      'Usage: pingcode context set-current-user <id|name|@me> [options]',
       '',
       'Set the current PingCode user for this workspace.',
       '',
@@ -147,7 +147,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'set-current-project') {
     console.log([
-      'Usage: node scripts/pingcode.js context set-current-project <id|name> [options]',
+      'Usage: pingcode context set-current-project <id|name> [options]',
       '',
       'Set the current PingCode project for this workspace.',
       '',
@@ -164,7 +164,7 @@ function printHelp(subcommand) {
 
   if (subcommand === 'set-current-sprint') {
     console.log([
-      'Usage: node scripts/pingcode.js context set-current-sprint <id|name> [options]',
+      'Usage: pingcode context set-current-sprint <id|name> [options]',
       '',
       'Set the current PingCode sprint/iteration for this workspace.',
       '',
@@ -183,7 +183,7 @@ function printHelp(subcommand) {
   console.log([
     'PingCode context — Manage workspace context',
     '',
-    'Usage: node scripts/pingcode.js context <subcommand> [options]',
+    'Usage: pingcode context <subcommand> [options]',
     '',
     'Subcommands:',
     '  init                     Initialize workspace context (interactive)',

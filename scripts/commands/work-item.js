@@ -809,7 +809,7 @@ function printHelp() {
   console.log([
     'PingCode work-item — Manage work items',
     '',
-    'Usage: node scripts/pingcode.js work-item <subcommand> [options]',
+    'Usage: pingcode work-item <subcommand> [options]',
     '',
     'Subcommands:',
     '  list [options]              List work items',
@@ -881,7 +881,7 @@ function printSubcommandHelp(subcommand) {
   switch (subcommand) {
     case 'list':
       console.log([
-        'Usage: node scripts/pingcode.js work-item list [options]',
+        'Usage: pingcode work-item list [options]',
         '',
         'List work items from the current project/sprint/assignee.',
         '',
@@ -897,7 +897,7 @@ function printSubcommandHelp(subcommand) {
       break;
     case 'create':
       console.log([
-        'Usage: node scripts/pingcode.js work-item create --title TITLE [options]',
+        'Usage: pingcode work-item create --title TITLE [options]',
         '',
         'Create a new work item.',
         '',
@@ -915,21 +915,21 @@ function printSubcommandHelp(subcommand) {
       break;
     case 'show':
       console.log([
-        'Usage: node scripts/pingcode.js work-item show <id|identifier>',
+        'Usage: pingcode work-item show <id|identifier>',
         '',
         'Show a single work item by id or identifier.',
       ].join('\n'));
       break;
     case 'get':
       console.log([
-        'Usage: node scripts/pingcode.js work-item get <id|identifier>',
+        'Usage: pingcode work-item get <id|identifier>',
         '',
         'Get a single work item by id or identifier.',
       ].join('\n'));
       break;
     case 'update':
       console.log([
-        'Usage: node scripts/pingcode.js work-item update <id|identifier> [options]',
+        'Usage: pingcode work-item update <id|identifier> [options]',
         '',
         'Update a work item. At least one option must be provided.',
         '',
