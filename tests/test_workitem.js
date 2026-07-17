@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 const core = require('../scripts/core');
-const workItem = require('../scripts/commands/work-item');
+const workItem = require('../scripts/commands/workitem');
 const { tmpFile, clearEnv, restoreEnv, writeWorkspaceCache } = require('./helpers');
 
 // ── Test infrastructure ───────────────────────────────────────────────
@@ -63,9 +63,9 @@ function capturedJson(stdout) {
   return JSON.parse(stdout.trim());
 }
 
-// ── work-item list ────────────────────────────────────────────────────
+// ── workitem list ────────────────────────────────────────────────────
 
-testInCleanTmp('work-item list dry-run applies default filters from cache', async (t, tmpdir) => {
+testInCleanTmp('workitem list dry-run applies default filters from cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -93,7 +93,7 @@ testInCleanTmp('work-item list dry-run applies default filters from cache', asyn
   assert.strictEqual(result.params.sprint_ids, 'sprint-1');
 });
 
-testInCleanTmp('work-item list --all-users --all-projects --all-sprints skips default filters', async (t, tmpdir) => {
+testInCleanTmp('workitem list --all-users --all-projects --all-sprints skips default filters', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -126,7 +126,7 @@ testInCleanTmp('work-item list --all-users --all-projects --all-sprints skips de
   assert.strictEqual('sprint_ids' in result.params, false);
 });
 
-testInCleanTmp('work-item list --state resolves name from cache', async (t, tmpdir) => {
+testInCleanTmp('workitem list --state resolves name from cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -155,7 +155,7 @@ testInCleanTmp('work-item list --state resolves name from cache', async (t, tmpd
   assert.strictEqual(result.params.state_id, 'state-progress');
 });
 
-testInCleanTmp('work-item list --assignee resolves cached user name', async (t, tmpdir) => {
+testInCleanTmp('workitem list --assignee resolves cached user name', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -183,7 +183,7 @@ testInCleanTmp('work-item list --assignee resolves cached user name', async (t, 
   assert.strictEqual(result.params.assignee_ids, 'user-alice');
 });
 
-testInCleanTmp('work-item list --assignee @me resolves to cached current user', async (t, tmpdir) => {
+testInCleanTmp('workitem list --assignee @me resolves to cached current user', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -209,7 +209,7 @@ testInCleanTmp('work-item list --assignee @me resolves to cached current user', 
   assert.strictEqual(result.params.assignee_ids, 'user-cached');
 });
 
-testInCleanTmp('work-item list --limit sets page_size', async (t, tmpdir) => {
+testInCleanTmp('workitem list --limit sets page_size', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -235,7 +235,7 @@ testInCleanTmp('work-item list --limit sets page_size', async (t, tmpdir) => {
   assert.strictEqual(result.params.page_size, '50');
 });
 
-testInCleanTmp('work-item list with incomplete cache (missing project) errors with guidance', async (t, tmpdir) => {
+testInCleanTmp('workitem list with incomplete cache (missing project) errors with guidance', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -255,7 +255,7 @@ testInCleanTmp('work-item list with incomplete cache (missing project) errors wi
   }
 });
 
-testInCleanTmp('work-item list with --all-projects --all-sprints skips project/sprint context check', async (t, tmpdir) => {
+testInCleanTmp('workitem list with --all-projects --all-sprints skips project/sprint context check', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-cached' },
@@ -282,7 +282,7 @@ testInCleanTmp('work-item list with --all-projects --all-sprints skips project/s
   assert.strictEqual('sprint_ids' in result.params, false);
 });
 
-testInCleanTmp('work-item list --keywords sets keywords query param', async (t, tmpdir) => {
+testInCleanTmp('workitem list --keywords sets keywords query param', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -308,9 +308,9 @@ testInCleanTmp('work-item list --keywords sets keywords query param', async (t, 
   assert.strictEqual(result.params.keywords, '登录页面');
 });
 
-// ── work-item create ──────────────────────────────────────────────────
+// ── workitem create ──────────────────────────────────────────────────
 
-testInCleanTmp('work-item create dry-run returns POST with resolved fields', async (t, tmpdir) => {
+testInCleanTmp('workitem create dry-run returns POST with resolved fields', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -349,7 +349,7 @@ testInCleanTmp('work-item create dry-run returns POST with resolved fields', asy
   assert.strictEqual(result.json.assignee_id, 'user-1');
 });
 
-testInCleanTmp('work-item create with --sprint resolves and includes sprint_id', async (t, tmpdir) => {
+testInCleanTmp('workitem create with --sprint resolves and includes sprint_id', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -388,7 +388,7 @@ testInCleanTmp('work-item create with --sprint resolves and includes sprint_id',
   assert.strictEqual(result.json.sprint_id, 'sprint-1');
 });
 
-testInCleanTmp('work-item create missing --title errors with usage', async (t, tmpdir) => {
+testInCleanTmp('workitem create missing --title errors with usage', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -415,7 +415,7 @@ testInCleanTmp('work-item create missing --title errors with usage', async (t, t
   }
 });
 
-testInCleanTmp('work-item create defaults assignee to @me from cache', async (t, tmpdir) => {
+testInCleanTmp('workitem create defaults assignee to @me from cache', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -448,7 +448,7 @@ testInCleanTmp('work-item create defaults assignee to @me from cache', async (t,
   assert.strictEqual(result.json.assignee_id, 'user-default');
 });
 
-testInCleanTmp('work-item create with --assignee overrides default', async (t, tmpdir) => {
+testInCleanTmp('workitem create with --assignee overrides default', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -483,7 +483,7 @@ testInCleanTmp('work-item create with --assignee overrides default', async (t, t
   assert.strictEqual(result.json.assignee_id, 'user-bob');
 });
 
-testInCleanTmp('work-item create with --all-users skips default assignee', async (t, tmpdir) => {
+testInCleanTmp('workitem create with --all-users skips default assignee', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -517,9 +517,9 @@ testInCleanTmp('work-item create with --all-users skips default assignee', async
   assert.strictEqual('assignee_id' in result.json, false);
 });
 
-// ── work-item show ────────────────────────────────────────────────────
+// ── workitem show ────────────────────────────────────────────────────
 
-testInCleanTmp('work-item show identifier returns GET with identifier param', async (t, tmpdir) => {
+testInCleanTmp('workitem show identifier returns GET with identifier param', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -545,7 +545,7 @@ testInCleanTmp('work-item show identifier returns GET with identifier param', as
   assert.strictEqual(result.params.identifier, 'SCR-1');
 });
 
-testInCleanTmp('work-item show missing target errors', async (t, tmpdir) => {
+testInCleanTmp('workitem show missing target errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -560,7 +560,7 @@ testInCleanTmp('work-item show missing target errors', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('work-item get by id returns GET by path', async (t, tmpdir) => {
+testInCleanTmp('workitem get by id returns GET by path', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -582,7 +582,7 @@ testInCleanTmp('work-item get by id returns GET by path', async (t, tmpdir) => {
   assert.deepStrictEqual(result.params, {});
 });
 
-testInCleanTmp('work-item get by identifier returns compound dry-run shape', async (t, tmpdir) => {
+testInCleanTmp('workitem get by identifier returns compound dry-run shape', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -608,7 +608,7 @@ testInCleanTmp('work-item get by identifier returns compound dry-run shape', asy
   assert.strictEqual(result.get.path, '/v1/project/work_items/{id}');
 });
 
-testInCleanTmp('work-item get missing id errors', async (t, tmpdir) => {
+testInCleanTmp('workitem get missing id errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -623,7 +623,7 @@ testInCleanTmp('work-item get missing id errors', async (t, tmpdir) => {
   }
 });
 
-testInCleanEnv('work-item get --help shows get-specific usage', async () => {
+testInCleanEnv('workitem get --help shows get-specific usage', async () => {
   let output = '';
   const originalLog = console.log;
   console.log = (...args) => { output += args.join(' ') + '\n'; };
@@ -632,14 +632,14 @@ testInCleanEnv('work-item get --help shows get-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: pingcode work-item get <id|identifier>'));
+  assert.ok(output.includes('Usage: pingcode workitem get <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
   assert.ok(!output.includes('create --title TITLE'));
 });
 
-// ── work-item update ──────────────────────────────────────────────────
+// ── workitem update ──────────────────────────────────────────────────
 
-testInCleanTmp('work-item update by id returns flat dry-run shape', async (t, tmpdir) => {
+testInCleanTmp('workitem update by id returns flat dry-run shape', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -674,7 +674,7 @@ testInCleanTmp('work-item update by id returns flat dry-run shape', async (t, tm
   assert.strictEqual('resolution' in result, false);
 });
 
-testInCleanTmp('work-item update by identifier returns compound dry-run shape', async (t, tmpdir) => {
+testInCleanTmp('workitem update by identifier returns compound dry-run shape', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -713,7 +713,7 @@ testInCleanTmp('work-item update by identifier returns compound dry-run shape', 
   assert.strictEqual(result.patch.json.state_id, 'state-done');
 });
 
-testInCleanTmp('work-item update with no update fields errors', async (t, tmpdir) => {
+testInCleanTmp('workitem update with no update fields errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -731,7 +731,7 @@ testInCleanTmp('work-item update with no update fields errors', async (t, tmpdir
   }
 });
 
-testInCleanTmp('work-item update missing target errors', async (t, tmpdir) => {
+testInCleanTmp('workitem update missing target errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -749,7 +749,7 @@ testInCleanTmp('work-item update missing target errors', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('work-item update by identifier with priority resolves both', async (t, tmpdir) => {
+testInCleanTmp('workitem update by identifier with priority resolves both', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -784,7 +784,7 @@ testInCleanTmp('work-item update by identifier with priority resolves both', asy
   assert.strictEqual(result.patch.json.priority_id, 'high');
 });
 
-testInCleanTmp('work-item update by identifier with assignee resolves user', async (t, tmpdir) => {
+testInCleanTmp('workitem update by identifier with assignee resolves user', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -816,7 +816,7 @@ testInCleanTmp('work-item update by identifier with assignee resolves user', asy
   assert.strictEqual(result.patch.json.assignee_id, 'user-alice');
 });
 
-testInCleanTmp('work-item update by id with 2-letter prefix treated as direct id', async (t, tmpdir) => {
+testInCleanTmp('workitem update by id with 2-letter prefix treated as direct id', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -849,7 +849,7 @@ testInCleanTmp('work-item update by id with 2-letter prefix treated as direct id
   assert.strictEqual('resolution' in result, false);
 });
 
-testInCleanTmp('work-item update by TASK-42 (3-letter prefix) is treated as identifier', async (t, tmpdir) => {
+testInCleanTmp('workitem update by TASK-42 (3-letter prefix) is treated as identifier', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -883,7 +883,7 @@ testInCleanTmp('work-item update by TASK-42 (3-letter prefix) is treated as iden
   assert.strictEqual(result.patch.json.state_id, 'state-done');
 });
 
-testInCleanTmp('work-item update by id without state updates only title', async (t, tmpdir) => {
+testInCleanTmp('workitem update by id without state updates only title', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -909,7 +909,7 @@ testInCleanTmp('work-item update by id without state updates only title', async 
   assert.strictEqual('state_id' in result.json, false);
 });
 
-testInCleanTmp('work-item update passes description and cached refs', async (t, tmpdir) => {
+testInCleanTmp('workitem update passes description and cached refs', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -962,7 +962,7 @@ testInCleanTmp('work-item update passes description and cached refs', async (t, 
   assert.strictEqual(result.json.description, 'New description');
 });
 
-testInCleanTmp('work-item update numeric and timestamp fields', async (t, tmpdir) => {
+testInCleanTmp('workitem update numeric and timestamp fields', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -993,7 +993,7 @@ testInCleanTmp('work-item update numeric and timestamp fields', async (t, tmpdir
   assert.strictEqual(result.json.end_at, 1735689600);
 });
 
-testInCleanTmp('work-item update passes raw ids and participants', async (t, tmpdir) => {
+testInCleanTmp('workitem update passes raw ids and participants', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -1030,7 +1030,7 @@ testInCleanTmp('work-item update passes raw ids and participants', async (t, tmp
   assert.deepStrictEqual(result.json.participant_ids, ['user-alice', 'user-bob']);
 });
 
-testInCleanTmp('work-item update parses properties json', async (t, tmpdir) => {
+testInCleanTmp('workitem update parses properties json', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -1055,7 +1055,7 @@ testInCleanTmp('work-item update parses properties json', async (t, tmpdir) => {
 
 // ── Adversarial / error cases ─────────────────────────────────────────
 
-testInCleanTmp('work-item list bad flag produces error', async (t, tmpdir) => {
+testInCleanTmp('workitem list bad flag produces error', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1074,7 +1074,7 @@ testInCleanTmp('work-item list bad flag produces error', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('work-item unknown subcommand errors', async (t, tmpdir) => {
+testInCleanTmp('workitem unknown subcommand errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -1084,12 +1084,12 @@ testInCleanTmp('work-item unknown subcommand errors', async (t, tmpdir) => {
     await workItem.run(['nonexistent', '--workspace-cache', cachePath, '--dry-run']);
     assert.fail('Expected error was not thrown');
   } catch (exc) {
-    assert.ok(exc.message.includes('Unknown work-item subcommand'));
+    assert.ok(exc.message.includes('Unknown workitem subcommand'));
     process.exitCode = 0;
   }
 });
 
-testInCleanTmp('work-item create --title empty string errors', async (t, tmpdir) => {
+testInCleanTmp('workitem create --title empty string errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1113,7 +1113,7 @@ testInCleanTmp('work-item create --title empty string errors', async (t, tmpdir)
   }
 });
 
-testInCleanTmp('work-item show with id param (non-identifier) uses id filter', async (t, tmpdir) => {
+testInCleanTmp('workitem show with id param (non-identifier) uses id filter', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: { current_user_id: 'user-1' },
@@ -1133,7 +1133,7 @@ testInCleanTmp('work-item show with id param (non-identifier) uses id filter', a
   assert.strictEqual('identifier' in result.params, false);
 });
 
-testInCleanTmp('work-item update --dry-run does not make network requests', async (t, tmpdir) => {
+testInCleanTmp('workitem update --dry-run does not make network requests', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1168,7 +1168,7 @@ testInCleanTmp('work-item update --dry-run does not make network requests', asyn
   assert.strictEqual(result.dry_run, true);
 });
 
-testInCleanTmp('work-item create with --description passes description in body', async (t, tmpdir) => {
+testInCleanTmp('workitem create with --description passes description in body', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1196,7 +1196,7 @@ testInCleanTmp('work-item create with --description passes description in body',
   assert.strictEqual(result.json.description, 'Some description text');
 });
 
-testInCleanTmp('work-item create with --parent passes parent_id', async (t, tmpdir) => {
+testInCleanTmp('workitem create with --parent passes parent_id', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1224,7 +1224,7 @@ testInCleanTmp('work-item create with --parent passes parent_id', async (t, tmpd
   assert.strictEqual(result.json.parent_id, 'SCR-0');
 });
 
-testInCleanTmp('work-item list state resolution fails for unknown state', async (t, tmpdir) => {
+testInCleanTmp('workitem list state resolution fails for unknown state', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1246,7 +1246,7 @@ testInCleanTmp('work-item list state resolution fails for unknown state', async 
   }
 });
 
-testInCleanTmp('work-item list with global options after subcommand args', async (t, tmpdir) => {
+testInCleanTmp('workitem list with global options after subcommand args', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1273,7 +1273,7 @@ testInCleanTmp('work-item list with global options after subcommand args', async
   assert.strictEqual(result.method, 'GET');
 });
 
-testInCleanTmp('work-item update resolves all-cached state for flat id update', async (t, tmpdir) => {
+testInCleanTmp('workitem update resolves all-cached state for flat id update', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1339,7 +1339,7 @@ testInCleanEnv('list --help shows list-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: pingcode work-item list [options]'));
+  assert.ok(output.includes('Usage: pingcode workitem list [options]'));
   assert.ok(output.includes('--keywords'));
   assert.ok(output.includes('--state <name|id>'));
   assert.ok(!output.includes('--all-users'));
@@ -1355,7 +1355,7 @@ testInCleanEnv('create --help shows create-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: pingcode work-item create --title TITLE [options]'));
+  assert.ok(output.includes('Usage: pingcode workitem create --title TITLE [options]'));
   assert.ok(output.includes('--title TITLE'));
   assert.ok(output.includes('--parent <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
@@ -1370,7 +1370,7 @@ testInCleanEnv('show --help shows show-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: pingcode work-item show <id|identifier>'));
+  assert.ok(output.includes('Usage: pingcode workitem show <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
   assert.ok(!output.includes('create --title TITLE'));
 });
@@ -1384,7 +1384,7 @@ testInCleanEnv('update --help shows update-specific usage', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.ok(output.includes('Usage: pingcode work-item update <id|identifier> [options]'));
+  assert.ok(output.includes('Usage: pingcode workitem update <id|identifier> [options]'));
   assert.ok(output.includes('--title TEXT'));
   assert.ok(output.includes('--state <name|id>'));
   assert.ok(output.includes('--priority <name|id>'));
@@ -1395,7 +1395,7 @@ testInCleanEnv('update --help shows update-specific usage', async () => {
 
 // ── --grant-type flag tests ─────────────────────────────────────────
 
-testInCleanTmp('work-item list --grant-type client_credentials --dry-run produces same output as default', async (t, tmpdir) => {
+testInCleanTmp('workitem list --grant-type client_credentials --dry-run produces same output as default', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1433,7 +1433,7 @@ testInCleanTmp('work-item list --grant-type client_credentials --dry-run produce
   assert.deepStrictEqual(grantResult.params, defaultResult.params);
 });
 
-testInCleanTmp('work-item list --grant-type authorization_code --dry-run accepts flag and produces valid request shape', async (t, tmpdir) => {
+testInCleanTmp('workitem list --grant-type authorization_code --dry-run accepts flag and produces valid request shape', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
     preferences: {
@@ -1464,7 +1464,7 @@ testInCleanTmp('work-item list --grant-type authorization_code --dry-run accepts
   assert.strictEqual('assignee_ids' in result.params, false, 'user token should not default to current-user filter');
 });
 
-testInCleanTmp('work-item list --grant-type authorization_code without cached token exits 1 with login guidance', async (t, tmpdir) => {
+testInCleanTmp('workitem list --grant-type authorization_code without cached token exits 1 with login guidance', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   const tokenCache = tmpFile(tmpdir, 'token.json');
   writeWorkspaceCache(cachePath, {
@@ -1502,7 +1502,7 @@ testInCleanTmp('work-item list --grant-type authorization_code without cached to
   }
 });
 
-testInCleanTmp('work-item list --grant-type authorization_code with cached user token succeeds', async (t, tmpdir) => {
+testInCleanTmp('workitem list --grant-type authorization_code with cached user token succeeds', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   const tokenCache = tmpFile(tmpdir, 'token.json');
 
@@ -1568,7 +1568,7 @@ testInCleanTmp('work-item list --grant-type authorization_code with cached user 
   }
 });
 
-testInCleanTmp('work-item list with cached user token and no current user does not require identity', async (t, tmpdir) => {
+testInCleanTmp('workitem list with cached user token and no current user does not require identity', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   const tokenCache = tmpFile(tmpdir, 'token.json');
 

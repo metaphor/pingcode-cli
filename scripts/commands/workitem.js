@@ -235,10 +235,10 @@ function parseListArgs(tokens) {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
       } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
-        throw new core.PingCodeError(`Unknown option: ${arg}. Use work-item list --help for usage.`);
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem list --help for usage.`);
       }
     } else {
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item list --help for usage.`);
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem list --help for usage.`);
     }
   }
   return args;
@@ -342,10 +342,10 @@ function parseCreateArgs(tokens) {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
       } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
-        throw new core.PingCodeError(`Unknown option: ${arg}. Use work-item create --help for usage.`);
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem create --help for usage.`);
       }
     } else {
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item create --help for usage.`);
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem create --help for usage.`);
     }
   }
   return args;
@@ -353,7 +353,7 @@ function parseCreateArgs(tokens) {
 
 async function runCreate(client, opts, args) {
   if (typeof args.title !== 'string' || !args.title.trim()) {
-    throw new core.PingCodeError('--title is required and must be non-empty. Use work-item create --help for usage.');
+    throw new core.PingCodeError('--title is required and must be non-empty. Use workitem create --help for usage.');
   }
 
   // Ensure workspace context for defaults
@@ -453,7 +453,7 @@ function parseShowArgs(tokens) {
         target = arg;
         continue;
       }
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item show --help for usage.`);
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem show --help for usage.`);
     }
     // Consume flag+value for global options (already parsed)
     if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
@@ -464,7 +464,7 @@ function parseShowArgs(tokens) {
     // For --help (already handled in parseGlobalOptions)
   }
   if (!target) {
-    throw new core.PingCodeError('A work item id or identifier is required. Use work-item show --help for usage.');
+    throw new core.PingCodeError('A work item id or identifier is required. Use workitem show --help for usage.');
   }
   return { target };
 }
@@ -507,7 +507,7 @@ function parseGetArgs(tokens) {
         workItemId = arg;
         continue;
       }
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item get --help for usage.`);
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem get --help for usage.`);
     }
     if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
     if (GLOBAL_STRING_FLAGS[arg]) {
@@ -516,7 +516,7 @@ function parseGetArgs(tokens) {
     }
   }
   if (!workItemId) {
-    throw new core.PingCodeError('A work item id or identifier is required. Use work-item get --help for usage.');
+    throw new core.PingCodeError('A work item id or identifier is required. Use workitem get --help for usage.');
   }
   return { work_item_id: workItemId };
 }
@@ -626,7 +626,7 @@ function parseUpdateArgs(tokens) {
         args.target = arg;
         continue;
       }
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use work-item update --help for usage.`);
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem update --help for usage.`);
     }
     if (arg in stringFlags) {
       if (i + 1 >= tokens.length) {
@@ -647,20 +647,20 @@ function parseUpdateArgs(tokens) {
           }
         }
       } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
-        throw new core.PingCodeError(`Unknown option: ${arg}. Use work-item update --help for usage.`);
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem update --help for usage.`);
       }
     }
   }
 
   if (!args.target) {
-    throw new core.PingCodeError('A work item id or identifier is required. Use work-item update --help for usage.');
+    throw new core.PingCodeError('A work item id or identifier is required. Use workitem update --help for usage.');
   }
 
   const hasUpdateField = Object.entries(args).some(
     ([key, value]) => key !== 'target' && value !== null,
   );
   if (!hasUpdateField) {
-    throw new core.PingCodeError('At least one field to update is required. Use work-item update --help for usage.');
+    throw new core.PingCodeError('At least one field to update is required. Use workitem update --help for usage.');
   }
 
   return args;
@@ -807,9 +807,9 @@ async function runUpdate(client, opts, args) {
 
 function printHelp() {
   console.log([
-    'PingCode work-item — Manage work items',
+    'PingCode workitem — Manage work items',
     '',
-    'Usage: pingcode work-item <subcommand> [options]',
+    'Usage: pingcode workitem <subcommand> [options]',
     '',
     'Subcommands:',
     '  list [options]              List work items',
@@ -881,7 +881,7 @@ function printSubcommandHelp(subcommand) {
   switch (subcommand) {
     case 'list':
       console.log([
-        'Usage: pingcode work-item list [options]',
+        'Usage: pingcode workitem list [options]',
         '',
         'List work items from the current project/sprint/assignee.',
         '',
@@ -897,7 +897,7 @@ function printSubcommandHelp(subcommand) {
       break;
     case 'create':
       console.log([
-        'Usage: pingcode work-item create --title TITLE [options]',
+        'Usage: pingcode workitem create --title TITLE [options]',
         '',
         'Create a new work item.',
         '',
@@ -915,21 +915,21 @@ function printSubcommandHelp(subcommand) {
       break;
     case 'show':
       console.log([
-        'Usage: pingcode work-item show <id|identifier>',
+        'Usage: pingcode workitem show <id|identifier>',
         '',
         'Show a single work item by id or identifier.',
       ].join('\n'));
       break;
     case 'get':
       console.log([
-        'Usage: pingcode work-item get <id|identifier>',
+        'Usage: pingcode workitem get <id|identifier>',
         '',
         'Get a single work item by id or identifier.',
       ].join('\n'));
       break;
     case 'update':
       console.log([
-        'Usage: pingcode work-item update <id|identifier> [options]',
+        'Usage: pingcode workitem update <id|identifier> [options]',
         '',
         'Update a work item. At least one option must be provided.',
         '',
@@ -1013,7 +1013,7 @@ async function run(argv) {
         break;
       }
       default:
-        throw new core.PingCodeError(`Unknown work-item subcommand: ${subcommand}. Use work-item --help for usage.`);
+        throw new core.PingCodeError(`Unknown workitem subcommand: ${subcommand}. Use workitem --help for usage.`);
     }
 
     if (opts.dry_run) {
@@ -1030,8 +1030,8 @@ async function run(argv) {
   }
 }
 
-shared.registerModule('work-item', {
-  name: 'work-item',
+shared.registerModule('workitem', {
+  name: 'workitem',
   description: 'Manage PingCode work items',
   run,
 });

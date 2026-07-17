@@ -14,7 +14,7 @@ module.exports = { ...core };
 // (Side-effect imports; no circular dependency because these import from
 // ./shared and ../core, never from ../pingcode.)
 require('./commands/context');
-require('./commands/work-item');
+require('./commands/workitem');
 require('./commands/auth');
 
 const shared = require('./commands/shared');

@@ -20,7 +20,7 @@
     "bin/install.js"
   ],
   "scripts": {
-    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_work_item.js tests/test_auth.js",
+    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_workitem.js tests/test_auth.js",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {
