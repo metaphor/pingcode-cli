@@ -12,8 +12,8 @@
     "pingcode-cli": "./bin/install.js"
   },
   "files": [
-    "SKILL.md",
     "README.md",
+    "skills/pingcode/SKILL.md",
     "skills/pingcode-ctx/SKILL.md",
     "references/",
     "scripts/",

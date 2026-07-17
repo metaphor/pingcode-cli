@@ -330,7 +330,7 @@ pingcode context init
 
 ## 参考资料
 
-- Skill 入口：[SKILL.md](SKILL.md)
+- Skill 入口：[SKILL.md](skills/pingcode/SKILL.md)
 - API 摘要：[references/api.md](references/api.md)
 - 操作流程：[references/workflows.md](references/workflows.md)
 - 官方文档：https://open.pingcode.com/

@@ -10,7 +10,7 @@ const packageRoot = path.resolve(__dirname, "..");
 const skillName = process.env.PINGCODE_SKILL_NAME || "pingcode";
 const aliasName = "pingcode-ctx";
 const sourceEntries = [
-  "SKILL.md",
+  "skills/pingcode/SKILL.md",
   "references",
 ];
 const aliasSkillEntries = ["skills/pingcode-ctx/SKILL.md"];
@@ -179,7 +179,7 @@ function copyEntry(name, destinationRoot) {
   const sourceStat = fs.statSync(source);
   const destination = sourceStat.isDirectory()
     ? path.join(destinationRoot, name)
-    : path.join(destinationRoot, path.dirname(name), path.basename(name));
+    : path.join(destinationRoot, path.basename(name));
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.cpSync(source, destination, {
     recursive: true,
