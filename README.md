@@ -8,14 +8,29 @@
 npx pingcode-cli@latest
 ```
 
-一条命令会检测当前用户已存在的 Codex / Claude Code / OpenClaw / Hermes / OpenCode 目录，并只安装到这些已有 Agent：
+一条命令会检测当前用户已存在的 Codex / Claude Code / OpenClaw / Hermes / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装四个同级 skill 目录：`pingcode`、`pingcode-auth`、`pingcode-ctx`、`pingcode-workitem`：
 
 ```text
 ~/.codex/skills/pingcode
+~/.codex/skills/pingcode-auth
+~/.codex/skills/pingcode-ctx
+~/.codex/skills/pingcode-workitem
 ~/.claude/skills/pingcode
+~/.claude/skills/pingcode-auth
+~/.claude/skills/pingcode-ctx
+~/.claude/skills/pingcode-workitem
 ~/.openclaw/skills/pingcode
+~/.openclaw/skills/pingcode-auth
+~/.openclaw/skills/pingcode-ctx
+~/.openclaw/skills/pingcode-workitem
 ~/.hermes/skills/project-management/pingcode
+~/.hermes/skills/project-management/pingcode-auth
+~/.hermes/skills/project-management/pingcode-ctx
+~/.hermes/skills/project-management/pingcode-workitem
 ~/.config/opencode/skills/pingcode
+~/.config/opencode/skills/pingcode-auth
+~/.config/opencode/skills/pingcode-ctx
+~/.config/opencode/skills/pingcode-workitem
 ```
 
 默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
@@ -116,12 +131,12 @@ npx pingcode-cli@latest --target ".opencode/skills/pingcode" --force
 安装要求：
 1. 直接运行：npx pingcode-cli@latest --force
    该命令会检测当前用户已存在的 Codex、Claude Code、OpenClaw、Hermes 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
-2. 安装结束后请检查下列 SKILL.md 入口文件是否存在（按你当前使用的 Agent 选择对应路径即可）：
-   - ~/.codex/skills/pingcode/SKILL.md
-   - ~/.claude/skills/pingcode/SKILL.md
-   - ~/.openclaw/skills/pingcode/SKILL.md
-   - ~/.hermes/skills/project-management/pingcode/SKILL.md
-   - ~/.config/opencode/skills/pingcode/SKILL.md
+2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode`、`pingcode-auth`、`pingcode-ctx`、`pingcode-workitem` 四个同级目录，且每个目录里都有 SKILL.md 入口文件（按你当前使用的 Agent 选择对应路径即可）：
+   - ~/.codex/skills/{pingcode,pingcode-auth,pingcode-ctx,pingcode-workitem}/SKILL.md
+   - ~/.claude/skills/{pingcode,pingcode-auth,pingcode-ctx,pingcode-workitem}/SKILL.md
+   - ~/.openclaw/skills/{pingcode,pingcode-auth,pingcode-ctx,pingcode-workitem}/SKILL.md
+   - ~/.hermes/skills/project-management/{pingcode,pingcode-auth,pingcode-ctx,pingcode-workitem}/SKILL.md
+   - ~/.config/opencode/skills/{pingcode,pingcode-auth,pingcode-ctx,pingcode-workitem}/SKILL.md
 3. 安装完成后，引导我配置环境变量 PINGCODE_CLIENT_ID 和 PINGCODE_CLIENT_SECRET；不要把 secret 写入仓库文件，也不要在对话里回显完整 secret。
 4. 如果我还需要默认查询“我的任务”，请继续引导我配置 PINGCODE_USER_NAME 或 PINGCODE_USER_ID。
 ```
@@ -129,12 +144,26 @@ npx pingcode-cli@latest --target ".opencode/skills/pingcode" --force
 ## 能力范围
 
 - 使用 `client_credentials` 获取 PingCode 企业令牌
+- 通过 OAuth2 `authorization_code` 获取用户令牌（`pingcode auth login`）
 - 查询项目、迭代、看板、工作项类型、状态、优先级
 - 查询、创建、更新工作项
 - 更新工作项状态
 - 在故事下创建子工作项（通过 `parent_id`）
 - 查询、创建、更新产品和产品需求
-- 通过子命令（`context *`, `work-item *`）调用 PingCode API
+- 通过子命令（`context *`, `workitem *`, `auth *`）调用 PingCode API
+
+以上能力按四个 skill 拆分提供：`$pingcode`（核心规则与路由）、`$pingcode-auth`（用户令牌登录与令牌类型）、`$pingcode-ctx`（工作区上下文初始化）、`$pingcode-workitem`（工作项 list/create/show/get/update）。
+
+## Skill 结构
+
+安装后在同一个 skills 根目录下会有四个同级 skill：
+
+| Skill | 作用 |
+|---|---|
+| `pingcode` | 主 skill：共享核心规则（输出大小、安全规则、工作区缓存）和到各子 skill 的路由 |
+| `pingcode-auth` | 用户令牌登录：`pingcode auth login`、grant-type 自动识别与覆盖、令牌类型说明 |
+| `pingcode-ctx` | 工作区上下文初始化：在 Agent 前台按编号选择当前项目、迭代、用户并写入缓存 |
+| `pingcode-workitem` | 工作项操作：`workitem list / create / show / get / update` 子命令及完整参数 |
 
 ## 子命令
 
@@ -161,47 +190,47 @@ pingcode context init
 pingcode context set-current-project my-project
 ```
 
-### 工作项管理 (`work-item`)
+### 工作项管理 (`workitem`)
 
 | 子命令 | 说明 | 示例 |
 |---|---|---|
-| `work-item list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `pingcode work-item list --assignee @me --state 进行中` |
-| `work-item create` | 创建工作项 | `pingcode work-item create --title "新任务" --type task` |
-| `work-item show <id>` | 查看单个工作项（通过列表接口按 id 或 identifier 查询） | `pingcode work-item show SCR-123` |
-| `work-item get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `pingcode work-item get WORK_ITEM_ID` |
-| `work-item update <id>` | 更新工作项 | `pingcode work-item update SCR-123 --state 已完成` |
+| `workitem list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `pingcode workitem list --assignee @me --state 进行中` |
+| `workitem create` | 创建工作项 | `pingcode workitem create --title "新任务" --type task` |
+| `workitem show <id>` | 查看单个工作项（通过列表接口按 id 或 identifier 查询） | `pingcode workitem show SCR-123` |
+| `workitem get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `pingcode workitem get WORK_ITEM_ID` |
+| `workitem update <id>` | 更新工作项 | `pingcode workitem update SCR-123 --state 已完成` |
 
 ```bash
 # 查看当前用户的未完成任务
-pingcode work-item list --assignee @me --state 进行中 --compact
+pingcode workitem list --assignee @me --state 进行中 --compact
 
 # 按类型查询
-pingcode work-item list --type bug --assignee @me --compact
+pingcode workitem list --type bug --assignee @me --compact
 
 # 按关键词搜索
-pingcode work-item list --keywords "登录页面" --compact
+pingcode workitem list --keywords "登录页面" --compact
 
 # 创建工作项（默认负责人为当前用户）
-pingcode work-item create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
+pingcode workitem create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
 
 # 通过编号查看工作项
-pingcode work-item show SCR-123
+pingcode workitem show SCR-123
 
 # 通过 id 获取单个工作项（官方单个工作项接口）
-pingcode work-item get WORK_ITEM_ID
+pingcode workitem get WORK_ITEM_ID
 
 # 通过编号更新状态（支持 identifier 或 id；支持 --title/--description/--type/--project/--sprint/--priority/--assignee/--parent/--version/--board/--entry/--swimlane/--start-at/--end-at/--participants/--story-points/--estimated-workload/--remaining-workload/--properties）
-pingcode work-item update SCR-123 --state 已完成
+pingcode workitem update SCR-123 --state 已完成
 
 # 更新工作项多个属性
-pingcode work-item update SCR-123 --title "修正后的标题" --priority 高 --story-points 3 --start-at 1736985600
+pingcode workitem update SCR-123 --title "修正后的标题" --priority 高 --story-points 3 --start-at 1736985600
 
 # 通过 id 更新状态
-pingcode work-item update WI-AbCdEf --state 进行中 --priority 高
+pingcode workitem update WI-AbCdEf --state 进行中 --priority 高
 
 # 试运行（预览 API 请求，不发送）
-pingcode work-item create --title "test" --type task --dry-run
-pingcode work-item update SCR-123 --state 已完成 --dry-run
+pingcode workitem create --title "test" --type task --dry-run
+pingcode workitem update SCR-123 --state 已完成 --dry-run
 ```
 
 ## 自然语言使用方式
@@ -255,13 +284,13 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 pingcode auth login --client-id ID --client-secret SECRET
 
 # 使用用户令牌查询工作项
-# --grant-type 会自动从缓存中识别，且 work-item list 不再默认按当前用户过滤
-pingcode work-item list --state 进行中 --compact
+# --grant-type 会自动从缓存中识别，且 workitem list 不再默认按当前用户过滤
+pingcode workitem list --state 进行中 --compact
 ```
 
 首次使用用户令牌前必须先运行 `auth login`。`auth login` 成功后的用户令牌会缓存在默认 token cache 中，后续命令不再需要在命令行写 `--grant-type`。当缓存里是企业令牌时，命令仍然走 `client_credentials`；当缓存里是用户令牌时，走 `authorization_code`。显式传 `--grant-type` 会覆盖自动识别。
 
-使用用户令牌时，`work-item list` 不再默认按当前用户过滤（等价于之前加 `--all-users` 的效果），因此不需要配置 `PINGCODE_USER_ID` 或工作区用户。如果你仍想只看自己的，可以显式加 `--assignee @me` 或 `--user-id`。`client_credentials` 模式下仍保持原来的默认过滤行为。
+使用用户令牌时，`workitem list` 不再默认按当前用户过滤（等价于之前加 `--all-users` 的效果），因此不需要配置 `PINGCODE_USER_ID` 或工作区用户。如果你仍想只看自己的，可以显式加 `--assignee @me` 或 `--user-id`。`client_credentials` 模式下仍保持原来的默认过滤行为。
 
 ## 初次使用
 
@@ -324,13 +353,15 @@ pingcode context init
 - “我”的身份：因为使用企业令牌，不能从 token 推断具体用户。优先读取工作区缓存、`PINGCODE_USER_ID` / `PINGCODE_USER_NAME`，或使用 `--user-id` / `--user-name`；如果没有配置，就先运行 `pingcode context init` 并让用户选择。
 - 用户占位符：CLI 支持在参数和 JSON 请求体里使用 `@me` 表示当前用户 ID，使用 `@me_name` 表示当前用户名称，使用 `@user:<名称或ID>` 从缓存用户列表解析 ID。如果对应配置不存在，脚本会输出配置引导并退出。
 - “未完成”：查询工作项后，由模型把 `state.type` 为 `pending`、`in_progress` 的项视为未完成，除非用户另有定义。
-- “未解决缺陷”：调用 `work-item list --type bug --assignee @me --compact`。
-- “在某故事下新增工作项”：先用 `work-item show <identifier>` 按编号或关键词找到父故事，再用 `work-item create --title "..." --type task --parent <identifier>`。
+- “未解决缺陷”：调用 `workitem list --type bug --assignee @me --compact`。
+- “在某故事下新增工作项”：先用 `workitem show <identifier>` 按编号或关键词找到父故事，再用 `workitem create --title "..." --type task --parent <identifier>`。
 - 状态更新：优先用缓存状态字典；没有缓存或怀疑过期时先运行 `context init` 刷新上下文。不要猜 `state_id`。
 
 ## 参考资料
 
 - Skill 入口：[SKILL.md](skills/pingcode/SKILL.md)
+- 用户令牌登录：[skills/pingcode-auth/SKILL.md](skills/pingcode-auth/SKILL.md)
+- 工作项操作：[skills/pingcode-workitem/SKILL.md](skills/pingcode-workitem/SKILL.md)
 - API 摘要：[references/api.md](references/api.md)
 - 操作流程：[references/workflows.md](references/workflows.md)
 - 官方文档：https://open.pingcode.com/

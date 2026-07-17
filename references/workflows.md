@@ -4,12 +4,12 @@
 
 | User says | Use |
 |---|---|
-| "查看当前没完成的任务" | `work-item list --assignee @me --compact`, then filter by non-completed states. Unless the user says "所有人", require the configured current user. |
-| "查看所有人当前没完成的任务" | `work-item list --all-users --compact`, then filter by non-completed states. Do not add the current-user assignee filter. |
-| "查看我的未解决缺陷" | `work-item list --type bug --assignee @me --compact`, then filter by non-completed states. |
-| "帮我在 xxx 故事下新增工作项" | Find the story, then `work-item create --title "..." --type task --parent STORY_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
-| "把某个工作项改成已完成/进行中" | `work-item update <id|identifier> --state 已完成`. Resolve states from cache first. |
-| "创建一个故事/任务/缺陷" | `work-item create --title "..." --type story|task|bug --project PROJECT_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
+| "查看当前没完成的任务" | `workitem list --assignee @me --compact`, then filter by non-completed states. Unless the user says "所有人", require the configured current user. |
+| "查看所有人当前没完成的任务" | `workitem list --all-users --compact`, then filter by non-completed states. Do not add the current-user assignee filter. |
+| "查看我的未解决缺陷" | `workitem list --type bug --assignee @me --compact`, then filter by non-completed states. |
+| "帮我在 xxx 故事下新增工作项" | Find the story, then `workitem create --title "..." --type task --parent STORY_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
+| "把某个工作项改成已完成/进行中" | `workitem update <id|identifier> --state 已完成`. Resolve states from cache first. |
+| "创建一个故事/任务/缺陷" | `workitem create --title "..." --type story|task|bug --project PROJECT_ID` with `assignee_id=@me` unless another assignee or "所有人" is explicit. |
 
 This skill uses `client_credentials`, so the token is an enterprise token and does not represent a specific human user. For work item create/query requests, default to the configured current user unless the user explicitly says "所有人" / all users or names another assignee. Use `PINGCODE_USER_ID` / `PINGCODE_USER_NAME`, the matching CLI flags, or the workspace cache if present. If none is set, cache users first and ask the user to choose their PingCode user before filtering or assigning.
 
@@ -65,13 +65,13 @@ If the user explicitly asks for all users, all projects, or all iterations, pass
 ## View My Current Unfinished Tasks
 
 ```bash
-pingcode work-item list --assignee @me --compact
+pingcode workitem list --assignee @me --compact
 ```
 
 Filter by type, state, etc.:
 
 ```bash
-pingcode work-item list --assignee @me --type task --state 进行中 --compact
+pingcode workitem list --assignee @me --type task --state 进行中 --compact
 ```
 
 Use this same current-user filter for generic work item queries unless the user explicitly asks for "所有人" / all users.
@@ -81,7 +81,7 @@ The model should treat state types `pending` and `in_progress` as unfinished unl
 ## View My Unresolved Defects
 
 ```bash
-pingcode work-item list --type bug --assignee @me --compact
+pingcode workitem list --type bug --assignee @me --compact
 ```
 
 This returns assigned bugs whose state type is `pending` or `in_progress`.
@@ -91,13 +91,13 @@ This returns assigned bugs whose state type is `pending` or `in_progress`.
 1. Find the parent story by identifier:
 
    ```bash
-   pingcode work-item show MND-123 --compact
+   pingcode workitem show MND-123 --compact
    ```
 
 2. Create the child work item:
 
    ```bash
-   pingcode work-item create --title "Child task" --type task --parent MND-123
+   pingcode workitem create --title "Child task" --type task --parent MND-123
    ```
 
 Omit `assignee_id` only when the user explicitly asks for "所有人" / unassigned behavior or names a different assignee.
@@ -107,26 +107,26 @@ Omit `assignee_id` only when the user explicitly asks for "所有人" / unassign
 Update by identifier (resolves to id automatically):
 
 ```bash
-pingcode work-item update SCR-123 --state 已完成
+pingcode workitem update SCR-123 --state 已完成
 ```
 
 Or by id:
 
 ```bash
-pingcode work-item update WI-AbCdEf --state 进行中 --priority high
+pingcode workitem update WI-AbCdEf --state 进行中 --priority high
 ```
 
 Use `--dry-run` to preview before executing:
 
 ```bash
-pingcode work-item update SCR-123 --state 已完成 --dry-run
+pingcode workitem update SCR-123 --state 已完成 --dry-run
 ```
 
 ## Create a Work Item or Story
 
 ```bash
-pingcode work-item create --title "New story" --type story --project PROJECT_ID
-pingcode work-item create --title "Bug fix" --type bug --assignee @me --priority high
+pingcode workitem create --title "New story" --type story --project PROJECT_ID
+pingcode workitem create --title "Bug fix" --type bug --assignee @me --priority high
 ```
 
 The subcommand resolves names to IDs from the workspace cache automatically. Add `--dry-run` to preview the request.
