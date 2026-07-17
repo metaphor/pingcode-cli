@@ -21,7 +21,7 @@ Use this skill implicitly when the user mentions `PingCode`, `pingcode`, `工作
 * "把某个工作项改成已完成/进行中"
 * "创建一个故事/任务/缺陷"
 
-When the request is natural language, map it to the closest CLI workflow below. Do not ask the user to provide a command unless a required ID or target remains ambiguous after lookup.
+When the request is natural language, map it to the closest CLI workflow. Do not ask the user to provide a command unless a required ID or target remains ambiguous after lookup.
 
 ## Setup
 
@@ -29,7 +29,7 @@ Run the requested CLI command directly. If credentials or identity settings are 
 
 `client_credentials` returns an enterprise token and does not identify a human user. For work item create/query requests, let the CLI apply cached current-user defaults unless the user explicitly asks for "所有人" / all users or names another assignee.
 
-The CLI also supports user tokens via `pingcode auth login` with `--grant-type authorization_code` (the default for `auth login`). User tokens represent a specific human user and can be used for commands that require a user identity. After `auth login`, the CLI automatically detects the cached user token grant type, so subsequent commands do not need `--grant-type` unless you want to override it. `client_credentials` remains the fallback when no user token is cached.
+User-token login via OAuth2 `authorization_code` is also supported through `pingcode auth login`; see `$pingcode-auth` for the login flow, grant-type detection, and behavior differences.
 
 ## Workspace Cache
 
@@ -47,40 +47,13 @@ pingcode --help
 
 When installed by `npx pingcode-cli`, the installer creates a global `pingcode` command on POSIX and rewrites these examples to use `pingcode`. In Codex, prefer the installed global command `pingcode` because sandbox/network approvals are matched by command prefix; a stable global command is more likely to reuse a prior approval than a relative repo path.
 
-### Subcommand Mode (Preferred)
+## Sub-skills
 
-Prefer the structured subcommands for common work item and context operations:
+Route focused work to the dedicated sub-skills:
 
-```bash
-# Context — workspace management
-pingcode context list
-pingcode context init
-pingcode context set-current-project PROJECT_ID
-pingcode context set-current-sprint SPRINT_ID
-pingcode context set-current-user USER_ID_OR_NAME
-
-# Work items — list
-pingcode work-item list --assignee @me --state 进行中 --compact
-pingcode work-item list --type bug --assignee @me --compact
-pingcode work-item list --keywords "登录页面" --compact
-
-# Work items — create
-pingcode work-item create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
-pingcode work-item create --title "Bug fix" --type bug --assignee @me --priority high
-
-# Work items — show
-pingcode work-item show SCR-123
-pingcode work-item show WI-AbCdEf
-
-# Work items — get (single-item endpoint by id or identifier)
-pingcode work-item get WORK_ITEM_ID
-pingcode work-item get WYT-852
-
-# Work items — update (by identifier or id; supports --title, --description, --type, --project, --sprint, --state, --priority, --assignee, --parent, --version, --board, --entry, --swimlane, --start-at, --end-at, --participants, --story-points, --estimated-workload, --remaining-workload, --properties)
-pingcode work-item update SCR-123 --state 已完成
-pingcode work-item update WI-AbCdEf --state 进行中 --priority high
-pingcode work-item update SCR-123 --title "Updated title" --story-points 3 --start-at 1736985600
-```
+* `$pingcode-auth` — user-token login (`pingcode auth login`), grant-type detection and override, token types.
+* `$pingcode-ctx` — workspace context initialization (`pingcode context init`, `context set-current-*`) with agent-fronted project, sprint, and user selection.
+* `$pingcode-workitem` — work item `list`, `create`, `show`, `get`, and `update` subcommands with full flag details.
 
 ## Workflow
 
@@ -88,7 +61,7 @@ pingcode work-item update SCR-123 --title "Updated title" --story-points 3 --sta
 2. Resolve names to IDs using list commands, with `--compact` by default for list/query output. PingCode write APIs usually require IDs.
 3. Execute write commands directly once the target project/product/work item and state IDs are unambiguous.
 4. Use `--dry-run` only when the target or payload is unusually risky and the user wants a manual preview.
-5. For common operations, prefer the structured subcommands (`work-item list`, `work-item create`, `work-item show`, `work-item get`, `work-item update`). Consult [`references/api.md`](references/api.md) for API reference.
+5. For common operations, prefer the structured subcommands (`workitem list`, `workitem create`, `workitem show`, `workitem get`, `workitem update`). Consult [`references/api.md`](references/api.md) for API reference.
 
 ## Safety Rules
 
