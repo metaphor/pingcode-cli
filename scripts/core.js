@@ -772,7 +772,7 @@ class PingCodeClient {
     }
     if (grantType === 'authorization_code') {
       throw new PingCodeError(
-        'No valid user token available. Run `login` to authenticate with your PingCode account.'
+        'No valid user token available. Run `auth login` to authenticate with your PingCode account.'
       );
     }
     throw new PingCodeError(`Unsupported grant_type: ${grantType}`);

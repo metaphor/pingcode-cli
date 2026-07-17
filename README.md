@@ -252,14 +252,14 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 
 ```bash
 # 在浏览器中完成授权
-pingcode login --client-id ID --client-secret SECRET
+pingcode auth login --client-id ID --client-secret SECRET
 
 # 使用用户令牌查询工作项
 # --grant-type 会自动从缓存中识别，且 work-item list 不再默认按当前用户过滤
 pingcode work-item list --state 进行中 --compact
 ```
 
-首次使用用户令牌前必须先运行 `login`。`login` 成功后的用户令牌会缓存在默认 token cache 中，后续命令不再需要在命令行写 `--grant-type`。当缓存里是企业令牌时，命令仍然走 `client_credentials`；当缓存里是用户令牌时，走 `authorization_code`。显式传 `--grant-type` 会覆盖自动识别。
+首次使用用户令牌前必须先运行 `auth login`。`auth login` 成功后的用户令牌会缓存在默认 token cache 中，后续命令不再需要在命令行写 `--grant-type`。当缓存里是企业令牌时，命令仍然走 `client_credentials`；当缓存里是用户令牌时，走 `authorization_code`。显式传 `--grant-type` 会覆盖自动识别。
 
 使用用户令牌时，`work-item list` 不再默认按当前用户过滤（等价于之前加 `--all-users` 的效果），因此不需要配置 `PINGCODE_USER_ID` 或工作区用户。如果你仍想只看自己的，可以显式加 `--assignee @me` 或 `--user-id`。`client_credentials` 模式下仍保持原来的默认过滤行为。
 

@@ -89,7 +89,7 @@ function parseLoginArgs(tokens) {
       opts[STRING_FLAGS[flag]] = value;
       continue;
     }
-    throw new core.PingCodeError(`Unexpected argument: ${arg}. Use login --help for usage.`);
+    throw new core.PingCodeError(`Unexpected argument: ${arg}. Use auth login --help for usage.`);
   }
 
   // Convert --port to number
@@ -157,9 +157,22 @@ function openBrowser(url) {
 
 function printHelp() {
   console.log([
-    'PingCode login — Authenticate with your PingCode user account',
+    'PingCode auth — Authenticate with PingCode',
     '',
-    'Usage: pingcode login [options]',
+    'Usage: pingcode auth <subcommand> [options]',
+    '',
+    'Subcommands:',
+    '  login    Authenticate with your PingCode user account (OAuth2 authorization_code)',
+    '',
+    'Run `pingcode auth <subcommand> --help` for subcommand-specific usage.',
+  ].join('\n'));
+}
+
+function printLoginHelp() {
+  console.log([
+    'PingCode auth login — Authenticate with your PingCode user account',
+    '',
+    'Usage: pingcode auth login [options]',
     '',
     'Options:',
     '  --redirect-uri URI         Redirect URI for OAuth callback',
@@ -241,19 +254,19 @@ function buildDryRunExchange(opts, code) {
 
 // ── Main ────────────────────────────────────────────────────────────────
 
-async function run(argv, inputFunc) {
+async function runLogin(argv, inputFunc) {
   const tokens = argv || [];
 
   // No args → help
   if (tokens.length === 0) {
-    printHelp();
+    printLoginHelp();
     return;
   }
 
   const { opts, helpRequested } = parseLoginArgs(tokens);
 
   if (helpRequested) {
-    printHelp();
+    printLoginHelp();
     return;
   }
 
@@ -347,10 +360,30 @@ async function run(argv, inputFunc) {
 
 // ── Register ───────────────────────────────────────────────────────────
 
-shared.registerModule('login', {
-  name: 'login',
-  description: 'Authenticate with your PingCode user account',
+const SUBCOMMANDS = ['login'];
+
+async function run(argv, inputFunc) {
+  const tokens = argv || [];
+  const subcommand = tokens[0];
+
+  if (!subcommand || subcommand === '--help' || subcommand === '-h') {
+    printHelp();
+    return;
+  }
+
+  if (subcommand !== 'login') {
+    throw new core.PingCodeError(
+      `Unknown auth subcommand: ${subcommand}. Valid subcommands: ${SUBCOMMANDS.join(', ')}.`
+    );
+  }
+
+  await runLogin(tokens.slice(1), inputFunc);
+}
+
+shared.registerModule('auth', {
+  name: 'auth',
+  description: 'Authenticate with PingCode',
   run,
 });
 
-module.exports = { run, printHelp, parseLoginArgs, createClient, buildDryRunExchange };
+module.exports = { run, runLogin, printHelp, printLoginHelp, parseLoginArgs, createClient, buildDryRunExchange };

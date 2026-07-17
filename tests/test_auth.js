@@ -7,7 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 const core = require('../scripts/core');
-const loginModule = require('../scripts/commands/login');
+const authModule = require('../scripts/commands/auth');
 const { tmpFile, clearEnv, restoreEnv, fakeResponse, mockFetch } = require('./helpers');
 
 // ── Test helpers ───────────────────────────────────────────────────────
@@ -31,32 +31,32 @@ function testInCleanTmp(name, fn) {
 // ── Parser tests ───────────────────────────────────────────────────────
 
 test('login parser parses --help', () => {
-  const { opts, helpRequested } = loginModule.parseLoginArgs(['--help']);
+  const { opts, helpRequested } = authModule.parseLoginArgs(['--help']);
   assert.strictEqual(helpRequested, true);
 });
 
 test('login parser parses -h', () => {
-  const { opts, helpRequested } = loginModule.parseLoginArgs(['-h']);
+  const { opts, helpRequested } = authModule.parseLoginArgs(['-h']);
   assert.strictEqual(helpRequested, true);
 });
 
 test('login parser defaults grant_type to authorization_code', () => {
-  const { opts } = loginModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
+  const { opts } = authModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
   assert.strictEqual(opts.grant_type, 'authorization_code');
 });
 
 test('login parser defaults redirect_uri to http://127.0.0.1:8765/callback', () => {
-  const { opts } = loginModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
+  const { opts } = authModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
   assert.strictEqual(opts.redirect_uri, 'http://127.0.0.1:8765/callback');
 });
 
 test('login parser defaults port to 8765', () => {
-  const { opts } = loginModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
+  const { opts } = authModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
   assert.strictEqual(opts.port, 8765);
 });
 
 test('login parser accepts --redirect-uri', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's',
     '--redirect-uri', 'http://127.0.0.1:9000/oauth',
   ]);
@@ -64,55 +64,55 @@ test('login parser accepts --redirect-uri', () => {
 });
 
 test('login parser accepts --port', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--port', '9999',
   ]);
   assert.strictEqual(opts.port, 9999);
 });
 
 test('login parser rejects invalid port', () => {
-  assert.throws(() => loginModule.parseLoginArgs([
+  assert.throws(() => authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--port', 'invalid',
   ]), /Invalid port/);
 });
 
 test('login parser accepts --no-browser', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--no-browser',
   ]);
   assert.strictEqual(opts.no_browser, true);
 });
 
 test('login parser accepts --code', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--code', 'auth-code-123',
   ]);
   assert.strictEqual(opts.code, 'auth-code-123');
 });
 
 test('login parser accepts --dry-run', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--dry-run',
   ]);
   assert.strictEqual(opts.dry_run, true);
 });
 
 test('login parser accepts --grant-type', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--grant-type', 'refresh_token',
   ]);
   assert.strictEqual(opts.grant_type, 'refresh_token');
 });
 
 test('login parser accepts --token-cache', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--token-cache', '/tmp/tokens.json',
   ]);
   assert.strictEqual(opts.token_cache, '/tmp/tokens.json');
 });
 
 test('login parser accepts --workspace-cache', () => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--workspace-cache', '/tmp/ws.json',
   ]);
   assert.strictEqual(opts.workspace_cache, '/tmp/ws.json');
@@ -122,7 +122,7 @@ test('login parser uses env vars for client_id and client_secret', () => {
   process.env.PINGCODE_CLIENT_ID = 'env-client';
   process.env.PINGCODE_CLIENT_SECRET = 'env-secret';
   try {
-    const { opts } = loginModule.parseLoginArgs([]);
+    const { opts } = authModule.parseLoginArgs([]);
     assert.strictEqual(opts.client_id, 'env-client');
     assert.strictEqual(opts.client_secret, 'env-secret');
   } finally {
@@ -134,7 +134,7 @@ test('login parser uses env vars for client_id and client_secret', () => {
 test('login parser uses env var for redirect_uri', () => {
   process.env.PINGCODE_REDIRECT_URI = 'http://127.0.0.1:8888/cb';
   try {
-    const { opts } = loginModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
+    const { opts } = authModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
     assert.strictEqual(opts.redirect_uri, 'http://127.0.0.1:8888/cb');
   } finally {
     delete process.env.PINGCODE_REDIRECT_URI;
@@ -142,13 +142,13 @@ test('login parser uses env var for redirect_uri', () => {
 });
 
 test('login parser rejects unknown option', () => {
-  assert.throws(() => loginModule.parseLoginArgs([
+  assert.throws(() => authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--bad-flag',
   ]), /Unknown option/);
 });
 
 test('login parser rejects unexpected positional argument', () => {
-  assert.throws(() => loginModule.parseLoginArgs([
+  assert.throws(() => authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', 'pos-arg',
   ]), /Unexpected argument/);
 });
@@ -162,7 +162,7 @@ testInCleanTmp('login --dry-run --code returns exchange request shape', async (t
   const originalLog = console.log;
   console.log = (...args) => outputs.push(args.join(' '));
   try {
-    await loginModule.run([
+    await authModule.runLogin([
       '--client-id', 'c', '--client-secret', 's',
       '--code', 'auth-code-123',
       '--token-cache', cachePath,
@@ -191,7 +191,7 @@ testInCleanTmp('login --dry-run --no-browser prints authorization URL', async (t
   const originalLog = console.log;
   console.log = (...args) => outputs.push(args.join(' '));
   try {
-    await loginModule.run([
+    await authModule.runLogin([
       '--client-id', 'c', '--client-secret', 's',
       '--no-browser',
       '--token-cache', cachePath,
@@ -219,7 +219,7 @@ testInCleanTmp('login --dry-run without credentials exits with auth guidance', a
   console.error = (...args) => errors.push(args.join(' '));
 
   try {
-    await loginModule.run(['--dry-run']);
+    await authModule.runLogin(['--dry-run']);
   } catch (_) {
     // exit throws
   } finally {
@@ -236,7 +236,7 @@ testInCleanTmp('login --dry-run without credentials exits with auth guidance', a
 
 testInCleanTmp('login dry-run missing client_id throws credential error', async (t, tmpdir) => {
   await assert.rejects(
-    () => loginModule.run(['--dry-run']),
+    () => authModule.runLogin(['--dry-run']),
     (err) => {
       assert.ok(err instanceof core.PingCodeError);
       assert.ok(err.message.includes('PINGCODE_CLIENT_ID'), `Expected PINGCODE_CLIENT_ID in message: ${err.message}`);
@@ -247,7 +247,7 @@ testInCleanTmp('login dry-run missing client_id throws credential error', async 
 
 testInCleanTmp('login dry-run missing client_secret throws credential error', async (t, tmpdir) => {
   await assert.rejects(
-    () => loginModule.run(['--dry-run', '--client-id', 'c']),
+    () => authModule.runLogin(['--dry-run', '--client-id', 'c']),
     (err) => {
       assert.ok(err instanceof core.PingCodeError);
       assert.ok(err.message.includes('PINGCODE_CLIENT_ID'), `Expected PINGCODE_CLIENT_ID in message: ${err.message}`);
@@ -272,7 +272,7 @@ testInCleanTmp('login --code exchanges code and saves token cache', async (t, tm
   const originalLog = console.log;
   console.log = (...args) => outputs.push(args.join(' '));
   try {
-    await loginModule.run([
+    await authModule.runLogin([
       '--client-id', 'c', '--client-secret', 's',
       '--code', 'auth-code-123',
       '--token-cache', cachePath,
@@ -314,7 +314,7 @@ testInCleanTmp('login --no-browser prompts for code and saves token', async (t, 
   const originalLog = console.log;
   console.log = (...args) => outputs.push(args.join(' '));
   try {
-    await loginModule.run([
+    await authModule.runLogin([
       '--client-id', 'c', '--client-secret', 's',
       '--no-browser',
       '--token-cache', cachePath,
@@ -337,11 +337,11 @@ testInCleanTmp('login --no-browser prompts for code and saves token', async (t, 
 
 // ── Help output test (via spawn) ────────────────────────────────────────
 
-test('login --help works via dispatcher', () => {
+test('auth login --help works via dispatcher', () => {
   const { spawnSync } = require('node:child_process');
   const REPO_ROOT = path.resolve(__dirname, '..');
   const result = spawnSync('node', [
-    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'login', '--help',
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'auth', 'login', '--help',
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
   assert.ok(result.stdout.includes('--redirect-uri'));
@@ -359,36 +359,36 @@ test('login --help works via dispatcher', () => {
   assert.ok(result.stdout.includes('--dry-run'));
 });
 
-test('login is listed in dispatcher module list', () => {
+test('auth is listed in dispatcher module list', () => {
   const { spawnSync } = require('node:child_process');
   const REPO_ROOT = path.resolve(__dirname, '..');
   const result = spawnSync('node', [
     path.join(REPO_ROOT, 'scripts', 'pingcode.js'), '--help',
   ], { encoding: 'utf8', cwd: REPO_ROOT });
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes('login'));
-  assert.ok(result.stdout.includes('Authenticate with your PingCode user account'));
+  assert.ok(result.stdout.includes('auth'));
+  assert.ok(result.stdout.includes('Authenticate with PingCode'));
 });
 
 // ── createClient tests ─────────────────────────────────────────────────
 
 testInCleanTmp('createClient constructs PingCodeClient with login defaults', async (t, tmpdir) => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'cid', '--client-secret', 'csec',
     '--token-cache', tmpFile(tmpdir, 'token.json'),
   ]);
-  const client = loginModule.createClient(opts);
+  const client = authModule.createClient(opts);
   assert.strictEqual(client.grantType, 'authorization_code');
   assert.strictEqual(client.clientId, 'cid');
   assert.strictEqual(client.clientSecret, 'csec');
 });
 
 testInCleanTmp('createClient with no_token_cache sets null cache', async (t, tmpdir) => {
-  const { opts } = loginModule.parseLoginArgs([
+  const { opts } = authModule.parseLoginArgs([
     '--client-id', 'cid', '--client-secret', 'csec',
     '--no-token-cache',
   ]);
-  const client = loginModule.createClient(opts);
+  const client = authModule.createClient(opts);
   assert.strictEqual(client.tokenCache, null);
 });
 
@@ -401,7 +401,7 @@ test('buildDryRunExchange returns correct shape for authorization_code', () => {
     client_secret: 's',
     redirect_uri: 'http://127.0.0.1:8765/callback',
   };
-  const result = loginModule.buildDryRunExchange(opts, 'auth-code-789');
+  const result = authModule.buildDryRunExchange(opts, 'auth-code-789');
   assert.strictEqual(result.dry_run, true);
   assert.strictEqual(result.method, 'GET');
   assert.strictEqual(result.path, '/v1/auth/token');
@@ -419,17 +419,50 @@ test('buildDryRunExchange includes redirect_uri only for authorization_code', ()
     client_secret: 's',
     redirect_uri: 'http://127.0.0.1:8765/callback',
   };
-  const result = loginModule.buildDryRunExchange(opts, 'refresh-code');
+  const result = authModule.buildDryRunExchange(opts, 'refresh-code');
   assert.strictEqual(result.params.grant_type, 'refresh_token');
   assert.strictEqual('redirect_uri' in result.params, false);
 });
 
 // ── Dispatcher integration tests ───────────────────────────────────────
 
-test('login module is registered in shared registry', () => {
+test('auth module is registered in shared registry', () => {
   const shared = require('../scripts/commands/shared');
-  const mod = shared.getModule('login');
-  assert.ok(mod, 'login module should be registered');
-  assert.strictEqual(mod.name, 'login');
+  const mod = shared.getModule('auth');
+  assert.ok(mod, 'auth module should be registered');
+  assert.strictEqual(mod.name, 'auth');
   assert.strictEqual(typeof mod.run, 'function');
+});
+
+test('auth with no subcommand prints module help', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (msg) => logs.push(msg);
+  try {
+    await authModule.run([]);
+  } finally {
+    console.log = originalLog;
+  }
+  const output = logs.join('\n');
+  assert.ok(output.includes('Usage: pingcode auth <subcommand>'));
+  assert.ok(output.includes('login'));
+});
+
+test('auth with unknown subcommand throws', async () => {
+  await assert.rejects(
+    () => authModule.run(['bogus']),
+    /Unknown auth subcommand: bogus/,
+  );
+});
+
+test('auth run dispatches to login subcommand', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (msg) => logs.push(msg);
+  try {
+    await authModule.run(['login', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(logs.join('\n').includes('Usage: pingcode auth login [options]'));
 });
