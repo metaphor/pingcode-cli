@@ -7,13 +7,18 @@ const readline = require("node:readline");
 const { stdin, stdout } = require("node:process");
 
 const packageRoot = path.resolve(__dirname, "..");
-const skillName = process.env.PINGCODE_SKILL_NAME || "pingcode";
-const aliasName = "pingcode-ctx";
-const sourceEntries = [
-  "skills/pingcode/SKILL.md",
-  "references",
+const MAIN_SKILL = {
+  name: process.env.PINGCODE_SKILL_NAME || "pingcode",
+  entries: [
+    "skills/pingcode/SKILL.md",
+    "references",
+  ],
+};
+const SUB_SKILLS = [
+  { name: "pingcode-ctx", entries: ["skills/pingcode-ctx/SKILL.md"] },
+  { name: "pingcode-auth", entries: ["skills/pingcode-auth/SKILL.md"] },
+  { name: "pingcode-workitem", entries: ["skills/pingcode-workitem/SKILL.md"] },
 ];
-const aliasSkillEntries = ["skills/pingcode-ctx/SKILL.md"];
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
@@ -85,13 +90,14 @@ function usage() {
     "                        [--codex-only|--claude-only|--openclaw-only|--hermes-only|--opencode-only]",
     "                        [--interactive|--non-interactive]",
     "",
-    "Default behavior installs the PingCode skill and pingcode-ctx alias",
+    "Default behavior installs the PingCode skill with sub-skills",
+    "pingcode-ctx, pingcode-auth, pingcode-workitem",
     "only into supported agent homes that already exist for the current user:",
-    "  Codex:     ~/.codex/skills/pingcode (and pingcode-ctx)",
-    "  Claude:    ~/.claude/skills/pingcode (and pingcode-ctx)",
-    "  OpenClaw:  ~/.openclaw/skills/pingcode (and pingcode-ctx)",
-    "  Hermes:    ~/.hermes/skills/project-management/pingcode (and pingcode-ctx)",
-    "  OpenCode:  ~/.config/opencode/skills/pingcode (and pingcode-ctx)",
+    "  Codex:     ~/.codex/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
+    "  Claude:    ~/.claude/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
+    "  OpenClaw:  ~/.openclaw/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
+    "  Hermes:    ~/.hermes/skills/project-management/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
+    "  OpenCode:  ~/.config/opencode/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
     "",
     "Project-level OpenCode install is supported via --target:",
     "  npx pingcode-cli --target \".opencode/skills/pingcode\" --force",
@@ -195,59 +201,44 @@ function shellQuote(value) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-function rewriteInstalledDocs(destinationRoot) {
+function rewriteDocFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
   const cliCommand = "pingcode";
   const ctxCommand = "pingcode context init";
-  const docs = [
-    path.join(destinationRoot, "SKILL.md"),
-    path.join(destinationRoot, "references", "workflows.md"),
-  ];
-
-  for (const file of docs) {
-    if (!fs.existsSync(file)) {
-      continue;
-    }
-    const original = fs.readFileSync(file, "utf8");
-    const rewritten = original
-      // Defensive: absolute paths from historical installs
-      .replace(/node\s+\S*\/scripts\/pingcode-ctx\.js/g, ctxCommand)
-      .replace(/node\s+\S*\/scripts\/pingcode\.js/g, cliCommand)
-      // Python3 legacy
-      .replaceAll("python3 scripts/pingcode_ctx.py", ctxCommand)
-      .replaceAll("python3 scripts/pingcode.py", cliCommand)
-      // Literal node scripts references (relative paths)
-      .replaceAll("node scripts/pingcode-ctx.js", ctxCommand)
-      .replaceAll("node scripts/pingcode.js", cliCommand);
-    if (rewritten !== original) {
-      fs.writeFileSync(file, rewritten);
-    }
+  const original = fs.readFileSync(filePath, "utf8");
+  const rewritten = original
+    // Defensive: absolute paths from historical installs
+    .replace(/node\s+\S*\/scripts\/pingcode-ctx\.js/g, ctxCommand)
+    .replace(/node\s+\S*\/scripts\/pingcode\.js/g, cliCommand)
+    // Python3 legacy
+    .replaceAll("python3 scripts/pingcode_ctx.py", ctxCommand)
+    .replaceAll("python3 scripts/pingcode.py", cliCommand)
+    // Literal node scripts references (relative paths)
+    .replaceAll("node scripts/pingcode-ctx.js", ctxCommand)
+    .replaceAll("node scripts/pingcode.js", cliCommand);
+  if (rewritten !== original) {
+    fs.writeFileSync(filePath, rewritten);
   }
 }
 
-function installAliasSkill(destinationRoot) {
-  const aliasRoot = path.join(path.dirname(destinationRoot), aliasName);
-  fs.rmSync(aliasRoot, { recursive: true, force: true });
-  fs.mkdirSync(aliasRoot, { recursive: true });
-  for (const entry of aliasSkillEntries) {
+function rewriteInstalledDocs(destinationRoot) {
+  rewriteDocFile(path.join(destinationRoot, "SKILL.md"));
+  rewriteDocFile(path.join(destinationRoot, "references", "workflows.md"));
+}
+
+function installSubSkill(parentDir, subSkill) {
+  const target = path.join(parentDir, subSkill.name);
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of subSkill.entries) {
     const source = path.join(packageRoot, entry);
-    const destination = path.join(aliasRoot, path.basename(entry));
+    const destination = path.join(target, path.basename(entry));
     fs.copyFileSync(source, destination);
   }
-  const cliCommand = "pingcode";
-  const ctxCommand = "pingcode context init";
-  const skillDoc = path.join(aliasRoot, "SKILL.md");
-  const original = fs.readFileSync(skillDoc, "utf8");
-  fs.writeFileSync(
-    skillDoc,
-    original
-      .replace(/node\s+\S*\/scripts\/pingcode-ctx\.js/g, ctxCommand)
-      .replace(/node\s+\S*\/scripts\/pingcode\.js/g, cliCommand)
-      .replaceAll("python3 scripts/pingcode_ctx.py", ctxCommand)
-      .replaceAll("python3 scripts/pingcode.py", cliCommand)
-      .replaceAll("node scripts/pingcode-ctx.js", ctxCommand)
-      .replaceAll("node scripts/pingcode.js", cliCommand),
-  );
-  return aliasRoot;
+  rewriteDocFile(path.join(target, "SKILL.md"));
+  return target;
 }
 
 function installToTarget(targetDir, options) {
@@ -260,13 +251,19 @@ function installToTarget(targetDir, options) {
   }
   fs.rmSync(targetDir, { recursive: true, force: true });
   fs.mkdirSync(targetDir, { recursive: true });
-  for (const entry of sourceEntries) {
+  for (const entry of MAIN_SKILL.entries) {
     copyEntry(entry, targetDir);
   }
   rewriteInstalledDocs(targetDir);
-  const aliasTarget = installAliasSkill(targetDir);
+
+  const parentDir = path.dirname(targetDir);
+  const subTargets = SUB_SKILLS.map((sub) => ({
+    name: sub.name,
+    target: installSubSkill(parentDir, sub),
+  }));
+
   installGlobalWrapper();
-  return { mainTarget: targetDir, aliasTarget };
+  return { mainTarget: targetDir, subTargets };
 }
 
 function printCredentialGuidance() {
@@ -370,14 +367,14 @@ function runMultiRootInstall(options) {
 
   for (const key of keys) {
     const root = roots[key];
-    const mainTarget = path.join(root.skillsRoot, skillName);
+    const mainTarget = path.join(root.skillsRoot, MAIN_SKILL.name);
     try {
       const result = installToTarget(mainTarget, options);
       successes.push({
         key,
         label: root.label,
         mainTarget: result.mainTarget,
-        aliasTarget: result.aliasTarget,
+        subTargets: result.subTargets,
       });
     } catch (error) {
       failures.push({
@@ -392,7 +389,9 @@ function runMultiRootInstall(options) {
   console.log("Install summary:");
   for (const item of successes) {
     console.log(`  [ok]   ${item.label}: ${item.mainTarget}`);
-    console.log(`         ${item.label} (pingcode-ctx): ${item.aliasTarget}`);
+    for (const sub of item.subTargets) {
+      console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
+    }
   }
   for (const item of skipped) {
     console.log(`  [skip] ${item.label}: ${item.agentHome} does not exist`);
@@ -427,7 +426,9 @@ function runSingleTargetInstall(options) {
   try {
     const result = installToTarget(target, options);
     console.log(`Installed PingCode skill to ${result.mainTarget}`);
-    console.log(`Installed PingCode context skill to ${result.aliasTarget}`);
+    for (const sub of result.subTargets) {
+      console.log(`Installed ${sub.name} skill to ${sub.target}`);
+    }
     printCredentialGuidance();
     return 0;
   } catch (error) {
@@ -451,7 +452,7 @@ function buildTargets(scope, keys) {
   return keys.map((key) => ({
     key,
     label: roots[key].label,
-    mainTarget: path.join(roots[key].skillsRoot, skillName),
+    mainTarget: path.join(roots[key].skillsRoot, MAIN_SKILL.name),
   }));
 }
 
@@ -460,7 +461,9 @@ function printInteractiveSummary(successes, failures, scope) {
   console.log(`Install summary (${scope}):`);
   for (const item of successes) {
     console.log(`  [ok]   ${item.label}: ${item.mainTarget}`);
-    console.log(`         ${item.label} (pingcode-ctx): ${item.aliasTarget}`);
+    for (const sub of item.subTargets) {
+      console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
+    }
   }
   for (const item of failures) {
     console.error(`  [fail] ${item.label}: ${item.target}`);
@@ -497,7 +500,7 @@ function runInteractiveInstall(options) {
         for (const target of targets) {
           try {
             const result = installToTarget(target.mainTarget, options);
-            successes.push({ ...target, aliasTarget: result.aliasTarget });
+            successes.push({ ...target, subTargets: result.subTargets });
           } catch (err) {
             failures.push({ ...target, message: err.message });
           }

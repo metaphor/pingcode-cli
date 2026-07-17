@@ -33,23 +33,33 @@ function expectedPaths(home, codexHome = null) {
   return {
     codex: {
       main: path.join(codexRoot, 'skills', 'pingcode'),
-      alias: path.join(codexRoot, 'skills', 'pingcode-ctx'),
+      ctx: path.join(codexRoot, 'skills', 'pingcode-ctx'),
+      auth: path.join(codexRoot, 'skills', 'pingcode-auth'),
+      workItem: path.join(codexRoot, 'skills', 'pingcode-workitem'),
     },
     claude: {
       main: path.join(home, '.claude', 'skills', 'pingcode'),
-      alias: path.join(home, '.claude', 'skills', 'pingcode-ctx'),
+      ctx: path.join(home, '.claude', 'skills', 'pingcode-ctx'),
+      auth: path.join(home, '.claude', 'skills', 'pingcode-auth'),
+      workItem: path.join(home, '.claude', 'skills', 'pingcode-workitem'),
     },
     openclaw: {
       main: path.join(home, '.openclaw', 'skills', 'pingcode'),
-      alias: path.join(home, '.openclaw', 'skills', 'pingcode-ctx'),
+      ctx: path.join(home, '.openclaw', 'skills', 'pingcode-ctx'),
+      auth: path.join(home, '.openclaw', 'skills', 'pingcode-auth'),
+      workItem: path.join(home, '.openclaw', 'skills', 'pingcode-workitem'),
     },
     hermes: {
       main: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode'),
-      alias: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-ctx'),
+      ctx: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-ctx'),
+      auth: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-auth'),
+      workItem: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-workitem'),
     },
     opencode: {
       main: path.join(home, '.config', 'opencode', 'skills', 'pingcode'),
-      alias: path.join(home, '.config', 'opencode', 'skills', 'pingcode-ctx'),
+      ctx: path.join(home, '.config', 'opencode', 'skills', 'pingcode-ctx'),
+      auth: path.join(home, '.config', 'opencode', 'skills', 'pingcode-auth'),
+      workItem: path.join(home, '.config', 'opencode', 'skills', 'pingcode-workitem'),
     },
   };
 }
@@ -83,6 +93,12 @@ function assertNotInstalled(target) {
   assert.strictEqual(fs.existsSync(target), false, `unexpected install at ${target}`);
 }
 
+function assertAllSubSkillsInstalled(pathsEntry) {
+  assertInstalled(pathsEntry.ctx);
+  assertInstalled(pathsEntry.auth);
+  assertInstalled(pathsEntry.workItem);
+}
+
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-install-test-'));
 }
@@ -100,12 +116,19 @@ test('installed docs use pingcode command', () => {
 
     const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
     const workflows = fs.readFileSync(path.join(target, 'references', 'workflows.md'), 'utf8');
-    const aliasDoc = fs.readFileSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md'), 'utf8');
 
     assert.ok(result.stdout.includes('Installed PingCode skill'));
     assert.ok(skillDoc.includes('pingcode'), 'skill doc should contain pingcode command');
     assert.ok(workflows.includes('pingcode'), 'workflows should contain pingcode command');
-    assert.ok(aliasDoc.includes('pingcode'), 'alias doc should contain pingcode command');
+
+    const parentDir = path.dirname(target);
+    for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
+      const subDoc = fs.readFileSync(path.join(parentDir, subName, 'SKILL.md'), 'utf8');
+      assert.ok(subDoc.includes('pingcode'), `${subName} doc should contain pingcode command`);
+      assert.strictEqual(subDoc.includes('python3 scripts/pingcode.py'), false, `${subName} should not contain old python command`);
+      assert.strictEqual(subDoc.includes('python3 scripts/pingcode_ctx.py'), false, `${subName} should not contain old python ctx command`);
+    }
+
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(workflows.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false);
@@ -145,9 +168,7 @@ test('default install writes existing agent roots', () => {
     const paths = expectedPaths(home);
     for (const key of Object.keys(paths)) {
       assertInstalled(paths[key].main);
-      assert.ok(fs.existsSync(paths[key].alias), `alias missing for ${key}`);
-      const aliasDoc = fs.readFileSync(path.join(paths[key].alias, 'SKILL.md'), 'utf8');
-      assert.ok(aliasDoc.includes('pingcode'));
+      assertAllSubSkillsInstalled(paths[key]);
       assert.ok(result.stdout.includes('[ok]'));
     }
     for (const label of ['Codex', 'Claude Code', 'OpenClaw', 'Hermes', 'OpenCode']) {
@@ -170,12 +191,14 @@ test('default install skips missing agent roots', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.codex.main);
-    assert.ok(fs.existsSync(paths.codex.alias));
+    assertAllSubSkillsInstalled(paths.codex);
     assertInstalled(paths.claude.main);
-    assert.ok(fs.existsSync(paths.claude.alias));
+    assertAllSubSkillsInstalled(paths.claude);
     for (const key of ['openclaw', 'hermes', 'opencode']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
     assert.ok(result.stdout.includes('[skip] OpenClaw'));
     assert.ok(result.stdout.includes('[skip] Hermes'));
@@ -196,7 +219,9 @@ test('default install no existing agent roots is noop', () => {
     const paths = expectedPaths(home);
     for (const key of Object.keys(paths)) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
     assert.ok(result.stdout.includes('No supported agent directories were found'));
   } finally {
@@ -215,10 +240,12 @@ test('codex only scope', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.codex.main);
-    assert.ok(fs.existsSync(paths.codex.alias));
+    assertAllSubSkillsInstalled(paths.codex);
     for (const key of ['claude', 'openclaw', 'hermes']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
   } finally {
     rmDir(tmpdir);
@@ -236,10 +263,12 @@ test('claude only scope', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.claude.main);
-    assert.ok(fs.existsSync(paths.claude.alias));
+    assertAllSubSkillsInstalled(paths.claude);
     for (const key of ['codex', 'openclaw', 'hermes']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
   } finally {
     rmDir(tmpdir);
@@ -257,10 +286,12 @@ test('openclaw only scope', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.openclaw.main);
-    assert.ok(fs.existsSync(paths.openclaw.alias));
+    assertAllSubSkillsInstalled(paths.openclaw);
     for (const key of ['codex', 'claude', 'hermes']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
   } finally {
     rmDir(tmpdir);
@@ -278,11 +309,13 @@ test('hermes only scope', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.hermes.main);
-    assert.ok(fs.existsSync(paths.hermes.alias));
+    assertAllSubSkillsInstalled(paths.hermes);
     assert.strictEqual(path.basename(path.dirname(paths.hermes.main)), 'project-management', 'Hermes install must live under the project-management category');
     for (const key of ['codex', 'claude', 'openclaw']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
   } finally {
     rmDir(tmpdir);
@@ -300,10 +333,12 @@ test('opencode only scope', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.opencode.main);
-    assert.ok(fs.existsSync(paths.opencode.alias));
+    assertAllSubSkillsInstalled(paths.opencode);
     for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
       assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].alias);
+      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].auth);
+      assertNotInstalled(paths[key].workItem);
     }
   } finally {
     rmDir(tmpdir);
@@ -321,7 +356,10 @@ test('opencode project-level target install', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     assertInstalled(target);
-    assert.ok(fs.existsSync(path.join(path.dirname(target), 'pingcode-ctx', 'SKILL.md')));
+    const parentDir = path.dirname(target);
+    for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
+      assert.ok(fs.existsSync(path.join(parentDir, subName, 'SKILL.md')), `${subName} SKILL.md missing`);
+    }
     const skillDoc = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
     assert.ok(skillDoc.includes('pingcode'));
   } finally {
@@ -340,7 +378,7 @@ test('interactive global install', () => {
 
     const paths = expectedPaths(home);
     assertInstalled(paths.opencode.main);
-    assert.ok(fs.existsSync(paths.opencode.alias));
+    assertAllSubSkillsInstalled(paths.opencode);
     assert.ok(result.stdout.includes('Install summary (global)'));
     assert.ok(result.stdout.includes('OpenCode'));
     for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
@@ -415,7 +453,7 @@ test('codex home only affects codex root', () => {
 
     const paths = expectedPaths(home, codexHome);
     assertInstalled(paths.codex.main);
-    assert.ok(fs.existsSync(paths.codex.alias));
+    assertAllSubSkillsInstalled(paths.codex);
     const defaultCodex = path.join(home, '.codex', 'skills', 'pingcode');
     assert.strictEqual(fs.existsSync(defaultCodex), false, 'default codex location should not be touched');
     for (const key of ['claude', 'openclaw', 'hermes']) {
