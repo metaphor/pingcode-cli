@@ -37,24 +37,6 @@ function expectedPaths(home, codexHome = null) {
       auth: path.join(codexRoot, 'skills', 'pingcode-auth'),
       workItem: path.join(codexRoot, 'skills', 'pingcode-workitem'),
     },
-    claude: {
-      main: path.join(home, '.claude', 'skills', 'pingcode'),
-      ctx: path.join(home, '.claude', 'skills', 'pingcode-ctx'),
-      auth: path.join(home, '.claude', 'skills', 'pingcode-auth'),
-      workItem: path.join(home, '.claude', 'skills', 'pingcode-workitem'),
-    },
-    openclaw: {
-      main: path.join(home, '.openclaw', 'skills', 'pingcode'),
-      ctx: path.join(home, '.openclaw', 'skills', 'pingcode-ctx'),
-      auth: path.join(home, '.openclaw', 'skills', 'pingcode-auth'),
-      workItem: path.join(home, '.openclaw', 'skills', 'pingcode-workitem'),
-    },
-    hermes: {
-      main: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode'),
-      ctx: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-ctx'),
-      auth: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-auth'),
-      workItem: path.join(home, '.hermes', 'skills', 'project-management', 'pingcode-workitem'),
-    },
     opencode: {
       main: path.join(home, '.config', 'opencode', 'skills', 'pingcode'),
       ctx: path.join(home, '.config', 'opencode', 'skills', 'pingcode-ctx'),
@@ -68,11 +50,7 @@ function createAgentHomes(home, codexHome = null, keys = null) {
   const paths = expectedPaths(home, codexHome);
   const selected = keys || Object.keys(paths);
   for (const key of selected) {
-    if (key === 'hermes') {
-      fs.mkdirSync(path.join(home, '.hermes'), { recursive: true });
-    } else {
-      fs.mkdirSync(paths[key].main.split(path.sep).slice(0, -2).join(path.sep), { recursive: true });
-    }
+    fs.mkdirSync(paths[key].main.split(path.sep).slice(0, -2).join(path.sep), { recursive: true });
   }
 }
 
@@ -171,7 +149,7 @@ test('default install writes existing agent roots', () => {
       assertAllSubSkillsInstalled(paths[key]);
       assert.ok(result.stdout.includes('[ok]'));
     }
-    for (const label of ['Codex', 'Claude Code', 'OpenClaw', 'Hermes', 'OpenCode']) {
+    for (const label of ['Codex', 'OpenCode']) {
       assert.ok(result.stdout.includes(label));
     }
   } finally {
@@ -185,23 +163,19 @@ test('default install skips missing agent roots', () => {
     const home = path.join(tmpdir, 'home');
     fs.mkdirSync(home, { recursive: true });
     const env = isolatedHomeEnv(home);
-    createAgentHomes(home, null, ['codex', 'claude']);
+    createAgentHomes(home, null, ['codex']);
     const result = runInstall([], env);
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
     assertInstalled(paths.codex.main);
     assertAllSubSkillsInstalled(paths.codex);
-    assertInstalled(paths.claude.main);
-    assertAllSubSkillsInstalled(paths.claude);
-    for (const key of ['openclaw', 'hermes', 'opencode']) {
+    for (const key of ['opencode']) {
       assertNotInstalled(paths[key].main);
       assertNotInstalled(paths[key].ctx);
       assertNotInstalled(paths[key].auth);
       assertNotInstalled(paths[key].workItem);
     }
-    assert.ok(result.stdout.includes('[skip] OpenClaw'));
-    assert.ok(result.stdout.includes('[skip] Hermes'));
     assert.ok(result.stdout.includes('[skip] OpenCode'));
   } finally {
     rmDir(tmpdir);
@@ -241,77 +215,7 @@ test('codex only scope', () => {
     const paths = expectedPaths(home);
     assertInstalled(paths.codex.main);
     assertAllSubSkillsInstalled(paths.codex);
-    for (const key of ['claude', 'openclaw', 'hermes']) {
-      assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
-    }
-  } finally {
-    rmDir(tmpdir);
-  }
-});
-
-test('claude only scope', () => {
-  const tmpdir = tmpDir();
-  try {
-    const home = path.join(tmpdir, 'home');
-    fs.mkdirSync(home, { recursive: true });
-    const env = isolatedHomeEnv(home);
-    const result = runInstall(['--claude-only'], env);
-    assert.strictEqual(result.status, 0, result.stderr);
-
-    const paths = expectedPaths(home);
-    assertInstalled(paths.claude.main);
-    assertAllSubSkillsInstalled(paths.claude);
-    for (const key of ['codex', 'openclaw', 'hermes']) {
-      assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
-    }
-  } finally {
-    rmDir(tmpdir);
-  }
-});
-
-test('openclaw only scope', () => {
-  const tmpdir = tmpDir();
-  try {
-    const home = path.join(tmpdir, 'home');
-    fs.mkdirSync(home, { recursive: true });
-    const env = isolatedHomeEnv(home);
-    const result = runInstall(['--openclaw-only'], env);
-    assert.strictEqual(result.status, 0, result.stderr);
-
-    const paths = expectedPaths(home);
-    assertInstalled(paths.openclaw.main);
-    assertAllSubSkillsInstalled(paths.openclaw);
-    for (const key of ['codex', 'claude', 'hermes']) {
-      assertNotInstalled(paths[key].main);
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
-    }
-  } finally {
-    rmDir(tmpdir);
-  }
-});
-
-test('hermes only scope', () => {
-  const tmpdir = tmpDir();
-  try {
-    const home = path.join(tmpdir, 'home');
-    fs.mkdirSync(home, { recursive: true });
-    const env = isolatedHomeEnv(home);
-    const result = runInstall(['--hermes-only'], env);
-    assert.strictEqual(result.status, 0, result.stderr);
-
-    const paths = expectedPaths(home);
-    assertInstalled(paths.hermes.main);
-    assertAllSubSkillsInstalled(paths.hermes);
-    assert.strictEqual(path.basename(path.dirname(paths.hermes.main)), 'project-management', 'Hermes install must live under the project-management category');
-    for (const key of ['codex', 'claude', 'openclaw']) {
+    for (const key of ['opencode']) {
       assertNotInstalled(paths[key].main);
       assertNotInstalled(paths[key].ctx);
       assertNotInstalled(paths[key].auth);
@@ -334,7 +238,7 @@ test('opencode only scope', () => {
     const paths = expectedPaths(home);
     assertInstalled(paths.opencode.main);
     assertAllSubSkillsInstalled(paths.opencode);
-    for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
+    for (const key of ['codex']) {
       assertNotInstalled(paths[key].main);
       assertNotInstalled(paths[key].ctx);
       assertNotInstalled(paths[key].auth);
@@ -373,7 +277,7 @@ test('interactive global install', () => {
     const home = path.join(tmpdir, 'home');
     fs.mkdirSync(home, { recursive: true });
     const env = isolatedHomeEnv(home);
-    const result = runInstall(['--interactive', '--force'], env, '1\n5\n');
+    const result = runInstall(['--interactive', '--force'], env, '1\n2\n');
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
@@ -381,7 +285,7 @@ test('interactive global install', () => {
     assertAllSubSkillsInstalled(paths.opencode);
     assert.ok(result.stdout.includes('Install summary (global)'));
     assert.ok(result.stdout.includes('OpenCode'));
-    for (const key of ['codex', 'claude', 'openclaw', 'hermes']) {
+    for (const key of ['codex']) {
       assertNotInstalled(paths[key].main);
     }
   } finally {
@@ -397,7 +301,7 @@ test('interactive project-level install', () => {
     fs.mkdirSync(projectDir, { recursive: true });
     const resolvedProjectDir = fs.realpathSync(projectDir);
     const env = isolatedHomeEnv(home);
-    const result = runInstall(['--interactive', '--force'], env, '2\n1,5\n', resolvedProjectDir);
+    const result = runInstall(['--interactive', '--force'], env, '2\n1,2\n', resolvedProjectDir);
     assert.strictEqual(result.status, 0, result.stderr);
 
     const codexTarget = path.join(resolvedProjectDir, '.codex', 'skills', 'pingcode');
@@ -456,7 +360,7 @@ test('codex home only affects codex root', () => {
     assertAllSubSkillsInstalled(paths.codex);
     const defaultCodex = path.join(home, '.codex', 'skills', 'pingcode');
     assert.strictEqual(fs.existsSync(defaultCodex), false, 'default codex location should not be touched');
-    for (const key of ['claude', 'openclaw', 'hermes']) {
+    for (const key of ['opencode']) {
       assertInstalled(paths[key].main);
     }
   } finally {
@@ -473,26 +377,24 @@ test('per root failure does not abort others', () => {
   try {
     const home = path.join(tmpdir, 'home');
     fs.mkdirSync(home, { recursive: true });
-    const claudeSkillsRoot = path.join(home, '.claude', 'skills');
-    fs.mkdirSync(claudeSkillsRoot, { recursive: true });
-    createAgentHomes(home, null, ['codex', 'openclaw', 'hermes']);
-    fs.chmodSync(claudeSkillsRoot, 0o500);
+    const opencodeSkillsRoot = path.join(home, '.config', 'opencode', 'skills');
+    fs.mkdirSync(opencodeSkillsRoot, { recursive: true });
+    createAgentHomes(home, null, ['codex']);
+    fs.chmodSync(opencodeSkillsRoot, 0o500);
     const env = isolatedHomeEnv(home);
     let result;
     try {
       result = runInstall([], env);
     } finally {
-      fs.chmodSync(claudeSkillsRoot, 0o700);
+      fs.chmodSync(opencodeSkillsRoot, 0o700);
     }
 
     const paths = expectedPaths(home);
-    assert.strictEqual(fs.existsSync(path.join(paths.claude.main, 'SKILL.md')), false);
+    assert.strictEqual(fs.existsSync(path.join(paths.opencode.main, 'SKILL.md')), false);
     assertInstalled(paths.codex.main);
-    assertInstalled(paths.openclaw.main);
-    assertInstalled(paths.hermes.main);
     assert.strictEqual(result.status, 2, result.stdout + result.stderr);
     assert.ok(result.stderr.includes('[fail]'));
-    assert.ok(result.stderr.includes('Claude Code'));
+    assert.ok(result.stderr.includes('OpenCode'));
     assert.ok(result.stdout.includes('[ok]'));
   } finally {
     rmDir(tmpdir);

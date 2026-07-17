@@ -5,7 +5,7 @@ description: Use this skill when the user wants to initialize or change PingCode
 
 # PingCode Context Setup
 
-Use this skill to configure `.pingcode/cache.json` from an agent frontend such as Codex or Claude Code.
+Use this skill to configure `.pingcode/cache.json` from an agent frontend such as Codex or OpenCode.
 
 Do not run the terminal-interactive `pingcode context init` command by default. Instead, use the agent frontend Q&A protocol below so the user chooses in chat and the agent writes choices with non-interactive CLI commands.
 
@@ -27,7 +27,7 @@ export PINGCODE_WORKSPACE_CACHE=".pingcode/cache.json"
 
 ## Agent Frontend Q&A Protocol
 
-This protocol is intentionally platform-neutral and works in Codex, Claude Code, and similar agents:
+This protocol is intentionally platform-neutral and works in Codex, OpenCode, and similar agents:
 
 1. Run a list command for one choice group.
 2. Present a numbered list in chat. Include display name, username/email/identifier when present, and ID.

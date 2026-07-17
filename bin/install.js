@@ -22,7 +22,7 @@ const SUB_SKILLS = [
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
-const AGENT_KEYS = ["codex", "claude", "openclaw", "hermes", "opencode"];
+const AGENT_KEYS = ["codex", "opencode"];
 
 function defaultAgentRoots() {
   const home = os.homedir();
@@ -34,21 +34,6 @@ function defaultAgentRoots() {
       label: "Codex",
       agentHome: codexHome,
       skillsRoot: path.join(codexHome, "skills"),
-    },
-    claude: {
-      label: "Claude Code",
-      agentHome: path.join(home, ".claude"),
-      skillsRoot: path.join(home, ".claude", "skills"),
-    },
-    openclaw: {
-      label: "OpenClaw",
-      agentHome: path.join(home, ".openclaw"),
-      skillsRoot: path.join(home, ".openclaw", "skills"),
-    },
-    hermes: {
-      label: "Hermes",
-      agentHome: path.join(home, ".hermes"),
-      skillsRoot: path.join(home, ".hermes", "skills", "project-management"),
     },
     opencode: {
       label: "OpenCode",
@@ -65,18 +50,6 @@ function projectAgentRoots() {
       label: "Codex",
       skillsRoot: path.join(cwd, ".codex", "skills"),
     },
-    claude: {
-      label: "Claude Code",
-      skillsRoot: path.join(cwd, ".claude", "skills"),
-    },
-    openclaw: {
-      label: "OpenClaw",
-      skillsRoot: path.join(cwd, ".openclaw", "skills"),
-    },
-    hermes: {
-      label: "Hermes",
-      skillsRoot: path.join(cwd, ".hermes", "skills", "project-management"),
-    },
     opencode: {
       label: "OpenCode",
       skillsRoot: path.join(cwd, ".opencode", "skills"),
@@ -87,16 +60,13 @@ function projectAgentRoots() {
 function usage() {
   return [
     "Usage: npx pingcode-cli [--force] [--target <dir>]",
-    "                        [--codex-only|--claude-only|--openclaw-only|--hermes-only|--opencode-only]",
+    "                        [--codex-only|--opencode-only]",
     "                        [--interactive|--non-interactive]",
     "",
     "Default behavior installs the PingCode skill with sub-skills",
     "pingcode-ctx, pingcode-auth, pingcode-workitem",
     "only into supported agent homes that already exist for the current user:",
     "  Codex:     ~/.codex/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
-    "  Claude:    ~/.claude/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
-    "  OpenClaw:  ~/.openclaw/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
-    "  Hermes:    ~/.hermes/skills/project-management/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
     "  OpenCode:  ~/.config/opencode/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
     "",
     "Project-level OpenCode install is supported via --target:",
@@ -112,9 +82,6 @@ function usage() {
     "  --force            Overwrite existing installs in every selected root",
     "  --target DIR       Install only into DIR (skips the multi-root flow)",
     "  --codex-only       Install only into the Codex skills root",
-    "  --claude-only      Install only into the Claude Code skills root",
-    "  --openclaw-only    Install only into the OpenClaw skills root",
-    "  --hermes-only      Install only into the Hermes project-management root",
     "  --opencode-only    Install only into the OpenCode skills root",
     "  --interactive      Prompt for install scope and agent selection",
     "  --non-interactive  Skip prompts and use the default auto-install behavior",
@@ -135,9 +102,6 @@ function parseArgs(argv) {
   };
   const onlyFlags = {
     "--codex-only": "codex",
-    "--claude-only": "claude",
-    "--openclaw-only": "openclaw",
-    "--hermes-only": "hermes",
     "--opencode-only": "opencode",
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -160,7 +124,7 @@ function parseArgs(argv) {
     } else if (Object.prototype.hasOwnProperty.call(onlyFlags, arg)) {
       if (options.only && options.only !== onlyFlags[arg]) {
         throw new Error(
-          "Only one of --codex-only / --claude-only / --openclaw-only / --hermes-only / --opencode-only may be set",
+          "Only one of --codex-only / --opencode-only may be set",
         );
       }
       options.only = onlyFlags[arg];
@@ -169,7 +133,7 @@ function parseArgs(argv) {
     }
   }
   if (options.target && options.only) {
-    throw new Error("--target cannot be combined with --codex-only / --claude-only / --openclaw-only / --hermes-only / --opencode-only");
+    throw new Error("--target cannot be combined with --codex-only / --opencode-only");
   }
   if (options.interactive && (options.target || options.only)) {
     throw new Error("--interactive cannot be combined with --target or --*-only flags");
@@ -527,7 +491,7 @@ function runInteractiveInstall(options) {
       AGENT_KEYS.forEach((key, index) => {
         console.log(`  ${index + 1}) ${roots[key].label}`);
       });
-      rl.question("Enter choices (1-5): ", (answer) => {
+      rl.question(`Enter choices (1-${AGENT_KEYS.length}): `, (answer) => {
         const trimmed = answer.trim();
         if (!trimmed) {
           selectedKeys = [...AGENT_KEYS];
