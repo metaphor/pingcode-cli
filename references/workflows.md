@@ -34,11 +34,11 @@ Before routine work item queries or creates, ensure `.pingcode/cache.json` has `
 
 ### Agent Frontend Setup
 
-In Codex, OpenCode, or another agent frontend, prefer `$pingcode context init` when available. The `$pingcode-ctx` skill invokes `context init` underneath. The agent should not run a blocking Node.js readline flow unless the user explicitly asks for terminal interaction.
+In Codex, OpenCode, or another agent frontend, prefer the `$pingcode-ctx` skill when available. The `$pingcode-ctx` skill invokes `context init` underneath. The agent should not run a blocking Node.js readline flow unless the user explicitly asks for terminal interaction.
 
 1. Run the interactive setup skill:
    ```text
-   使用 $pingcode context init 初始化 PingCode 当前项目、迭代和用户
+   使用 $pingcode-ctx 初始化 PingCode 当前项目、迭代和用户
    ```
    The skill guides the user through selecting a project, sprint, and user via the agent's frontend chat.
 

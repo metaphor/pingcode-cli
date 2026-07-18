@@ -1,6 +1,6 @@
 {
   "name": "pingcode-cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "PingCode CLI and Codex skill, written in Node.js.",
   "license": "MIT",
   "repository": {
@@ -13,7 +13,6 @@
   },
   "files": [
     "README.md",
-    "skills/pingcode/SKILL.md",
     "skills/pingcode-ctx/SKILL.md",
     "skills/pingcode-auth/SKILL.md",
     "skills/pingcode-workitem/SKILL.md",

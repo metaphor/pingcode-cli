@@ -48,10 +48,10 @@ Use `--compact` by default for list/query output before showing results to the m
 
 ## Workflow
 
-1. Read `references/workflows.md` (bundled with the `$pingcode` skill) before mutating PingCode data.
+1. Read `references/workflows.md` (bundled with this skill) before mutating PingCode data.
 2. Resolve names to IDs using list commands, with `--compact` by default. PingCode write APIs usually require IDs.
 3. Execute write commands directly once the target project/product/work item and state IDs are unambiguous.
-4. Consult `references/api.md` (bundled with the `$pingcode` skill) for API reference.
+4. Consult `references/api.md` (bundled with this skill) for API reference.
 
 ## Defaults and Identity
 

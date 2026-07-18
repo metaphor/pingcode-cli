@@ -7,17 +7,13 @@ const readline = require("node:readline");
 const { stdin, stdout } = require("node:process");
 
 const packageRoot = path.resolve(__dirname, "..");
-const MAIN_SKILL = {
-  name: process.env.PINGCODE_SKILL_NAME || "pingcode",
-  entries: [
-    "skills/pingcode/SKILL.md",
-    "references",
-  ],
-};
 const SUB_SKILLS = [
   { name: "pingcode-ctx", entries: ["skills/pingcode-ctx/SKILL.md"] },
   { name: "pingcode-auth", entries: ["skills/pingcode-auth/SKILL.md"] },
-  { name: "pingcode-workitem", entries: ["skills/pingcode-workitem/SKILL.md"] },
+  {
+    name: "pingcode-workitem",
+    entries: ["skills/pingcode-workitem/SKILL.md", "references"],
+  },
 ];
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
@@ -63,14 +59,14 @@ function usage() {
     "                        [--codex-only|--opencode-only]",
     "                        [--interactive|--non-interactive]",
     "",
-    "Default behavior installs the PingCode skill with sub-skills",
+    "Default behavior installs the PingCode skills",
     "pingcode-ctx, pingcode-auth, pingcode-workitem",
     "only into supported agent homes that already exist for the current user:",
-    "  Codex:     ~/.codex/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
-    "  OpenCode:  ~/.config/opencode/skills/pingcode (and pingcode-ctx, pingcode-auth, pingcode-workitem)",
+    "  Codex:     ~/.codex/skills/{pingcode-ctx,pingcode-auth,pingcode-workitem}",
+    "  OpenCode:  ~/.config/opencode/skills/{pingcode-ctx,pingcode-auth,pingcode-workitem}",
     "",
     "Project-level OpenCode install is supported via --target:",
-    "  npx pingcode-cli --target \".opencode/skills/pingcode\" --force",
+    "  npx pingcode-cli --target \".opencode/skills\" --force",
     "",
     "Interactive install lets you choose global/project scope and agents:",
     "  npx pingcode-cli --interactive",
@@ -144,20 +140,6 @@ function parseArgs(argv) {
   return options;
 }
 
-function copyEntry(name, destinationRoot) {
-  const source = path.join(packageRoot, name);
-  const sourceStat = fs.statSync(source);
-  const destination = sourceStat.isDirectory()
-    ? path.join(destinationRoot, name)
-    : path.join(destinationRoot, path.basename(name));
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.cpSync(source, destination, {
-    recursive: true,
-    errorOnExist: false,
-    force: true,
-  });
-}
-
 function shellQuote(value) {
   if (/^[A-Za-z0-9_/:=.,+-]+$/.test(value)) {
     return value;
@@ -187,11 +169,6 @@ function rewriteDocFile(filePath) {
   }
 }
 
-function rewriteInstalledDocs(destinationRoot) {
-  rewriteDocFile(path.join(destinationRoot, "SKILL.md"));
-  rewriteDocFile(path.join(destinationRoot, "references", "workflows.md"));
-}
-
 function installSubSkill(parentDir, subSkill) {
   const target = path.join(parentDir, subSkill.name);
   fs.rmSync(target, { recursive: true, force: true });
@@ -199,35 +176,33 @@ function installSubSkill(parentDir, subSkill) {
   for (const entry of subSkill.entries) {
     const source = path.join(packageRoot, entry);
     const destination = path.join(target, path.basename(entry));
-    fs.copyFileSync(source, destination);
+    fs.cpSync(source, destination, { recursive: true, force: true });
   }
   rewriteDocFile(path.join(target, "SKILL.md"));
+  rewriteDocFile(path.join(target, "references", "workflows.md"));
   return target;
 }
 
 function installToTarget(targetDir, options) {
-  if (fs.existsSync(targetDir) && !options.force) {
+  const existing = SUB_SKILLS.map((sub) => path.join(targetDir, sub.name)).filter(
+    (dir) => fs.existsSync(dir),
+  );
+  if (existing.length > 0 && !options.force) {
     const error = new Error(
-      `PingCode skill already exists at ${targetDir}. Re-run with --force to overwrite it.`,
+      `PingCode skills already exist at ${existing[0]}. Re-run with --force to overwrite them.`,
     );
     error.code = "EEXIST_TARGET";
     throw error;
   }
-  fs.rmSync(targetDir, { recursive: true, force: true });
   fs.mkdirSync(targetDir, { recursive: true });
-  for (const entry of MAIN_SKILL.entries) {
-    copyEntry(entry, targetDir);
-  }
-  rewriteInstalledDocs(targetDir);
 
-  const parentDir = path.dirname(targetDir);
   const subTargets = SUB_SKILLS.map((sub) => ({
     name: sub.name,
-    target: installSubSkill(parentDir, sub),
+    target: installSubSkill(targetDir, sub),
   }));
 
   installGlobalWrapper();
-  return { mainTarget: targetDir, subTargets };
+  return { target: targetDir, subTargets };
 }
 
 function printCredentialGuidance() {
@@ -331,20 +306,20 @@ function runMultiRootInstall(options) {
 
   for (const key of keys) {
     const root = roots[key];
-    const mainTarget = path.join(root.skillsRoot, MAIN_SKILL.name);
+    const target = root.skillsRoot;
     try {
-      const result = installToTarget(mainTarget, options);
+      const result = installToTarget(target, options);
       successes.push({
         key,
         label: root.label,
-        mainTarget: result.mainTarget,
+        target: result.target,
         subTargets: result.subTargets,
       });
     } catch (error) {
       failures.push({
         key,
         label: root.label,
-        target: mainTarget,
+        target,
         message: error.message,
       });
     }
@@ -352,7 +327,7 @@ function runMultiRootInstall(options) {
 
   console.log("Install summary:");
   for (const item of successes) {
-    console.log(`  [ok]   ${item.label}: ${item.mainTarget}`);
+    console.log(`  [ok]   ${item.label}: ${item.target}`);
     for (const sub of item.subTargets) {
       console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
     }
@@ -389,7 +364,7 @@ function runSingleTargetInstall(options) {
   const target = options.target;
   try {
     const result = installToTarget(target, options);
-    console.log(`Installed PingCode skill to ${result.mainTarget}`);
+    console.log(`Installed PingCode skills to ${result.target}`);
     for (const sub of result.subTargets) {
       console.log(`Installed ${sub.name} skill to ${sub.target}`);
     }
@@ -416,7 +391,7 @@ function buildTargets(scope, keys) {
   return keys.map((key) => ({
     key,
     label: roots[key].label,
-    mainTarget: path.join(roots[key].skillsRoot, MAIN_SKILL.name),
+    target: roots[key].skillsRoot,
   }));
 }
 
@@ -424,7 +399,7 @@ function printInteractiveSummary(successes, failures, scope) {
   console.log("");
   console.log(`Install summary (${scope}):`);
   for (const item of successes) {
-    console.log(`  [ok]   ${item.label}: ${item.mainTarget}`);
+    console.log(`  [ok]   ${item.label}: ${item.target}`);
     for (const sub of item.subTargets) {
       console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
     }
@@ -463,7 +438,7 @@ function runInteractiveInstall(options) {
         console.log("Installing...");
         for (const target of targets) {
           try {
-            const result = installToTarget(target.mainTarget, options);
+            const result = installToTarget(target.target, options);
             successes.push({ ...target, subTargets: result.subTargets });
           } catch (err) {
             failures.push({ ...target, message: err.message });

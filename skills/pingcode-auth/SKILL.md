@@ -53,4 +53,4 @@ With a user token, `workitem list` no longer applies the current-user filter by 
 
 `@me` identity resolution does not change: `@me` still expands from the workspace cache, `PINGCODE_USER_ID`, or `PINGCODE_USER_NAME`, and is never inferred from the token itself.
 
-For work item commands that run under these tokens, see `$pingcode-workitem`. For workspace context (current user/project/sprint), see `$pingcode-ctx`. For shared rules and routing, see `$pingcode`.
+For work item commands that run under these tokens, see `$pingcode-workitem`. For workspace context (current user/project/sprint), see `$pingcode-ctx`.

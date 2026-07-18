@@ -74,7 +74,7 @@ If the workspace cache is empty, run `pingcode context init` first to populate i
 
 ## Completion
 
-When all three preferences are cached, report the selected current project, sprint, and user from `pingcode context list`. The normal `$pingcode` skill can then run routine work item queries and creates with cached defaults.
+When all three preferences are cached, report the selected current project, sprint, and user from `pingcode context list`. The `$pingcode-workitem` skill can then run routine work item queries and creates with cached defaults.
 
 ## Terminal Fallback
 
