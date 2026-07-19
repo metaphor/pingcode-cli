@@ -307,16 +307,29 @@ function printSubcommandHelp(subcommand) {
       break;
     case 'transition-history':
       console.log([
-        'Usage: pingcode idea transition-history <id|identifier>',
+        'Usage: pingcode idea transition-history <transition_history_id> <id|identifier>',
         '',
-        'Get transition history of an idea.',
+        'Get a single transition history record of an idea.',
+        '',
+        'The first argument is the transition history id; the second is the idea id or identifier.',
+        'For identifiers (format PROJ-123), first resolves to a raw id via keyword search.',
+        '',
+        'Examples:',
+        '  pingcode idea transition-history 64c3676c983bb9481ee1eea5 64b4d70ba368e6594360ea24',
+        '  pingcode idea transition-history 64c3676c983bb9481ee1eea5 SLC-1 --dry-run',
       ].join('\n'));
       break;
     case 'transition-histories':
       console.log([
-        'Usage: pingcode idea transition-histories [options]',
+        'Usage: pingcode idea transition-histories <id|identifier>',
         '',
-        'List transition histories of ideas.',
+        'List transition history records of an idea.',
+        '',
+        'For identifiers (format PROJ-123), first resolves to a raw id via keyword search.',
+        '',
+        'Examples:',
+        '  pingcode idea transition-histories 64b4d70ba368e6594360ea24 --compact',
+        '  pingcode idea transition-histories SLC-1 --dry-run',
       ].join('\n'));
       break;
     default:
@@ -551,6 +564,154 @@ async function runGet(client, opts, args) {
     'GET',
     `/v1/ship/ideas/${args.target}`,
     Object.keys(params).length > 0 ? params : null,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
+// ── Transition Histories subcommand (list) ────────────────────────────
+
+function parseTransitionHistoriesArgs(tokens) {
+  let target = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      if (target === null) {
+        target = arg;
+        continue;
+      }
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea transition-histories --help for usage.`);
+    }
+    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+  }
+  if (!target) {
+    throw new core.PingCodeError('An idea id or identifier is required. Use idea transition-histories --help for usage.');
+  }
+  return { target };
+}
+
+async function runTransitionHistories(client, opts, args) {
+  if (isIdentifier(args.target)) {
+    if (opts.dry_run) {
+      return {
+        dry_run: true,
+        resolution: {
+          method: 'GET',
+          path: '/v1/ship/ideas',
+          params: { keywords: args.target },
+        },
+        list: {
+          method: 'GET',
+          path: '/v1/ship/ideas/{id}/transition_histories',
+        },
+      };
+    }
+
+    const resolved = await client.request(
+      'GET',
+      '/v1/ship/ideas',
+      { keywords: args.target },
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+    const values = core.pageValues(resolved);
+    if (values.length === 0) {
+      throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
+    }
+    const ideaId = values[0].id;
+    return await client.request(
+      'GET',
+      `/v1/ship/ideas/${ideaId}/transition_histories`,
+      null,
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+  }
+
+  return await client.request(
+    'GET',
+    `/v1/ship/ideas/${args.target}/transition_histories`,
+    null,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
+// ── Transition History subcommand (single) ────────────────────────────
+
+function parseTransitionHistoryArgs(tokens) {
+  const positionals = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      positionals.push(arg);
+      continue;
+    }
+    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+  }
+  return { positionals };
+}
+
+async function runTransitionHistory(client, opts, positionals) {
+  if (positionals.length < 2) {
+    throw new core.PingCodeError('A transition history id and an idea id/identifier are required. Use idea transition-history --help for usage.');
+  }
+  if (positionals.length > 2) {
+    throw new core.PingCodeError(`Unexpected argument: ${positionals[2]}. Use idea transition-history --help for usage.`);
+  }
+
+  const historyId = positionals[0];
+  const ideaRef = positionals[1];
+
+  if (isIdentifier(ideaRef)) {
+    if (opts.dry_run) {
+      return {
+        dry_run: true,
+        resolution: {
+          method: 'GET',
+          path: '/v1/ship/ideas',
+          params: { keywords: ideaRef },
+        },
+        get: {
+          method: 'GET',
+          path: `/v1/ship/ideas/{id}/transition_histories/${historyId}`,
+        },
+      };
+    }
+
+    const resolved = await client.request(
+      'GET',
+      '/v1/ship/ideas',
+      { keywords: ideaRef },
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+    const values = core.pageValues(resolved);
+    if (values.length === 0) {
+      throw new core.PingCodeError(`No idea found with identifier ${ideaRef}`);
+    }
+    const ideaId = values[0].id;
+    return await client.request(
+      'GET',
+      `/v1/ship/ideas/${ideaId}/transition_histories/${historyId}`,
+      null,
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+  }
+
+  return await client.request(
+    'GET',
+    `/v1/ship/ideas/${ideaRef}/transition_histories/${historyId}`,
+    null,
     null,
     { dry_run: opts.dry_run, use_workspace_cache: true },
   );
@@ -1099,9 +1260,16 @@ async function run(argv) {
         result = await runDictionary(client, opts, prioritiesArgs, 'priorities');
         break;
       }
-      case 'transition-history':
-      case 'transition-histories':
-        throw new core.PingCodeError(`Idea subcommand not yet implemented: ${subcommand}`);
+      case 'transition-histories': {
+        const thListArgs = parseTransitionHistoriesArgs(subArgs);
+        result = await runTransitionHistories(client, opts, thListArgs);
+        break;
+      }
+      case 'transition-history': {
+        const thArgs = parseTransitionHistoryArgs(subArgs);
+        result = await runTransitionHistory(client, opts, thArgs.positionals);
+        break;
+      }
       default:
         throw new core.PingCodeError(`Unknown idea subcommand: ${subcommand}`);
     }
