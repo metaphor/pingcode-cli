@@ -15,6 +15,7 @@ module.exports = { ...core };
 // ./shared and ../core, never from ../pingcode.)
 require('./commands/comment');
 require('./commands/context');
+require('./commands/idea');
 require('./commands/workitem');
 require('./commands/auth');
 
