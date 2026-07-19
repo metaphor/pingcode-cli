@@ -151,6 +151,19 @@ function printSubcommandHelp(subcommand) {
         'Usage: pingcode idea create [options]',
         '',
         'Create an idea.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '  --title TEXT                 (required) Idea title (max 255 chars)',
+        '  --assignee NAME              Assignee (name resolvable from workspace cache)',
+        '  --description TEXT           Description',
+        '  --suite ID                   Raw suite id',
+        '  --priority ID                Raw priority id',
+        '  --properties JSON            Properties as JSON object',
+        '',
+        'Examples:',
+        '  pingcode idea create --product 6422711c3f12e6c1e46d40e9 --title "New feature"',
+        '  pingcode idea create --product 6422711c3f12e6c1e46d40e9 --title "New" --assignee john --priority 5cb9466afda1ce4ca0090005 --dry-run',
       ].join('\n'));
       break;
     case 'update':
@@ -158,6 +171,23 @@ function printSubcommandHelp(subcommand) {
         'Usage: pingcode idea update <id|identifier> [options]',
         '',
         'Update an idea.',
+        '',
+        'Options:',
+        '  --title TEXT                 New title',
+        '  --description TEXT           New description',
+        '  --state ID                   Raw state id',
+        '  --priority ID                Raw priority id',
+        '  --assignee NAME              Assignee (name resolvable from workspace cache)',
+        '  --progress NUM               Progress (0 to 1, at most 2 decimal places)',
+        '  --plan-at JSON               Plan time range as JSON: {"from":<ts>,"to":<ts>,"granularity":"day"}',
+        '  --real-at JSON               Real time range as JSON (same format as --plan-at)',
+        '  --plan ID                    Raw plan id',
+        '  --suite ID                   Raw suite id',
+        '  --properties JSON            Properties as JSON object',
+        '',
+        'Examples:',
+        '  pingcode idea update SLC-1 --title "Updated title"',
+        '  pingcode idea update SLC-1 --state 63e1bf51898a0be5a2d21b2a --progress 0.5 --dry-run',
       ].join('\n'));
       break;
     case 'list':
@@ -484,6 +514,312 @@ async function runGet(client, opts, args) {
   );
 }
 
+// ── Create subcommand ──────────────────────────────────────────────────
+
+function parseCreateArgs(tokens) {
+  const args = {
+    product: null,
+    title: null,
+    assignee: null,
+    description: null,
+    suite: null,
+    priority: null,
+    properties: null,
+  };
+  const stringFlags = {
+    '--product': 'product',
+    '--title': 'title',
+    '--assignee': 'assignee',
+    '--description': 'description',
+    '--suite': 'suite',
+    '--priority': 'priority',
+    '--properties': 'properties',
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use idea create --help for usage.`);
+      }
+    } else {
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea create --help for usage.`);
+    }
+  }
+  return args;
+}
+
+async function runCreate(client, opts, args) {
+  // Validate required fields
+  if (typeof args.product !== 'string' || !args.product.trim()) {
+    throw new core.PingCodeError('--product is required and must be a raw id. Use idea create --help for usage.');
+  }
+  if (!isRawId(args.product)) {
+    throw new core.PingCodeError('--product must be a raw id');
+  }
+  if (typeof args.title !== 'string' || !args.title.trim()) {
+    throw new core.PingCodeError('--title is required and must be non-empty. Use idea create --help for usage.');
+  }
+
+  // Build body
+  const body = {
+    product_id: args.product,
+    title: args.title,
+  };
+
+  // Description
+  if (args.description) {
+    body.description = args.description;
+  }
+
+  // Suite (raw ID)
+  if (args.suite) {
+    if (!isRawId(args.suite)) {
+      throw new core.PingCodeError('--suite must be a raw id');
+    }
+    body.suite_id = args.suite;
+  }
+
+  // Priority (raw ID)
+  if (args.priority) {
+    if (!isRawId(args.priority)) {
+      throw new core.PingCodeError('--priority must be a raw id');
+    }
+    body.priority_id = args.priority;
+  }
+
+  // Properties (JSON object)
+  if (args.properties) {
+    body.properties = core.parseJsonObject(args.properties, '--properties');
+  }
+
+  // Assignee (name resolvable from cache)
+  if (args.assignee) {
+    const cache = client.workspaceCache;
+    const userId = core.cachedUserId(args.assignee, cache);
+    body.assignee_id = userId;
+  }
+
+  return await client.request(
+    'POST',
+    '/v1/ship/ideas',
+    null,
+    body,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
+// ── Update subcommand ──────────────────────────────────────────────────
+
+function parseUpdateArgs(tokens) {
+  const args = {
+    target: null,
+    title: null,
+    description: null,
+    state: null,
+    priority: null,
+    assignee: null,
+    progress: null,
+    planAt: null,
+    realAt: null,
+    plan: null,
+    suite: null,
+    properties: null,
+  };
+  const stringFlags = {
+    '--title': 'title',
+    '--description': 'description',
+    '--state': 'state',
+    '--priority': 'priority',
+    '--assignee': 'assignee',
+    '--progress': 'progress',
+    '--plan-at': 'planAt',
+    '--real-at': 'realAt',
+    '--plan': 'plan',
+    '--suite': 'suite',
+    '--properties': 'properties',
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      if (args.target === null) {
+        args.target = arg;
+        continue;
+      }
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea update --help for usage.`);
+    }
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use idea update --help for usage.`);
+      }
+    }
+  }
+
+  if (!args.target) {
+    throw new core.PingCodeError('An idea id or identifier is required. Use idea update --help for usage.');
+  }
+
+  const hasUpdateField = Object.entries(args).some(
+    ([key, value]) => key !== 'target' && value !== null,
+  );
+  if (!hasUpdateField) {
+    throw new core.PingCodeError('At least one field to update is required. Use idea update --help for usage.');
+  }
+
+  return args;
+}
+
+function validateProgress(value) {
+  const num = Number(value);
+  if (Number.isNaN(num)) {
+    throw new core.PingCodeError('--progress must be a number between 0 and 1');
+  }
+  if (num < 0 || num > 1) {
+    throw new core.PingCodeError('--progress must be between 0 and 1');
+  }
+  // At most 2 decimal places
+  const str = String(value);
+  const dotIndex = str.indexOf('.');
+  if (dotIndex !== -1 && str.length - dotIndex - 1 > 2) {
+    throw new core.PingCodeError('--progress must have at most 2 decimal places');
+  }
+  return num;
+}
+
+function validatePlanAt(raw, label) {
+  const obj = core.parseJsonObject(raw, label);
+  if (!obj) return null;
+  if (typeof obj.from === 'undefined' || typeof obj.to === 'undefined' || typeof obj.granularity === 'undefined') {
+    throw new core.PingCodeError(`${label} must include from, to, and granularity fields`);
+  }
+  const validGranularities = new Set(['year', 'quarter', 'month', 'day']);
+  if (!validGranularities.has(obj.granularity)) {
+    throw new core.PingCodeError(`${label} granularity must be one of: year, quarter, month, day`);
+  }
+  return obj;
+}
+
+async function runUpdate(client, opts, args) {
+  const body = {};
+
+  if (args.title) body.title = args.title;
+  if (args.description) body.description = args.description;
+
+  if (args.state) {
+    if (!isRawId(args.state)) {
+      throw new core.PingCodeError('--state must be a raw id');
+    }
+    body.state_id = args.state;
+  }
+  if (args.priority) {
+    if (!isRawId(args.priority)) {
+      throw new core.PingCodeError('--priority must be a raw id');
+    }
+    body.priority_id = args.priority;
+  }
+  if (args.assignee) {
+    const cache = client.workspaceCache;
+    const userId = core.cachedUserId(args.assignee, cache);
+    body.assignee_id = userId;
+  }
+  if (args.progress) {
+    body.progress = validateProgress(args.progress);
+  }
+  if (args.planAt) {
+    body.plan_at = validatePlanAt(args.planAt, '--plan-at');
+  }
+  if (args.realAt) {
+    body.real_at = validatePlanAt(args.realAt, '--real-at');
+  }
+  if (args.plan) {
+    if (!isRawId(args.plan)) {
+      throw new core.PingCodeError('--plan must be a raw id');
+    }
+    body.plan_id = args.plan;
+  }
+  if (args.suite) {
+    if (!isRawId(args.suite)) {
+      throw new core.PingCodeError('--suite must be a raw id');
+    }
+    body.suite_id = args.suite;
+  }
+  if (args.properties) {
+    body.properties = core.parseJsonObject(args.properties, '--properties');
+  }
+
+  // Resolve identifier to raw id if needed
+  let targetId = args.target;
+  if (isIdentifier(args.target)) {
+    if (opts.dry_run) {
+      return {
+        dry_run: true,
+        resolution: {
+          method: 'GET',
+          path: '/v1/ship/ideas',
+          params: { keywords: args.target },
+        },
+        update: {
+          method: 'PATCH',
+          path: '/v1/ship/ideas/{id}',
+          json: body,
+        },
+      };
+    }
+
+    const resolved = await client.request(
+      'GET',
+      '/v1/ship/ideas',
+      { keywords: args.target },
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+    const values = core.pageValues(resolved);
+    if (values.length === 0) {
+      throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
+    }
+    targetId = values[0].id;
+  }
+
+  return await client.request(
+    'PATCH',
+    `/v1/ship/ideas/${targetId}`,
+    null,
+    body,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────
 
 async function run(argv) {
@@ -523,8 +859,16 @@ async function run(argv) {
         result = await runGet(client, opts, getArgs);
         break;
       }
-      case 'create':
-      case 'update':
+      case 'create': {
+        const createArgs = parseCreateArgs(subArgs);
+        result = await runCreate(client, opts, createArgs);
+        break;
+      }
+      case 'update': {
+        const updateArgs = parseUpdateArgs(subArgs);
+        result = await runUpdate(client, opts, updateArgs);
+        break;
+      }
       case 'search':
       case 'states':
       case 'properties':
