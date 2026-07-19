@@ -7,14 +7,10 @@ const readline = require("node:readline");
 const { stdin, stdout } = require("node:process");
 
 const packageRoot = path.resolve(__dirname, "..");
-const SUB_SKILLS = [
-  { name: "pingcode-ctx", entries: ["skills/pingcode-ctx/SKILL.md"] },
-  { name: "pingcode-auth", entries: ["skills/pingcode-auth/SKILL.md"] },
-  {
-    name: "pingcode-workitem",
-    entries: ["skills/pingcode-workitem/SKILL.md", "references"],
-  },
-];
+const SKILL = {
+  name: "pingcode",
+  entries: ["skills/pingcode/SKILL.md", "skills/pingcode/references"],
+};
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
@@ -59,11 +55,11 @@ function usage() {
     "                        [--codex-only|--opencode-only]",
     "                        [--interactive|--non-interactive]",
     "",
-    "Default behavior installs the PingCode skills",
-    "pingcode-ctx, pingcode-auth, pingcode-workitem",
+    "Default behavior installs the PingCode skill",
+    "pingcode",
     "only into supported agent homes that already exist for the current user:",
-    "  Codex:     ~/.codex/skills/{pingcode-ctx,pingcode-auth,pingcode-workitem}",
-    "  OpenCode:  ~/.config/opencode/skills/{pingcode-ctx,pingcode-auth,pingcode-workitem}",
+    "  Codex:     ~/.codex/skills/pingcode",
+    "  OpenCode:  ~/.config/opencode/skills/pingcode",
     "",
     "Project-level OpenCode install is supported via --target:",
     "  npx pingcode-cli --target \".opencode/skills\" --force",
@@ -179,14 +175,17 @@ function installSubSkill(parentDir, subSkill) {
     fs.cpSync(source, destination, { recursive: true, force: true });
   }
   rewriteDocFile(path.join(target, "SKILL.md"));
-  rewriteDocFile(path.join(target, "references", "workflows.md"));
   return target;
 }
 
 function installToTarget(targetDir, options) {
-  const existing = SUB_SKILLS.map((sub) => path.join(targetDir, sub.name)).filter(
-    (dir) => fs.existsSync(dir),
-  );
+  const oldAliases = ["pingcode-auth", "pingcode-ctx", "pingcode-workitem"];
+
+  // Detect existing installs: the new pingcode skill or any old alias directories
+  const existing = [path.join(targetDir, SKILL.name)]
+    .concat(oldAliases.map((name) => path.join(targetDir, name)))
+    .filter((dir) => fs.existsSync(dir));
+
   if (existing.length > 0 && !options.force) {
     const error = new Error(
       `PingCode skills already exist at ${existing[0]}. Re-run with --force to overwrite them.`,
@@ -194,15 +193,24 @@ function installToTarget(targetDir, options) {
     error.code = "EEXIST_TARGET";
     throw error;
   }
+
+  // Clean up old alias directories unconditionally before installing
+  for (const alias of oldAliases) {
+    const aliasDir = path.join(targetDir, alias);
+    if (fs.existsSync(aliasDir)) {
+      fs.rmSync(aliasDir, { recursive: true, force: true });
+    }
+  }
+
   fs.mkdirSync(targetDir, { recursive: true });
 
-  const subTargets = SUB_SKILLS.map((sub) => ({
-    name: sub.name,
-    target: installSubSkill(targetDir, sub),
-  }));
+  const result = {
+    name: SKILL.name,
+    target: installSubSkill(targetDir, SKILL),
+  };
 
   installGlobalWrapper();
-  return { target: targetDir, subTargets };
+  return { target: targetDir, subTargets: [result] };
 }
 
 function printCredentialGuidance() {
@@ -328,9 +336,6 @@ function runMultiRootInstall(options) {
   console.log("Install summary:");
   for (const item of successes) {
     console.log(`  [ok]   ${item.label}: ${item.target}`);
-    for (const sub of item.subTargets) {
-      console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
-    }
   }
   for (const item of skipped) {
     console.log(`  [skip] ${item.label}: ${item.agentHome} does not exist`);
@@ -364,10 +369,7 @@ function runSingleTargetInstall(options) {
   const target = options.target;
   try {
     const result = installToTarget(target, options);
-    console.log(`Installed PingCode skills to ${result.target}`);
-    for (const sub of result.subTargets) {
-      console.log(`Installed ${sub.name} skill to ${sub.target}`);
-    }
+    console.log(`Installed PingCode skill to ${result.target}`);
     printCredentialGuidance();
     return 0;
   } catch (error) {
@@ -400,9 +402,6 @@ function printInteractiveSummary(successes, failures, scope) {
   console.log(`Install summary (${scope}):`);
   for (const item of successes) {
     console.log(`  [ok]   ${item.label}: ${item.target}`);
-    for (const sub of item.subTargets) {
-      console.log(`         ${item.label} (${sub.name}): ${sub.target}`);
-    }
   }
   for (const item of failures) {
     console.error(`  [fail] ${item.label}: ${item.target}`);
