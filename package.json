@@ -15,8 +15,8 @@
     "url": "https://github.com/metaphor/pingcode-cli/issues"
   },
   "bin": {
-    "pingcode": "./scripts/pingcode.js",
-    "pingcode-cli": "./bin/install.js"
+    "pingcode": "scripts/pingcode.js",
+    "pingcode-cli": "bin/install.js"
   },
   "files": [
     "README.md",
