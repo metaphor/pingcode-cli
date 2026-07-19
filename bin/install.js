@@ -51,7 +51,7 @@ function projectAgentRoots() {
 
 function usage() {
   return [
-    "Usage: npx pingcode-cli [--force] [--target <dir>]",
+    "Usage: npx @metaphorli/pingcode-cli [--force] [--target <dir>]",
     "                        [--codex-only|--opencode-only]",
     "                        [--interactive|--non-interactive]",
     "",
@@ -62,13 +62,13 @@ function usage() {
     "  OpenCode:  ~/.config/opencode/skills/pingcode",
     "",
     "Project-level OpenCode install is supported via --target:",
-    "  npx pingcode-cli --target \".opencode/skills\" --force",
+    "  npx @metaphorli/pingcode-cli --target \".opencode/skills\" --force",
     "",
     "Interactive install lets you choose global/project scope and agents:",
-    "  npx pingcode-cli --interactive",
+    "  npx @metaphorli/pingcode-cli --interactive",
     "",
     "Non-interactive auto-install (useful for CI/scripts):",
-    "  npx pingcode-cli --non-interactive",
+    "  npx @metaphorli/pingcode-cli --non-interactive",
     "",
     "Options:",
     "  --force            Overwrite existing installs in every selected root",
@@ -225,7 +225,7 @@ function installGlobalWrapper() {
   if (process.platform === "win32") {
     console.log("");
     console.log("For a global pingcode command on Windows, run:");
-    console.log("  npm install -g pingcode-cli");
+    console.log("  npm install -g @metaphorli/pingcode-cli");
     return;
   }
 

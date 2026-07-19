@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-npx pingcode-cli@latest
+npx @metaphorli/pingcode-cli@latest
 ```
 
 一条命令会检测当前用户已存在的 Codex / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录，其中包含 `references/` 子目录：
@@ -37,7 +37,7 @@ export PINGCODE_CLIENT_SECRET="..."
 直接运行安装命令会进入交互式向导：
 
 ```bash
-npx pingcode-cli@latest
+npx @metaphorli/pingcode-cli@latest
 ```
 
 流程：
@@ -66,7 +66,7 @@ Enter choices (1-2): 2
 在自动化环境中使用 `--non-interactive`，会保持原来的自动检测并安装到已有 Agent 目录的逻辑：
 
 ```bash
-npx pingcode-cli@latest --non-interactive --force
+npx @metaphorli/pingcode-cli@latest --non-interactive --force
 ```
 
 ### 更新
@@ -74,7 +74,7 @@ npx pingcode-cli@latest --non-interactive --force
 升级到最新版本（覆盖当前用户已存在 Agent 的默认目录）：
 
 ```bash
-npx pingcode-cli@latest --force
+npx @metaphorli/pingcode-cli@latest --force
 ```
 
 ### 高级用法
@@ -82,16 +82,16 @@ npx pingcode-cli@latest --force
 只安装到某一个 Agent：
 
 ```bash
-npx pingcode-cli@latest --codex-only --force
-npx pingcode-cli@latest --opencode-only --force
+npx @metaphorli/pingcode-cli@latest --codex-only --force
+npx @metaphorli/pingcode-cli@latest --opencode-only --force
 ```
 
 安装到自定义目录（例如项目本地的 `.codex/skills` 或 OpenCode 项目级 `.opencode/skills`）：
 
 ```bash
-npx pingcode-cli@latest --target ".codex/skills" --force
-npx pingcode-cli@latest --target "$HOME/.config/opencode/skills" --force
-npx pingcode-cli@latest --target ".opencode/skills" --force
+npx @metaphorli/pingcode-cli@latest --target ".codex/skills" --force
+npx @metaphorli/pingcode-cli@latest --target "$HOME/.config/opencode/skills" --force
+npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 ```
 
 `--target` 与 `--codex-only` / `--opencode-only` 互斥；指定 `--target` 后只会安装到给定目录，不再走多 Agent 默认流程。
@@ -104,7 +104,7 @@ npx pingcode-cli@latest --target ".opencode/skills" --force
 请帮我安装 PingCode CLI，让当前 AI Agent 可以通过 PingCode 官方 REST API 查询和操作项目/产品数据。
 
 安装要求：
-1. 直接运行：npx pingcode-cli@latest --force
+1. 直接运行：npx @metaphorli/pingcode-cli@latest --force
    该命令会检测当前用户已存在的 Codex 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
 2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode` 目录，且目录里有 SKILL.md 入口文件和 `references/` 子目录（按你当前使用的 Agent 选择对应路径即可）：
    - ~/.codex/skills/pingcode/SKILL.md

@@ -1,8 +1,11 @@
 {
-  "name": "pingcode-cli",
+  "name": "@metaphorli/pingcode-cli",
   "version": "0.3.0",
   "description": "PingCode CLI and Codex skill, written in Node.js.",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/metaphor/pingcode-cli.git"

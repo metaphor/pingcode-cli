@@ -439,7 +439,7 @@ test('windows platform prints npm install guidance', () => {
     assert.strictEqual(fs.existsSync(wrapperPath), false, 'Windows should not create POSIX wrapper');
 
     // Windows guidance should be printed
-    assert.ok(result.stdout.includes('npm install -g pingcode-cli'), `Expected Windows guidance, got: ${result.stdout.substring(0, 500)}`);
+    assert.ok(result.stdout.includes('npm install -g @metaphorli/pingcode-cli'), `Expected Windows guidance, got: ${result.stdout.substring(0, 500)}`);
   } finally {
     rmDir(tmpdir);
   }
