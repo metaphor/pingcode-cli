@@ -72,6 +72,7 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 支持通过 OAuth2 `authorization_code` 获取用户令牌，适合以个人身份操作 PingCode。
 
 ```bash
+# 默认打印授权 URL 并提示粘贴授权码；加 --browser 则自动打开浏览器
 pingcode auth login --client-id ID --client-secret SECRET
 pingcode workitem list --state 进行中 --compact
 ```
