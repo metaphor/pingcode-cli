@@ -359,41 +359,34 @@ async function runGet(client, opts, args) {
   }
 
   if (isIdentifier(args.target)) {
+    const searchParams = { keywords: args.target };
+    if (args.include_public_image_token) {
+      searchParams.include_public_image_token = 'description';
+    }
+
     if (opts.dry_run) {
       return {
         dry_run: true,
-        resolution: {
-          method: 'GET',
-          path: '/v1/ship/ideas',
-          params: { keywords: args.target },
-        },
         get: {
           method: 'GET',
-          path: '/v1/ship/ideas/{id}',
-          params: Object.keys(params).length > 0 ? params : undefined,
+          path: '/v1/ship/ideas',
+          params: searchParams,
         },
       };
     }
 
-    const resolved = await client.request(
+    const result = await client.request(
       'GET',
       '/v1/ship/ideas',
-      { keywords: args.target },
+      searchParams,
       null,
       { dry_run: false, use_workspace_cache: true },
     );
-    const values = core.pageValues(resolved);
+    const values = core.pageValues(result);
     if (values.length === 0) {
       throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
     }
-    const ideaId = values[0].id;
-    return await client.request(
-      'GET',
-      `/v1/ship/ideas/${ideaId}`,
-      Object.keys(params).length > 0 ? params : null,
-      null,
-      { dry_run: false, use_workspace_cache: true },
-    );
+    return values[0];
   }
 
   return await client.request(

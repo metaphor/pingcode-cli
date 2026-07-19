@@ -472,7 +472,7 @@ testInCleanTmp('idea list dry-run with all filters', async (t, tmpdir) => {
 
 // ── Get dry-run ───────────────────────────────────────────────────────
 
-testInCleanTmp('idea get with identifier returns compound dry-run', async (t, tmpdir) => {
+testInCleanTmp('idea get with identifier returns flat search dry-run', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, { preferences: {} });
 
@@ -490,14 +490,11 @@ testInCleanTmp('idea get with identifier returns compound dry-run', async (t, tm
 
   const result = JSON.parse(output.trim());
   assert.strictEqual(result.dry_run, true);
-  assert.ok(result.resolution);
-  assert.strictEqual(result.resolution.method, 'GET');
-  assert.strictEqual(result.resolution.path, '/v1/ship/ideas');
-  assert.strictEqual(result.resolution.params.keywords, 'SLC-1');
-  assert.ok(result.get);
+  assert.strictEqual('resolution' in result, false);
   assert.strictEqual(result.get.method, 'GET');
-  assert.strictEqual(result.get.path, '/v1/ship/ideas/{id}');
-  assert.strictEqual(result.get.params, undefined);
+  assert.strictEqual(result.get.path, '/v1/ship/ideas');
+  assert.strictEqual(result.get.params.keywords, 'SLC-1');
+  assert.strictEqual('include_public_image_token' in result.get.params, false);
 });
 
 testInCleanTmp('idea get with identifier and --include-public-image-token', async (t, tmpdir) => {
@@ -519,7 +516,9 @@ testInCleanTmp('idea get with identifier and --include-public-image-token', asyn
 
   const result = JSON.parse(output.trim());
   assert.strictEqual(result.dry_run, true);
-  assert.deepStrictEqual(result.get.params, { include_public_image_token: 'description' });
+  assert.strictEqual('resolution' in result, false);
+  assert.strictEqual(result.get.params.keywords, 'SLC-1');
+  assert.deepStrictEqual(result.get.params.include_public_image_token, 'description');
 });
 
 testInCleanTmp('idea get with raw id returns flat dry-run', async (t, tmpdir) => {
