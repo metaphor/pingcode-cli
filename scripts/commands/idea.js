@@ -94,6 +94,16 @@ function clientFromOpts(opts) {
   });
 }
 
+// ── Identifier helpers ─────────────────────────────────────────────────
+
+function isIdentifier(arg) {
+  return /^[A-Z]{3,6}-\d+$/.test(arg);
+}
+
+function isRawId(arg) {
+  return /^[a-fA-F0-9]{24,32}$/.test(arg);
+}
+
 // ── Help ───────────────────────────────────────────────────────────────
 
 function printHelp() {
@@ -154,21 +164,31 @@ function printSubcommandHelp(subcommand) {
       console.log([
         'Usage: pingcode idea list [options]',
         '',
-        'List ideas.',
+        'Options:',
+        '  --product ID                 Filter by raw product id',
+        '  --state ID                   Filter by raw state id',
+        '  --priority ID                Filter by raw priority id',
+        '  --keywords TEXT              Filter by keywords (matches identifier and title)',
+        '  --include-public-image-token  Include image access token in response',
       ].join('\n'));
       break;
     case 'show':
       console.log([
-        'Usage: pingcode idea show <id|identifier>',
+        'Usage: pingcode idea show <identifier>',
         '',
-        'Show a single idea by id or identifier.',
+        'Show a single idea by identifier (e.g. SLC-1).',
+        'Only identifiers (format PROJ-123) are accepted; use `idea get` for raw ids.',
       ].join('\n'));
       break;
     case 'get':
       console.log([
         'Usage: pingcode idea get <id|identifier>',
         '',
-        'Get a single idea by id or identifier.',
+        'Get a single idea by raw id or identifier.',
+        'For identifiers (format PROJ-123), first resolves to a raw id via keyword search.',
+        '',
+        'Options:',
+        '  --include-public-image-token  Include image access token in response',
       ].join('\n'));
       break;
     case 'search':
@@ -232,6 +252,238 @@ function printSubcommandHelp(subcommand) {
   }
 }
 
+// ── List subcommand ───────────────────────────────────────────────────
+
+function parseListArgs(tokens) {
+  const args = {
+    product: null,
+    state: null,
+    priority: null,
+    keywords: null,
+    include_public_image_token: false,
+  };
+  const stringFlags = {
+    '--product': 'product',
+    '--state': 'state',
+    '--priority': 'priority',
+    '--keywords': 'keywords',
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      if (arg === '--include-public-image-token') {
+        args.include_public_image_token = true;
+        continue;
+      }
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use idea list --help for usage.`);
+      }
+    } else {
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea list --help for usage.`);
+    }
+  }
+  return args;
+}
+
+async function runList(client, opts, args) {
+  const params = {};
+  if (args.product) {
+    if (!isRawId(args.product)) {
+      throw new core.PingCodeError('--product must be a raw id');
+    }
+    params.product_id = args.product;
+  }
+  if (args.state) {
+    if (!isRawId(args.state)) {
+      throw new core.PingCodeError('--state must be a raw id');
+    }
+    params.state_id = args.state;
+  }
+  if (args.priority) {
+    if (!isRawId(args.priority)) {
+      throw new core.PingCodeError('--priority must be a raw id');
+    }
+    params.priority_id = args.priority;
+  }
+  if (args.keywords) {
+    params.keywords = args.keywords;
+  }
+  if (args.include_public_image_token) {
+    params.include_public_image_token = 'description';
+  }
+
+  return await client.request(
+    'GET',
+    '/v1/ship/ideas',
+    params,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
+// ── Show subcommand ──────────────────────────────────────────────────
+
+function parseShowArgs(tokens) {
+  let target = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      if (target === null) {
+        target = arg;
+        continue;
+      }
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea show --help for usage.`);
+    }
+    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+  }
+  if (!target) {
+    throw new core.PingCodeError('An idea identifier is required. Use idea show --help for usage.');
+  }
+  return { target };
+}
+
+async function runShow(client, opts, args) {
+  if (!isIdentifier(args.target)) {
+    if (isRawId(args.target)) {
+      throw new core.PingCodeError('Idea show requires an identifier, not a raw id. Use idea get for raw ids.');
+    }
+    throw new core.PingCodeError(`Invalid idea identifier: ${args.target}. Expected format like PROJ-123.`);
+  }
+
+  if (opts.dry_run) {
+    return {
+      dry_run: true,
+      resolution: {
+        method: 'GET',
+        path: '/v1/ship/ideas',
+        params: { keywords: args.target },
+      },
+      show: {
+        method: 'GET',
+        path: '/v1/ship/ideas',
+        params: { keywords: args.target },
+      },
+    };
+  }
+
+  const result = await client.request(
+    'GET',
+    '/v1/ship/ideas',
+    { keywords: args.target },
+    null,
+    { dry_run: false, use_workspace_cache: true },
+  );
+
+  const values = core.pageValues(result);
+  if (values.length === 0) {
+    throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
+  }
+  return values[0];
+}
+
+// ── Get subcommand ───────────────────────────────────────────────────
+
+function parseGetArgs(tokens) {
+  let target = null;
+  let includePublicImageToken = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      if (target === null) {
+        target = arg;
+        continue;
+      }
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea get --help for usage.`);
+    }
+    if (arg === '--include-public-image-token') {
+      includePublicImageToken = true;
+      continue;
+    }
+    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+  }
+  if (!target) {
+    throw new core.PingCodeError('An idea id or identifier is required. Use idea get --help for usage.');
+  }
+  return { target, include_public_image_token: includePublicImageToken };
+}
+
+async function runGet(client, opts, args) {
+  const params = {};
+  if (args.include_public_image_token) {
+    params.include_public_image_token = 'description';
+  }
+
+  if (isIdentifier(args.target)) {
+    if (opts.dry_run) {
+      return {
+        dry_run: true,
+        resolution: {
+          method: 'GET',
+          path: '/v1/ship/ideas',
+          params: { keywords: args.target },
+        },
+        get: {
+          method: 'GET',
+          path: '/v1/ship/ideas/{id}',
+          params: Object.keys(params).length > 0 ? params : undefined,
+        },
+      };
+    }
+
+    const resolved = await client.request(
+      'GET',
+      '/v1/ship/ideas',
+      { keywords: args.target },
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+    const values = core.pageValues(resolved);
+    if (values.length === 0) {
+      throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
+    }
+    const ideaId = values[0].id;
+    return await client.request(
+      'GET',
+      `/v1/ship/ideas/${ideaId}`,
+      Object.keys(params).length > 0 ? params : null,
+      null,
+      { dry_run: false, use_workspace_cache: true },
+    );
+  }
+
+  return await client.request(
+    'GET',
+    `/v1/ship/ideas/${args.target}`,
+    Object.keys(params).length > 0 ? params : null,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────
 
 async function run(argv) {
@@ -256,11 +508,23 @@ async function run(argv) {
   try {
     let result;
     switch (subcommand) {
+      case 'list': {
+        const listArgs = parseListArgs(subArgs);
+        result = await runList(client, opts, listArgs);
+        break;
+      }
+      case 'show': {
+        const showArgs = parseShowArgs(subArgs);
+        result = await runShow(client, opts, showArgs);
+        break;
+      }
+      case 'get': {
+        const getArgs = parseGetArgs(subArgs);
+        result = await runGet(client, opts, getArgs);
+        break;
+      }
       case 'create':
       case 'update':
-      case 'list':
-      case 'show':
-      case 'get':
       case 'search':
       case 'states':
       case 'properties':
