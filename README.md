@@ -290,8 +290,11 @@ export PINGCODE_USER_ID="你的 PingCode 用户 ID"
 除了 `client_credentials` 企业令牌，CLI 也支持通过 OAuth2 `authorization_code` 获取用户令牌。用户令牌代表具体的人类用户，适合需要以个人身份操作 PingCode 的场景。
 
 ```bash
-# 在浏览器中完成授权
+# 默认行为：打印授权 URL 并提示粘贴授权码
 pingcode auth login --client-id ID --client-secret SECRET
+
+# 自动打开浏览器完成授权
+pingcode auth login --client-id ID --client-secret SECRET --browser
 
 # 使用用户令牌查询工作项
 # --grant-type 会自动从缓存中识别，且 workitem list 不再默认按当前用户过滤
