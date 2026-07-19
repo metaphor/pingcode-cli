@@ -203,25 +203,6 @@ pingcode workitem create --title "test" --type task --dry-run
 pingcode workitem update SCR-123 --state 已完成 --dry-run
 ```
 
-## 自然语言使用方式
-
-安装并启用 skill 后，用户可以直接用自然语言描述需求，例如：
-
-- 查看我当前没完成的任务
-- 查看我的未解决缺陷
-- 帮我在某个故事下新增工作项
-- 把某个工作项改成已完成
-- 创建一个用户故事
-
-大模型应根据语义自动选择 `$pingcode` skill，并把自然语言转换成通用 CLI 命令和参数。不要为每个自然语言场景新增专门命令；统一使用 `scripts/pingcode.js` 的通用命令组合完成。
-
-如果平台没有稳定的隐式 skill 选择能力，可以显式写：
-
-```text
-使用 $pingcode 查看我当前没完成的任务
-使用 $pingcode 初始化 PingCode 当前项目、迭代和用户
-```
-
 ## 凭证配置
 
 在 PingCode 企业后台创建应用，配置数据访问范围，然后设置环境变量：
