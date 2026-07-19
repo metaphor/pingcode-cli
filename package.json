@@ -13,10 +13,8 @@
   },
   "files": [
     "README.md",
-    "skills/pingcode-ctx/SKILL.md",
-    "skills/pingcode-auth/SKILL.md",
-    "skills/pingcode-workitem/SKILL.md",
-    "references/",
+    "skills/pingcode/SKILL.md",
+    "skills/pingcode/references/",
     "scripts/",
     "bin/install.js"
   ],
