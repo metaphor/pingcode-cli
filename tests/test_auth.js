@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 const assert = require('node:assert');
 
@@ -76,11 +77,23 @@ test('login parser rejects invalid port', () => {
   ]), /Invalid port/);
 });
 
-test('login parser accepts --no-browser', () => {
+test('login parser defaults browser to true', () => {
+  const { opts } = authModule.parseLoginArgs(['--client-id', 'c', '--client-secret', 's']);
+  assert.strictEqual(opts.browser, true);
+});
+
+test('login parser accepts --browser', () => {
+  const { opts } = authModule.parseLoginArgs([
+    '--client-id', 'c', '--client-secret', 's', '--browser',
+  ]);
+  assert.strictEqual(opts.browser, true);
+});
+
+test('login parser keeps --no-browser as backward-compatible no-op', () => {
   const { opts } = authModule.parseLoginArgs([
     '--client-id', 'c', '--client-secret', 's', '--no-browser',
   ]);
-  assert.strictEqual(opts.no_browser, true);
+  assert.strictEqual(opts.browser, false);
 });
 
 test('login parser accepts --code', () => {
@@ -184,7 +197,7 @@ testInCleanTmp('login --dry-run --code returns exchange request shape', async (t
   assert.ok('redirect_uri' in parsed.params);
 });
 
-testInCleanTmp('login --dry-run --no-browser prints authorization URL', async (t, tmpdir) => {
+testInCleanTmp('login --dry-run prints authorization URL', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'token.json');
 
   const outputs = [];
@@ -193,7 +206,6 @@ testInCleanTmp('login --dry-run --no-browser prints authorization URL', async (t
   try {
     await authModule.runLogin([
       '--client-id', 'c', '--client-secret', 's',
-      '--no-browser',
       '--token-cache', cachePath,
       '--dry-run',
     ]);
@@ -335,6 +347,155 @@ testInCleanTmp('login --no-browser prompts for code and saves token', async (t, 
   assert.strictEqual(cache.refresh_token, 'refresh-uvw');
 });
 
+// ── Browser flow integration test ────────────────────────────────────
+
+testInCleanTmp('login --browser opens browser, receives callback, and saves token', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+
+  mockFetch(fakeResponse({
+    access_token: 'user-token-browser',
+    token_type: 'Bearer',
+    expires_in: 7200,
+    refresh_token: 'refresh-browser',
+  }));
+
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+
+  try {
+    await authModule.runLogin([
+      '--client-id', 'c', '--client-secret', 's',
+      '--browser',
+      '--token-cache', cachePath,
+    ], null, {
+      openBrowser: async (url) => {},
+      startAuthCallbackServer: async ({ port, path, state }) => ({
+        code: 'browser-code-789',
+        state,
+      }),
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  const output = outputs.join('\n');
+  assert.ok(output.includes('Authorization code received'), `Expected progress message, got: ${output}`);
+  assert.ok(output.includes('User token saved'), `Expected success message, got: ${output}`);
+  assert.ok(output.includes('authorization_code'), `Expected grant_type, got: ${output}`);
+  assert.ok(!output.includes('user-token-browser'), `Should not print access_token, got: ${output}`);
+  assert.ok(!output.includes('refresh-browser'), `Should not print refresh_token, got: ${output}`);
+
+  // Check cache file
+  assert.strictEqual(fs.existsSync(cachePath), true);
+  const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cache.grant_type, 'authorization_code');
+  assert.strictEqual(cache.access_token, 'user-token-browser');
+  assert.strictEqual(cache.refresh_token, 'refresh-browser');
+  assert.ok(typeof cache.expires_at === 'number');
+});
+
+// ── openBrowser tests ───────────────────────────────────────────────────
+
+function fakeSpawner(command, args, opts) {
+  const child = new EventEmitter();
+  child.unref = () => {};
+  child.stdin = null;
+  child.stdout = null;
+  child.stderr = null;
+  child.stdio = [];
+  child.pid = 123;
+  process.nextTick(() => child.emit('spawn'));
+  return child;
+}
+
+test('openBrowser resolves on spawn event without waiting for browser close', async () => {
+  const result = await authModule.openBrowser('https://example.com', fakeSpawner);
+  assert.strictEqual(result, true);
+});
+
+test('openBrowser rejects on spawn error', async () => {
+  const error = new Error('spawn failed');
+  const failingSpawner = (command, args, opts) => {
+    const child = new EventEmitter();
+    child.unref = () => {};
+    child.stdin = null;
+    child.stdout = null;
+    child.stderr = null;
+    child.stdio = [];
+    process.nextTick(() => child.emit('error', error));
+    return child;
+  };
+
+  await assert.rejects(
+    () => authModule.openBrowser('https://example.com', failingSpawner),
+    /spawn failed/
+  );
+});
+
+testInCleanTmp('login --browser starts callback server before browser redirect', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+
+  mockFetch(fakeResponse({
+    access_token: 'user-token-real',
+    token_type: 'Bearer',
+    expires_in: 7200,
+    refresh_token: 'refresh-real',
+  }));
+
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+
+  let browserRedirectPromise = null;
+
+  try {
+    await authModule.runLogin([
+      '--client-id', 'c', '--client-secret', 's',
+      '--browser',
+      '--token-cache', cachePath,
+    ], null, {
+      openBrowser: async (url) => {
+        const http = require('node:http');
+        const authUrl = new URL(url);
+        const redirectUri = authUrl.searchParams.get('redirect_uri');
+        const callbackUrl = new URL(redirectUri);
+        const state = authUrl.searchParams.get('state');
+        const redirectTarget =
+          `http://127.0.0.1:${callbackUrl.port}${callbackUrl.pathname}?code=browser-real-123&state=${encodeURIComponent(state)}`;
+        // Return immediately so runLogin starts the local callback server,
+        // then make the browser redirect in the background after a short delay.
+        browserRedirectPromise = new Promise((resolve, reject) => {
+          setTimeout(() => {
+            const req = http.get(redirectTarget, (res) => {
+              res.resume();
+              resolve();
+            });
+            req.on('error', (err) => reject(err));
+          }, 100);
+        });
+      },
+      startAuthCallbackServer: core.startAuthCallbackServer,
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  if (browserRedirectPromise) {
+    await browserRedirectPromise;
+  }
+
+  const output = outputs.join('\n');
+  assert.ok(output.includes('Authorization code received'), `Expected progress message, got: ${output}`);
+  assert.ok(output.includes('User token saved'), `Expected success message, got: ${output}`);
+
+  const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.strictEqual(cache.grant_type, 'authorization_code');
+  assert.strictEqual(cache.access_token, 'user-token-real');
+  assert.strictEqual(cache.refresh_token, 'refresh-real');
+  assert.ok(typeof cache.expires_at === 'number');
+});
+
 // ── Help output test (via spawn) ────────────────────────────────────────
 
 test('auth login --help works via dispatcher', () => {
@@ -346,6 +507,7 @@ test('auth login --help works via dispatcher', () => {
   assert.strictEqual(result.status, 0);
   assert.ok(result.stdout.includes('--redirect-uri'));
   assert.ok(result.stdout.includes('--port'));
+  assert.ok(result.stdout.includes('--browser'));
   assert.ok(result.stdout.includes('--no-browser'));
   assert.ok(result.stdout.includes('--code'));
   assert.ok(result.stdout.includes('--grant-type'));

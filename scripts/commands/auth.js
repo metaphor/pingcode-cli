@@ -17,7 +17,7 @@ const DEFAULT_PORT = 8765;
 // ── Flag maps ──────────────────────────────────────────────────────────
 
 const BOOLEAN_FLAGS = new Set([
-  '--no-browser', '--no-token-cache', '--no-workspace-cache', '--dry-run',
+  '--browser', '--no-token-cache', '--no-workspace-cache', '--dry-run',
 ]);
 
 const STRING_FLAGS = {
@@ -61,7 +61,7 @@ function parseLoginArgs(tokens) {
     base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
     token_cache: process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE,
     workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
-    no_browser: false,
+    browser: true,
     no_token_cache: false,
     no_workspace_cache: false,
     dry_run: false,
@@ -73,6 +73,10 @@ function parseLoginArgs(tokens) {
     const arg = tokens[i];
     if (arg === '--help' || arg === '-h') {
       helpRequested = true;
+      continue;
+    }
+    if (arg === '--no-browser') {
+      opts.browser = false;
       continue;
     }
     if (BOOLEAN_FLAGS.has(arg)) {
@@ -195,7 +199,7 @@ function createClient(opts) {
 
 // ── Browser opening ────────────────────────────────────────────────────
 
-function openBrowser(url) {
+function openBrowser(url, spawner = spawn) {
   const platform = os.platform();
   let command, args;
 
@@ -211,17 +215,20 @@ function openBrowser(url) {
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    let settled = false;
+    const child = spawner(command, args, {
       stdio: 'ignore',
       detached: true,
     });
-    child.on('error', (err) => reject(err));
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(true);
-      } else {
-        reject(new Error(`Browser process exited with code ${code}`));
-      }
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+    child.on('spawn', () => {
+      if (settled) return;
+      settled = true;
+      resolve(true);
     });
     child.unref();
   });
@@ -253,7 +260,8 @@ function printLoginHelp() {
     '  --redirect-uri URI         Redirect URI for OAuth callback',
     `                            (default: ${DEFAULT_REDIRECT_URI})`,
     `  --port PORT                Local callback server port (default: ${DEFAULT_PORT})`,
-    '  --no-browser              Print the authorization URL and prompt for code',
+    '  --browser                 Open browser for authorization (default: true)',
+    '  --no-browser              Print the authorization URL and prompt for code instead of opening browser',
     '  --code CODE               Authorization code (skip browser and callback)',
     '  --grant-type TYPE         OAuth grant type (default: authorization_code)',
     '  --client-id ID            OAuth client ID',
@@ -359,8 +367,10 @@ function buildDryRunExchange(opts, code) {
 
 // ── Main ────────────────────────────────────────────────────────────────
 
-async function runLogin(argv, inputFunc) {
+async function runLogin(argv, inputFunc, deps = {}) {
   const tokens = argv || [];
+  const openBrowserImpl = deps.openBrowser || openBrowser;
+  const startAuthCallbackServerImpl = deps.startAuthCallbackServer || core.startAuthCallbackServer;
 
   // No args → help
   if (tokens.length === 0) {
@@ -419,7 +429,7 @@ async function runLogin(argv, inputFunc) {
   const authUrl = client.buildAuthorizationUrl(opts.redirect_uri, state);
   const callbackPath = extractCallbackPath(opts.redirect_uri);
 
-  if (opts.no_browser) {
+  if (!opts.browser) {
     // Print URL and prompt for code
     console.log('Open this URL in your browser to authorize:');
     console.log(authUrl);
@@ -435,7 +445,7 @@ async function runLogin(argv, inputFunc) {
   // Try to open the browser; fall back to URL + prompt on failure
   let browserOpened = false;
   try {
-    await openBrowser(authUrl);
+    await openBrowserImpl(authUrl);
     browserOpened = true;
   } catch (_) {
     // Browser spawn failed; fall back to printing the URL
@@ -453,11 +463,12 @@ async function runLogin(argv, inputFunc) {
 
   if (browserOpened) {
     // Start callback server and wait for the redirect
-    const result = await core.startAuthCallbackServer({
+    const result = await startAuthCallbackServerImpl({
       port: opts.port,
       path: callbackPath,
       state: state,
     });
+    console.log('Authorization code received; exchanging for token...');
     await client.exchangeAuthorizationCode(result.code, opts.redirect_uri);
     console.log(`User token saved for grant_type ${opts.grant_type}`);
   }
@@ -572,4 +583,4 @@ shared.registerModule('auth', {
   run,
 });
 
-module.exports = { run, runLogin, runStatus, printHelp, printLoginHelp, printStatusHelp, parseLoginArgs, parseStatusArgs, createClient, buildDryRunExchange };
+module.exports = { run, runLogin, runStatus, printHelp, printLoginHelp, printStatusHelp, parseLoginArgs, parseStatusArgs, createClient, buildDryRunExchange, openBrowser };
