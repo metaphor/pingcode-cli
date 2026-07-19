@@ -15,10 +15,12 @@ npx @metaphorli/pingcode-cli@latest
 ~/.codex/skills/pingcode/references/auth.md
 ~/.codex/skills/pingcode/references/ctx.md
 ~/.codex/skills/pingcode/references/workitem.md
+~/.codex/skills/pingcode/references/comment.md
 ~/.config/opencode/skills/pingcode
 ~/.config/opencode/skills/pingcode/references/auth.md
 ~/.config/opencode/skills/pingcode/references/ctx.md
 ~/.config/opencode/skills/pingcode/references/workitem.md
+~/.config/opencode/skills/pingcode/references/comment.md
 ```
 
 默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
@@ -120,9 +122,10 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 - 查询项目、迭代、看板、工作项类型、状态、优先级
 - 查询、创建、更新工作项（含状态更新，支持 `--dry-run` 试运行）
 - 在故事下创建子工作项（通过 `--parent`）
-- 通过子命令（`context *`, `workitem *`, `auth *`）调用 PingCode API
+- 创建、查看、删除工作项评论（通过 `--reply-to` 支持回复）
+- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`）调用 PingCode API
 
-以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作的详细参考。
+以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md`、`comment.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作、评论操作的详细参考。
 
 ## Skill 结构
 
@@ -134,6 +137,7 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 | `pingcode/references/auth.md` | 用户令牌登录：`pingcode auth login`、grant-type 自动识别与覆盖、令牌类型说明 |
 | `pingcode/references/ctx.md` | 工作区上下文初始化：在 Agent 前台按编号选择当前项目、迭代、用户并写入缓存 |
 | `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / show / get / update` 子命令及完整参数；含共享安全规则 |
+| `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete` 子命令及安全规则 |
 
 ## 子命令
 
@@ -201,6 +205,36 @@ pingcode workitem update WI-AbCdEf --state 进行中 --priority 高
 # 试运行（预览 API 请求，不发送）
 pingcode workitem create --title "test" --type task --dry-run
 pingcode workitem update SCR-123 --state 已完成 --dry-run
+```
+
+### 评论管理 (`comment`)
+
+| 子命令 | 说明 | 示例 |
+|---|---|---|
+| `comment create <id\|identifier>` | 创建工作项评论 | `pingcode comment create SCR-123 --content "需要优化性能"` |
+| `comment list <id\|identifier>` | 列出工作项评论 | `pingcode comment list SCR-123 --compact` |
+| `comment get <comment-id> <id\|identifier>` | 获取单条评论 | `pingcode comment get cmt-456 SCR-123` |
+| `comment delete <comment-id> <id\|identifier>` | 删除评论 | `pingcode comment delete cmt-456 SCR-123` |
+
+```bash
+# 创建工作项评论
+pingcode comment create SCR-123 --content "这个工作项需要考虑性能优化"
+
+# 创建回复评论
+pingcode comment create SCR-123 --content "已确认，稍后处理" --reply-to cmt-456
+
+# 查看评论列表
+pingcode comment list SCR-123 --compact
+
+# 获取单条评论
+pingcode comment get cmt-456 SCR-123
+
+# 删除评论
+pingcode comment delete cmt-456 SCR-123
+
+# 试运行（预览 API 请求，不发送）
+pingcode comment create SCR-123 --content "hello" --dry-run
+pingcode comment delete cmt-456 SCR-123 --dry-run
 ```
 
 ## 凭证配置
@@ -290,5 +324,6 @@ pingcode context init
 - 用户令牌登录：[skills/pingcode/references/auth.md](skills/pingcode/references/auth.md)
 - 工作区上下文：[skills/pingcode/references/ctx.md](skills/pingcode/references/ctx.md)
 - 工作项操作：[skills/pingcode/references/workitem.md](skills/pingcode/references/workitem.md)
+- 评论操作：[skills/pingcode/references/comment.md](skills/pingcode/references/comment.md)
 - 官方文档：https://open.pingcode.com/
 
