@@ -5,7 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/situjunjie/pingcode-cli.git"
+    "url": "git+https://github.com/metaphor/pingcode-cli.git"
+  },
+  "homepage": "https://github.com/metaphor/pingcode-cli#readme",
+  "bugs": {
+    "url": "https://github.com/metaphor/pingcode-cli/issues"
   },
   "bin": {
     "pingcode": "./scripts/pingcode.js",
