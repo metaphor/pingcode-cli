@@ -1185,6 +1185,22 @@ function pathIsListWorkItems(rawPath, baseUrl = DEFAULT_BASE_URL) {
   return normalizePath(rawPath, baseUrl) === '/v1/project/work_items';
 }
 
+async function resolveWorkItemIdentifier(client, identifier) {
+  const params = { identifier };
+  const response = await client.request(
+    'GET',
+    '/v1/project/work_items',
+    params,
+    null,
+    { dry_run: false, use_workspace_cache: true },
+  );
+  const values = pageValues(response);
+  if (values.length === 0) {
+    throw new PingCodeError(`No work item found with identifier ${identifier}`);
+  }
+  return values[0].id;
+}
+
 function printJson(data) {
   const sorted = sortKeys(data);
   console.log(JSON.stringify(sorted, null, 2));
@@ -1368,5 +1384,6 @@ module.exports = {
   applyDefaultWorkItemFilters,
   ensureWorkItemWorkspaceContext,
   applyDefaultWorkItemCreateBody,
+  resolveWorkItemIdentifier,
   printJson,
 };
