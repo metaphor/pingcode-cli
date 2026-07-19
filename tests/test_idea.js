@@ -521,6 +521,30 @@ testInCleanTmp('idea get with identifier and --include-public-image-token', asyn
   assert.deepStrictEqual(result.get.params.include_public_image_token, 'description');
 });
 
+testInCleanTmp('idea get with 2-letter prefix identifier returns search dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: {} });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await idea.run([
+      'get', 'YY-34',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual('resolution' in result, false);
+  assert.strictEqual(result.get.method, 'GET');
+  assert.strictEqual(result.get.path, '/v1/ship/ideas');
+  assert.strictEqual(result.get.params.keywords, 'YY-34');
+});
+
 testInCleanTmp('idea get with raw id returns flat dry-run', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, { preferences: {} });

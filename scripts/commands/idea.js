@@ -6,7 +6,7 @@ const shared = require('./shared');
 // ── Identifier helpers ─────────────────────────────────────────────────
 
 function isIdentifier(arg) {
-  return /^[A-Z]{3,6}-\d+$/.test(arg);
+  return /^[A-Z]{2,}-\d+$/.test(arg);
 }
 
 function isRawId(arg) {
