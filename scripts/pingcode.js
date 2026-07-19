@@ -4,7 +4,7 @@
 // ── Library layer ────────────────────────────────────────────────────
 // Import everything from the shared core module and re-export it
 // so that require('./pingcode') remains fully backward-compatible
-// for the pingcode-ctx alias skill and existing tests.
+// for existing tests and the unified pingcode skill.
 const core = require('./core');
 
 module.exports = { ...core };

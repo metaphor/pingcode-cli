@@ -16,7 +16,6 @@ const MAX_SELECTION_OPTIONS = 20;
 
 const CLI_COMMAND = 'pingcode';
 const CTX_COMMAND = 'pingcode context init';
-const CTX_COMMAND_ALIAS = 'pingcode-ctx';
 
 const AUTH_ENV_GUIDANCE = (
   'Configure PingCode OAuth client credentials first:\n' +
