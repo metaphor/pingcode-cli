@@ -16,6 +16,7 @@ module.exports = { ...core };
 require('./commands/comment');
 require('./commands/context');
 require('./commands/idea');
+require('./commands/product');
 require('./commands/workitem');
 require('./commands/auth');
 

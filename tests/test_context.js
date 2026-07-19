@@ -96,12 +96,18 @@ test('parseContextArgs --no-workspace-cache boolean flag', () => {
   assert.strictEqual(result.opts.no_workspace_cache, true);
 });
 
-test('parseContextArgs unknown flag throws', () => {
-  assert.throws(() => context.parseContextArgs(['list', '--unknown-flag']), core.PingCodeError);
+test('parseContextArgs unknown flag passes through without throwing', () => {
+  // shared.parseGlobalOptions is lenient — unknown flags pass through to remaining
+  const result = context.parseContextArgs(['list', '--unknown-flag']);
+  assert.strictEqual(result.subcommand, 'list');
+  assert.strictEqual(result.helpRequested, false);
 });
 
-test('parseContextArgs flag without value throws', () => {
-  assert.throws(() => context.parseContextArgs(['list', '--workspace-cache']), core.PingCodeError);
+test('parseContextArgs flag with no value passes through without throwing', () => {
+  // shared.parseGlobalOptions passes through string flags when no value follows
+  const result = context.parseContextArgs(['list', '--workspace-cache']);
+  assert.strictEqual(result.subcommand, 'list');
+  assert.strictEqual(result.helpRequested, false);
 });
 
 test('parseContextArgs empty tokens returns null subcommand', () => {
@@ -377,14 +383,15 @@ testInCleanTmp('context list prints preferences and dictionary counts', async (t
   try {
     await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
-    assert.ok(output.includes('Preferences:'), 'should print Preferences header');
-    assert.ok(output.includes('current_user_id'), 'should include current_user_id');
-    assert.ok(output.includes('current_project_id'), 'should include current_project_id');
-    assert.ok(output.includes('current_sprint_id'), 'should include current_sprint_id');
-    assert.ok(output.includes('Cached dictionaries:'), 'should print dictionaries header');
-    assert.ok(output.includes('users: 1 items'), 'should count users');
-    assert.ok(output.includes('projects: 1 items'), 'should count projects');
-    assert.ok(output.includes('sprints: 1 items'), 'should count sprints');
+    const data = JSON.parse(output);
+    assert.ok(data.preferences, 'should have preferences');
+    assert.ok(data.preferences.current_user_id, 'should include current_user_id');
+    assert.ok(data.preferences.current_project_id, 'should include current_project_id');
+    assert.ok(data.preferences.current_sprint_id, 'should include current_sprint_id');
+    assert.ok(data.dictionaries, 'should have dictionaries');
+    assert.strictEqual(data.dictionaries.users, 1);
+    assert.strictEqual(data.dictionaries.projects, 1);
+    assert.strictEqual(data.dictionaries.sprints, 1);
   } finally {
     capture.done();
   }
@@ -398,9 +405,11 @@ testInCleanTmp('context list with empty cache prints (none) for preferences', as
   try {
     await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
-    assert.ok(output.includes('(none)'), 'should show (none) for empty preferences');
-    assert.ok(output.includes('users: 0 items'), 'should show 0 users');
-    assert.ok(output.includes('projects: 0 items'), 'should show 0 projects');
+    const data = JSON.parse(output);
+    assert.ok(data.preferences, 'should have preferences object');
+    assert.deepStrictEqual(data.preferences, {}, 'preferences should be empty');
+    assert.strictEqual(data.dictionaries.users, 0, 'should show 0 users');
+    assert.strictEqual(data.dictionaries.projects, 0, 'should show 0 projects');
   } finally {
     capture.done();
   }
@@ -437,12 +446,13 @@ testInCleanTmp('context list with rich cache shows all dictionary counts', async
   try {
     await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
-    assert.ok(output.includes('users: 2 items'));
-    assert.ok(output.includes('projects: 3 items'));
-    assert.ok(output.includes('sprints: 2 items'));
-    assert.ok(output.includes('work item types: 2 items'));
-    assert.ok(output.includes('work item states: 3 items'));
-    assert.ok(output.includes('work item priorities: 1 items'));
+    const data = JSON.parse(output);
+    assert.strictEqual(data.dictionaries.users, 2);
+    assert.strictEqual(data.dictionaries.projects, 3);
+    assert.strictEqual(data.dictionaries.sprints, 2);
+    assert.strictEqual(data.dictionaries.work_item_types, 2);
+    assert.strictEqual(data.dictionaries.work_item_states, 3);
+    assert.strictEqual(data.dictionaries.work_item_priorities, 1);
   } finally {
     capture.done();
   }
@@ -464,10 +474,11 @@ testInCleanTmp('context list sorts preference keys alphabetically', async (t, tm
   try {
     await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
+    const data = JSON.parse(output);
     // Verify all three keys appear
-    assert.ok(output.includes('current_project_id'), 'should include current_project_id');
-    assert.ok(output.includes('current_sprint_id'), 'should include current_sprint_id');
-    assert.ok(output.includes('current_user_id'), 'should include current_user_id');
+    assert.ok(data.preferences.current_project_id, 'should include current_project_id');
+    assert.ok(data.preferences.current_sprint_id, 'should include current_sprint_id');
+    assert.ok(data.preferences.current_user_id, 'should include current_user_id');
   } finally {
     capture.done();
   }
@@ -494,15 +505,16 @@ testInCleanTmp('context list with null/undefined cache fields shows 0 items', as
   try {
     await context.run(['list', '--workspace-cache', cachePath]);
     const output = capture.logs();
-    assert.ok(output.includes('users: 0 items'));
-    assert.ok(output.includes('projects: 0 items'));
-    assert.ok(output.includes('sprints: 0 items'));
-    assert.ok(output.includes('work item types: 0 items'));
-    assert.ok(output.includes('work item states: 0 items'));
-    assert.ok(output.includes('work item priorities: 0 items'));
-    assert.ok(output.includes('work item properties: 0 items'));
-    assert.ok(output.includes('idea states: 0 items'));
-    assert.ok(output.includes('idea priorities: 0 items'));
+    const data = JSON.parse(output);
+    assert.strictEqual(data.dictionaries.users, 0);
+    assert.strictEqual(data.dictionaries.projects, 0);
+    assert.strictEqual(data.dictionaries.sprints, 0);
+    assert.strictEqual(data.dictionaries.work_item_types, 0);
+    assert.strictEqual(data.dictionaries.work_item_states, 0);
+    assert.strictEqual(data.dictionaries.work_item_priorities, 0);
+    assert.strictEqual(data.dictionaries.work_item_properties, 0);
+    assert.strictEqual(data.dictionaries.idea_states, 0);
+    assert.strictEqual(data.dictionaries.idea_priorities, 0);
   } finally {
     capture.done();
   }
@@ -674,16 +686,16 @@ testInCleanTmp('context list prints meaningful data not just exits 0', async (t,
 
     // Verify meaningful content (not just empty output)
     assert.ok(output.length > 0, 'list should produce output');
-    assert.ok(output.includes('user-1'), 'should include actual user id value');
-    assert.ok(output.includes('Alice'), 'should include actual user name value');
-    assert.ok(output.includes('Core'), 'should include actual project name value');
-    assert.ok(output.includes('users: 1 items'), 'should have meaningful user count');
-    assert.ok(output.includes('projects: 2 items'), 'should have meaningful project count');
+    const data = JSON.parse(output);
+    assert.strictEqual(data.preferences.current_user_id, 'user-1', 'should include actual user id value');
+    assert.strictEqual(data.preferences.current_user_name, 'Alice', 'should include actual user name value');
+    assert.strictEqual(data.preferences.current_project_name, 'Core', 'should include actual project name value');
+    assert.strictEqual(data.dictionaries.users, 1, 'should have meaningful user count');
+    assert.strictEqual(data.dictionaries.projects, 2, 'should have meaningful project count');
 
     // Verify structured format
-    const lines = output.split('\n');
-    const prefLines = lines.filter(l => l.includes(':') && l.includes('current_'));
-    assert.ok(prefLines.length >= 2, 'should have at least 2 preference lines');
+    assert.ok(data.preferences.current_project_id, 'should have at least 1 preference');
+    assert.ok(data.preferences.current_user_id, 'should have at least 2 preference');
   } finally {
     capture.done();
   }

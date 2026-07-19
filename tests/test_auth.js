@@ -466,3 +466,242 @@ test('auth run dispatches to login subcommand', async () => {
   }
   assert.ok(logs.join('\n').includes('Usage: pingcode auth login [options]'));
 });
+
+// ── Status parser tests ────────────────────────────────────────────────
+
+test('status parser parses --help', () => {
+  const { opts, helpRequested } = authModule.parseStatusArgs(['--help']);
+  assert.strictEqual(helpRequested, true);
+});
+
+test('status parser defaults grant_type to auto', () => {
+  const { opts } = authModule.parseStatusArgs(['--client-id', 'c', '--client-secret', 's']);
+  assert.strictEqual(opts.grant_type, 'auto');
+});
+
+test('status parser accepts --grant-type', () => {
+  const { opts } = authModule.parseStatusArgs([
+    '--client-id', 'c', '--client-secret', 's', '--grant-type', 'client_credentials',
+  ]);
+  assert.strictEqual(opts.grant_type, 'client_credentials');
+});
+
+test('status parser accepts --token', () => {
+  const { opts } = authModule.parseStatusArgs([
+    '--token', 'explicit-token',
+  ]);
+  assert.strictEqual(opts.token, 'explicit-token');
+});
+
+test('status parser accepts --compact', () => {
+  const { opts } = authModule.parseStatusArgs([
+    '--client-id', 'c', '--client-secret', 's', '--compact',
+  ]);
+  assert.strictEqual(opts.compact, true);
+});
+
+test('status parser accepts --token-cache', () => {
+  const { opts } = authModule.parseStatusArgs([
+    '--token-cache', '/tmp/tokens.json',
+  ]);
+  assert.strictEqual(opts.token_cache, '/tmp/tokens.json');
+});
+
+test('status parser accepts --workspace-cache', () => {
+  const { opts } = authModule.parseStatusArgs([
+    '--workspace-cache', '/tmp/ws.json',
+  ]);
+  assert.strictEqual(opts.workspace_cache, '/tmp/ws.json');
+});
+
+test('status parser rejects unknown option', () => {
+  assert.throws(() => authModule.parseStatusArgs([
+    '--client-id', 'c', '--client-secret', 's', '--bad-flag',
+  ]), /Unknown option/);
+});
+
+test('status parser rejects unexpected positional argument', () => {
+  assert.throws(() => authModule.parseStatusArgs([
+    '--client-id', 'c', '--client-secret', 's', 'pos-arg',
+  ]), /Unexpected argument/);
+});
+
+// ── Status behavior tests ──────────────────────────────────────────────
+
+testInCleanTmp('status with no token reports unauthenticated', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus([
+      '--token-cache', cachePath,
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, false);
+  assert.strictEqual(parsed.token_valid, false);
+  assert.strictEqual(parsed.token_cache_exists, false);
+  assert.strictEqual(parsed.credentials.client_id_configured, false);
+  assert.strictEqual(parsed.credentials.client_secret_configured, false);
+  assert.ok(!('access_token' in parsed), 'Should not expose access_token');
+  assert.ok(!('refresh_token' in parsed), 'Should not expose refresh_token');
+});
+
+testInCleanTmp('status with credentials reports configured credentials', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus([
+      '--client-id', 'c', '--client-secret', 's',
+      '--token-cache', cachePath,
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, false);
+  assert.strictEqual(parsed.credentials.client_id_configured, true);
+  assert.strictEqual(parsed.credentials.client_secret_configured, true);
+});
+
+testInCleanTmp('status with explicit token reports authenticated', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus([
+      '--token', 'explicit-token',
+      '--token-cache', cachePath,
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, true);
+  assert.strictEqual(parsed.token_valid, true);
+  assert.strictEqual(parsed.grant_type, 'client_credentials');
+});
+
+testInCleanTmp('status with valid cached token reports authenticated', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  core.saveCachedToken(cachePath, 'cached-token', 7200, 'authorization_code');
+
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus(['--token-cache', cachePath]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, true);
+  assert.strictEqual(parsed.token_valid, true);
+  assert.strictEqual(parsed.token_cache_exists, true);
+  assert.strictEqual(parsed.grant_type, 'authorization_code');
+  assert.ok(typeof parsed.token_expires_at === 'number');
+  assert.ok(parsed.token_expires_in > 0);
+  assert.ok(!('access_token' in parsed), 'Should not expose access_token');
+  assert.ok(!('refresh_token' in parsed), 'Should not expose refresh_token');
+});
+
+testInCleanTmp('status with expired cached token reports token_valid false', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  fs.writeFileSync(cachePath, JSON.stringify({
+    grant_type: 'authorization_code',
+    access_token: 'expired-token',
+    expires_at: Math.floor(Date.now() / 1000) - 60,
+  }));
+
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus(['--token-cache', cachePath]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, false);
+  assert.strictEqual(parsed.token_valid, false);
+  assert.strictEqual(parsed.token_cache_exists, true);
+  assert.strictEqual(parsed.grant_type, 'authorization_code');
+  assert.ok(!parsed.token_expires_in);
+  assert.ok(!('access_token' in parsed), 'Should not expose access_token');
+});
+
+testInCleanTmp('status --compact returns reduced output', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  core.saveCachedToken(cachePath, 'cached-token', 7200, 'client_credentials');
+
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus(['--token-cache', cachePath, '--compact']);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.authenticated, true);
+  assert.strictEqual(parsed.grant_type, 'client_credentials');
+  assert.strictEqual(parsed.token_valid, true);
+  assert.strictEqual(parsed.credentials.client_id_configured, false);
+  assert.ok(!('token_cache' in parsed), 'Compact output should omit token_cache');
+});
+
+testInCleanTmp('status --dry-run marks output dry_run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'token.json');
+  const outputs = [];
+  const originalLog = console.log;
+  console.log = (...args) => outputs.push(args.join(' '));
+  try {
+    await authModule.runStatus([
+      '--client-id', 'c', '--client-secret', 's',
+      '--token-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+  const parsed = JSON.parse(outputs.join('\n'));
+  assert.strictEqual(parsed.dry_run, true);
+  assert.strictEqual(parsed.authenticated, false);
+});
+
+test('auth status --help works via dispatcher', () => {
+  const { spawnSync } = require('node:child_process');
+  const REPO_ROOT = path.resolve(__dirname, '..');
+  const result = spawnSync('node', [
+    path.join(REPO_ROOT, 'scripts', 'pingcode.js'), 'auth', 'status', '--help',
+  ], { encoding: 'utf8', cwd: REPO_ROOT });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.includes('--grant-type'));
+  assert.ok(result.stdout.includes('--client-id'));
+  assert.ok(result.stdout.includes('--client-secret'));
+  assert.ok(result.stdout.includes('--base-url'));
+  assert.ok(result.stdout.includes('--token-cache'));
+  assert.ok(result.stdout.includes('--no-token-cache'));
+  assert.ok(result.stdout.includes('--workspace-cache'));
+  assert.ok(result.stdout.includes('--no-workspace-cache'));
+  assert.ok(result.stdout.includes('--token'));
+  assert.ok(result.stdout.includes('--dry-run'));
+  assert.ok(result.stdout.includes('--compact'));
+});
+
+test('auth run dispatches to status subcommand', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (msg) => logs.push(msg);
+  try {
+    await authModule.run(['status', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(logs.join('\n').includes('Usage: pingcode auth status [options]'));
+});

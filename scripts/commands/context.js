@@ -204,71 +204,11 @@ function printHelp(subcommand) {
 
 // ── Parser ─────────────────────────────────────────────────────────
 
-const BOOLEAN_FLAGS = new Set([
-  '--no-workspace-cache', '--no-token-cache',
-  '--dry-run', '--refresh',
-]);
-
-const STRING_FLAGS = {
-  '--base-url': 'base_url',
-  '--client-id': 'client_id',
-  '--client-secret': 'client_secret',
-  '--token': 'token',
-  '--workspace-cache': 'workspace_cache',
-  '--grant-type': 'grant_type',
-};
-
 function parseContextArgs(tokens) {
-  const opts = {
-    base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
-    client_id: process.env.PINGCODE_CLIENT_ID || null,
-    client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
-    token: process.env.PINGCODE_ACCESS_TOKEN || null,
-    workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
-    no_workspace_cache: false,
-    no_token_cache: false,
-    dry_run: false,
-    refresh: false,
-    grant_type: 'auto',
-  };
+  const { opts, remaining } = shared.parseGlobalOptions(tokens, ['--refresh']);
 
-  const positionals = [];
-  let helpRequested = false;
-
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (arg === '--help' || arg === '-h') {
-      helpRequested = true;
-      continue;
-    }
-    if (BOOLEAN_FLAGS.has(arg)) {
-      const key = arg.replace(/^--/, '').replace(/-/g, '_');
-      opts[key] = true;
-      continue;
-    }
-    if (arg.startsWith('--')) {
-      const eqIndex = arg.indexOf('=');
-      let flag, value;
-      if (eqIndex !== -1) {
-        flag = arg.slice(0, eqIndex);
-        value = arg.slice(eqIndex + 1);
-      } else {
-        flag = arg;
-        if (i + 1 < tokens.length) {
-          value = tokens[i + 1];
-          i += 1;
-        } else {
-          throw new core.PingCodeError(`Flag ${flag} requires a value`);
-        }
-      }
-      if (!(flag in STRING_FLAGS)) {
-        throw new core.PingCodeError(`Unknown option: ${flag}`);
-      }
-      opts[STRING_FLAGS[flag]] = value;
-      continue;
-    }
-    positionals.push(arg);
-  }
+  const helpRequested = remaining.includes('--help') || remaining.includes('-h');
+  const positionals = remaining.filter(a => !a.startsWith('-'));
 
   return {
     subcommand: positionals[0] || null,
@@ -280,21 +220,7 @@ function parseContextArgs(tokens) {
 
 // ── Client ─────────────────────────────────────────────────────────
 
-function createClient(opts) {
-  const tokenCache = opts.no_token_cache
-    ? null
-    : (process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE);
-  const workspaceCache = opts.no_workspace_cache ? null : opts.workspace_cache;
-  return new core.PingCodeClient({
-    base_url: opts.base_url,
-    client_id: opts.client_id,
-    client_secret: opts.client_secret,
-    token: opts.token,
-    token_cache: tokenCache,
-    workspace_cache: workspaceCache,
-    grant_type: opts.grant_type,
-  });
-}
+const createClient = shared.clientFromOpts;
 
 // ── Dictionary counts (copied from config.js; not exported from core) ──
 
@@ -482,40 +408,19 @@ async function handleList(opts) {
   const client = createClient(opts);
   const cache = client.workspaceCache;
 
-  // Print preferences
-  console.log('Preferences:');
-  const prefs = cache.preferences || {};
-  const prefKeys = Object.keys(prefs).sort();
-  if (prefKeys.length === 0) {
-    console.log('  (none)');
-  } else {
-    for (const key of prefKeys) {
-      console.log(`  ${key}: ${prefs[key]}`);
-    }
-  }
+  const preferences = cache.preferences || {};
 
-  // Print cached dictionary summary
-  console.log('');
-  console.log('Cached dictionaries:');
-  const counts = countDictionaryEntries(cache);
-  const countKeys = Object.keys(counts).sort();
-  for (const key of countKeys) {
-    const label = key.replace(/_/g, ' ');
-    console.log(`  ${label}: ${counts[key]} items`);
-  }
+  core.printJson({
+    preferences,
+    dictionaries: countDictionaryEntries(cache),
+  });
 }
 
-// ── Subcommand name mapping ────────────────────────────────────────
-
-const SUBCOMMAND_ALIASES = {
-  'set-current-user': 'set-current-user',
-  'set-current-project': 'set-current-project',
-  'set-current-sprint': 'set-current-sprint',
-  init: 'init',
-  list: 'list',
-};
-
 // ── Run ────────────────────────────────────────────────────────────
+
+const VALID_SUBCOMMANDS = new Set([
+  'init', 'set-current-user', 'set-current-project', 'set-current-sprint', 'list',
+]);
 
 async function run(argv) {
   const tokens = argv || [];
@@ -536,10 +441,9 @@ async function run(argv) {
 
   const subcommand = parsed.subcommand;
 
-  if (!subcommand || !(subcommand in SUBCOMMAND_ALIASES)) {
+  if (!subcommand || !VALID_SUBCOMMANDS.has(subcommand)) {
     throw new core.PingCodeError(
-      `Unknown context subcommand: ${subcommand || '(none)'}. ` +
-      'Valid subcommands: init, set-current-user, set-current-project, set-current-sprint, list.',
+      `Unknown context subcommand: ${subcommand || '(none)'}. Use context --help for usage.`
     );
   }
 

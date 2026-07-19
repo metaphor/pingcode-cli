@@ -3,102 +3,14 @@
 const core = require('../core');
 const shared = require('./shared');
 
-// ── Global option defaults ────────────────────────────────────────────
-const GLOBAL_BOOLEAN_FLAGS = new Set([
-  '--dry-run', '--compact', '--no-token-cache', '--no-workspace-cache',
-  '--all-users', '--all-projects', '--all-sprints',
+// ── Extra global boolean flags ──────────────────────────────────────
+const EXTRA_BOOLEAN_FLAGS = ['--all-users', '--all-projects', '--all-sprints'];
+
+// Combined set used by sub-parsers to skip globally consumed flags
+const ALL_BOOLEAN_FLAGS = new Set([
+  ...shared.BASE_GLOBAL_BOOLEAN_FLAGS,
+  ...EXTRA_BOOLEAN_FLAGS,
 ]);
-
-const GLOBAL_STRING_FLAGS = {
-  '--base-url': 'base_url',
-  '--client-id': 'client_id',
-  '--client-secret': 'client_secret',
-  '--token': 'token',
-  '--user-id': 'user_id',
-  '--user-name': 'user_name',
-  '--workspace-cache': 'workspace_cache',
-  '--grant-type': 'grant_type',
-};
-
-function defaultGlobalOpts() {
-  return {
-    base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
-    client_id: process.env.PINGCODE_CLIENT_ID || null,
-    client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
-    token: process.env.PINGCODE_ACCESS_TOKEN || null,
-    user_id: process.env.PINGCODE_USER_ID || null,
-    user_name: process.env.PINGCODE_USER_NAME || null,
-    no_token_cache: false,
-    workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
-    no_workspace_cache: false,
-    dry_run: false,
-    compact: false,
-    all_users: false,
-    all_projects: false,
-    all_sprints: false,
-    grant_type: 'auto',
-  };
-}
-
-function parseGlobalOptions(tokens) {
-  const opts = defaultGlobalOpts();
-  const remaining = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (arg === '--help' || arg === '-h') {
-      remaining.push(arg);
-      continue;
-    }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) {
-      const key = arg.replace(/^--/, '').replace(/-/g, '_');
-      opts[key] = true;
-      continue;
-    }
-    const eqIndex = arg.indexOf('=');
-    let flag, value, consumedNext = false;
-    if (eqIndex !== -1) {
-      flag = arg.slice(0, eqIndex);
-      value = arg.slice(eqIndex + 1);
-    } else if (arg.startsWith('--')) {
-      flag = arg;
-      if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
-        value = tokens[i + 1];
-        consumedNext = true;
-      } else {
-        // Boolean-like flag with no value — could be a subcommand flag
-        remaining.push(arg);
-        continue;
-      }
-    } else {
-      remaining.push(arg);
-      continue;
-    }
-    if (flag in GLOBAL_STRING_FLAGS) {
-      opts[GLOBAL_STRING_FLAGS[flag]] = value;
-      if (consumedNext) i += 1;
-    } else {
-      // Not a recognized global flag — pass through as subcommand arg
-      remaining.push(arg);
-      if (consumedNext) remaining.push(value);
-      if (consumedNext) i += 1;
-    }
-  }
-  return { opts, remaining };
-}
-
-function clientFromOpts(opts) {
-  const tokenCache = opts.no_token_cache ? null : (process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE);
-  const workspaceCache = opts.no_workspace_cache ? null : opts.workspace_cache;
-  return new core.PingCodeClient({
-    base_url: opts.base_url,
-    client_id: opts.client_id,
-    client_secret: opts.client_secret,
-    token: opts.token,
-    token_cache: tokenCache,
-    workspace_cache: workspaceCache,
-    grant_type: opts.grant_type,
-  });
-}
 
 // ── Cache lookup helpers ──────────────────────────────────────────────
 
@@ -234,7 +146,7 @@ function parseListArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!ALL_BOOLEAN_FLAGS.has(arg)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem list --help for usage.`);
       }
     } else {
@@ -341,7 +253,7 @@ function parseCreateArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!ALL_BOOLEAN_FLAGS.has(arg)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem create --help for usage.`);
       }
     } else {
@@ -441,61 +353,6 @@ async function runCreate(client, opts, args) {
   );
 }
 
-// ── Show subcommand ──────────────────────────────────────────────────
-
-function parseShowArgs(tokens) {
-  // First non-flag token is the id/identifier
-  let target = null;
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (!arg.startsWith('--')) {
-      if (target === null) {
-        target = arg;
-        continue;
-      }
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem show --help for usage.`);
-    }
-    // Consume flag+value for global options (already parsed)
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
-      i += 1;
-      continue;
-    }
-    // For --help (already handled in parseGlobalOptions)
-  }
-  if (!target) {
-    throw new core.PingCodeError('A work item id or identifier is required. Use workitem show --help for usage.');
-  }
-  return { target };
-}
-
-async function runShow(client, opts, args) {
-  const params = {};
-  // Detect if target is an identifier (uppercase letters + dash + number)
-  const isIdFormat = /^[A-Z]{3,6}-\d+$/.test(args.target);
-  if (isIdFormat) {
-    params.identifier = args.target;
-  } else {
-    params.id = args.target;
-  }
-
-  const result = await client.request(
-    'GET',
-    '/v1/project/work_items',
-    params,
-    null,
-    { dry_run: opts.dry_run, use_workspace_cache: true },
-  );
-
-  if (opts.dry_run) return result;
-
-  // For real results, compact if requested, otherwise return first match
-  if (opts.compact) {
-    return core.compactResponse(result);
-  }
-  return result;
-}
-
 // ── Get subcommand ───────────────────────────────────────────────────
 
 function parseGetArgs(tokens) {
@@ -509,8 +366,8 @@ function parseGetArgs(tokens) {
       }
       throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem get --help for usage.`);
     }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
+    if (ALL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
       i += 1;
       continue;
     }
@@ -519,6 +376,12 @@ function parseGetArgs(tokens) {
     throw new core.PingCodeError('A work item id or identifier is required. Use workitem get --help for usage.');
   }
   return { work_item_id: workItemId };
+}
+
+function isIdentifier(arg) {
+  // PingCode identifiers look like: PROJECT_KEY-NUMBER (e.g., SCR-1, TASK-42)
+  // Project keys are typically 3-6 uppercase letters.
+  return /^[A-Z]{3,6}-\d+$/.test(arg);
 }
 
 async function runGet(client, opts, args) {
@@ -642,11 +505,11 @@ function parseUpdateArgs(tokens) {
         if (flag in stringFlags) {
           args[stringFlags[flag]] = value;
         } else {
-          if (!(flag in GLOBAL_BOOLEAN_FLAGS) && !(flag in GLOBAL_STRING_FLAGS)) {
+          if (!ALL_BOOLEAN_FLAGS.has(flag) && !(flag in shared.BASE_GLOBAL_STRING_FLAGS)) {
             throw new core.PingCodeError(`Unknown option: ${flag}`);
           }
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!ALL_BOOLEAN_FLAGS.has(arg)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem update --help for usage.`);
       }
     }
@@ -664,12 +527,6 @@ function parseUpdateArgs(tokens) {
   }
 
   return args;
-}
-
-function isIdentifier(arg) {
-  // PingCode identifiers look like: PROJECT_KEY-NUMBER (e.g., SCR-1, TASK-42)
-  // Project keys are typically 3-6 uppercase letters.
-  return /^[A-Z]{3,6}-\d+$/.test(arg);
 }
 
 function parseNumber(value, label) {
@@ -831,8 +688,6 @@ function printHelp() {
     '    --description TEXT        Description text',
     '    --parent <id|identifier>  Parent work item',
     '',
-    '  show <id|identifier>        Show a single work item',
-    '',
     '  get <id|identifier>         Get a single work item by id or identifier',
     '',
     '  update <id|identifier>      Update a work item',
@@ -913,18 +768,13 @@ function printSubcommandHelp(subcommand) {
         '  --parent <id|identifier>  Parent work item',
       ].join('\n'));
       break;
-    case 'show':
-      console.log([
-        'Usage: pingcode workitem show <id|identifier>',
-        '',
-        'Show a single work item by id or identifier.',
-      ].join('\n'));
-      break;
     case 'get':
       console.log([
         'Usage: pingcode workitem get <id|identifier>',
         '',
         'Get a single work item by id or identifier.',
+        '',
+        'Identifiers (e.g. SCR-123) are resolved to an id, then the single item is fetched.',
       ].join('\n'));
       break;
     case 'update':
@@ -979,10 +829,10 @@ async function run(argv) {
     return;
   }
 
-  // Parse global options from remaining tokens
-  const { opts, remaining: subArgs } = parseGlobalOptions(remaining);
+  // Parse global options from remaining tokens, passing workitem-specific boolean flags
+  const { opts, remaining: subArgs } = shared.parseGlobalOptions(remaining, EXTRA_BOOLEAN_FLAGS);
 
-  const client = clientFromOpts(opts);
+  const client = shared.clientFromOpts(opts);
 
   try {
     let result;
@@ -995,11 +845,6 @@ async function run(argv) {
       case 'create': {
         const args = parseCreateArgs(subArgs);
         result = await runCreate(client, opts, args);
-        break;
-      }
-      case 'show': {
-        const args = parseShowArgs(subArgs);
-        result = await runShow(client, opts, args);
         break;
       }
       case 'get': {

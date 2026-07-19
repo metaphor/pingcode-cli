@@ -971,7 +971,7 @@ testInCleanEnv('dispatcher prints workitem help', async () => {
   assert.ok(result.stdout.includes('workitem'));
   assert.ok(result.stdout.includes('list'));
   assert.ok(result.stdout.includes('create'));
-  assert.ok(result.stdout.includes('show'));
+  assert.ok(result.stdout.includes('get'));
   assert.ok(result.stdout.includes('update'));
 });
 

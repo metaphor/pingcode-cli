@@ -123,7 +123,9 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 - 查询、创建、更新工作项（含状态更新，支持 `--dry-run` 试运行）
 - 在故事下创建子工作项（通过 `--parent`）
 - 创建、查看、删除工作项评论（通过 `--reply-to` 支持回复）
-- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`）调用 PingCode API
+- 查询、创建、更新需求（idea）
+- 查询产品列表和产品详情（`product list / get`）
+- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`, `idea *`, `product *`）调用 PingCode API
 
 以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md`、`comment.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作、评论操作的详细参考。
 
@@ -136,7 +138,9 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 | `pingcode/SKILL.md` | 路由入口，统一提供 PingCode CLI 的各项能力 |
 | `pingcode/references/auth.md` | 用户令牌登录：`pingcode auth login`、grant-type 自动识别与覆盖、令牌类型说明 |
 | `pingcode/references/ctx.md` | 工作区上下文初始化：在 Agent 前台按编号选择当前项目、迭代、用户并写入缓存 |
-| `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / show / get / update` 子命令及完整参数；含共享安全规则 |
+| `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / get / update` 子命令及完整参数；含共享安全规则 |
+| `pingcode/references/idea.md` | 需求操作：`idea list / create / update / get / search` 等子命令及安全规则 |
+| `pingcode/references/product.md` | 产品操作：`product list / get` 子命令及安全规则 |
 | `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete` 子命令及安全规则 |
 
 ## 子命令
@@ -148,7 +152,7 @@ PingCode CLI 通过子命令管理配置和工作项。
 | 子命令 | 说明 | 示例 |
 |---|---|---|
 | `context init` | 交互式初始化工作区上下文 | `pingcode context init` |
-| `context list` | 显示当前偏好和字典摘要 | `pingcode context list` |
+| `context list` | 以 JSON 输出当前偏好和字典条目数量 | `pingcode context list` |
 | `context set-current-user <id>` | 设置当前用户 | `pingcode context set-current-user @me` |
 | `context set-current-project <id>` | 设置当前项目 | `pingcode context set-current-project PROJECT_ID` |
 | `context set-current-sprint <id>` | 设置当前迭代 | `pingcode context set-current-sprint SPRINT_ID` |
@@ -170,8 +174,7 @@ pingcode context set-current-project my-project
 |---|---|---|
 | `workitem list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `pingcode workitem list --assignee @me --state 进行中` |
 | `workitem create` | 创建工作项 | `pingcode workitem create --title "新任务" --type task` |
-| `workitem show <id>` | 查看单个工作项（通过列表接口按 id 或 identifier 查询） | `pingcode workitem show SCR-123` |
-| `workitem get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `pingcode workitem get WORK_ITEM_ID` |
+| `workitem get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `pingcode workitem get SCR-123` |
 | `workitem update <id>` | 更新工作项 | `pingcode workitem update SCR-123 --state 已完成` |
 
 ```bash
@@ -187,8 +190,8 @@ pingcode workitem list --keywords "登录页面" --compact
 # 创建工作项（默认负责人为当前用户）
 pingcode workitem create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
 
-# 通过编号查看工作项
-pingcode workitem show SCR-123
+# 通过编号获取工作项
+pingcode workitem get SCR-123
 
 # 通过 id 获取单个工作项（官方单个工作项接口）
 pingcode workitem get WORK_ITEM_ID
@@ -205,6 +208,28 @@ pingcode workitem update WI-AbCdEf --state 进行中 --priority 高
 # 试运行（预览 API 请求，不发送）
 pingcode workitem create --title "test" --type task --dry-run
 pingcode workitem update SCR-123 --state 已完成 --dry-run
+```
+
+### 产品管理 (`product`)
+
+| 子命令 | 说明 | 示例 |
+|---|---|---|
+| `product list` | 列出产品 | `pingcode product list --compact` |
+| `product get <id>` | 获取单个产品详情 | `pingcode product get PRODUCT_ID` |
+
+```bash
+# 查看产品列表
+pingcode product list --compact
+
+# 按关键词搜索产品
+pingcode product list --keywords "核心产品" --compact
+
+# 获取产品详情
+pingcode product get PRODUCT_ID
+
+# 试运行（预览 API 请求，不发送）
+pingcode product list --dry-run
+pingcode product get PRODUCT_ID --dry-run
 ```
 
 ### 评论管理 (`comment`)

@@ -54,7 +54,6 @@ testInCleanEnv('idea --help shows module help', async () => {
   assert.ok(output.includes('create'));
   assert.ok(output.includes('update'));
   assert.ok(output.includes('list'));
-  assert.ok(output.includes('show'));
   assert.ok(output.includes('get'));
   assert.ok(output.includes('search'));
   assert.ok(output.includes('states'));
@@ -140,19 +139,6 @@ testInCleanEnv('idea list --help shows list-specific usage', async () => {
   assert.ok(output.includes('--include-public-image-token'));
 });
 
-testInCleanEnv('idea show --help shows show-specific usage', async () => {
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
-  try {
-    await idea.run(['show', '--help']);
-  } finally {
-    console.log = originalLog;
-  }
-  assert.ok(output.includes('Usage: pingcode idea show <identifier>'));
-  assert.ok(output.includes('Only identifiers'));
-});
-
 testInCleanEnv('idea get --help shows get-specific usage', async () => {
   let output = '';
   const originalLog = console.log;
@@ -178,7 +164,7 @@ testInCleanEnv('idea search --help shows search-specific usage', async () => {
   assert.ok(output.includes('Usage: pingcode idea search [options]'));
   assert.ok(output.includes('--filter'));
   assert.ok(output.includes('--keywords'));
-  assert.ok(output.includes('--page-size'));
+  assert.ok(output.includes('--limit'));
   assert.ok(output.includes('--page-index'));
   assert.ok(output.includes('--include-public-image-token'));
 });
@@ -484,36 +470,6 @@ testInCleanTmp('idea list dry-run with all filters', async (t, tmpdir) => {
   assert.strictEqual(result.params.include_public_image_token, 'description');
 });
 
-// ── Show dry-run ──────────────────────────────────────────────────────
-
-testInCleanTmp('idea show with identifier returns compound dry-run', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, { preferences: {} });
-
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
-  try {
-    await idea.run([
-      'show', 'SLC-1',
-      '--workspace-cache', cachePath, '--dry-run',
-    ]);
-  } finally {
-    console.log = originalLog;
-  }
-
-  const result = JSON.parse(output.trim());
-  assert.strictEqual(result.dry_run, true);
-  assert.ok(result.resolution);
-  assert.strictEqual(result.resolution.method, 'GET');
-  assert.strictEqual(result.resolution.path, '/v1/ship/ideas');
-  assert.strictEqual(result.resolution.params.keywords, 'SLC-1');
-  assert.ok(result.show);
-  assert.strictEqual(result.show.method, 'GET');
-  assert.strictEqual(result.show.path, '/v1/ship/ideas');
-  assert.strictEqual(result.show.params.keywords, 'SLC-1');
-});
-
 // ── Get dry-run ───────────────────────────────────────────────────────
 
 testInCleanTmp('idea get with identifier returns compound dry-run', async (t, tmpdir) => {
@@ -627,7 +583,7 @@ testInCleanTmp('idea search dry-run with all options', async (t, tmpdir) => {
       'search',
       '--filter', '{"title":{"contains":"login"}}',
       '--keywords', 'auth',
-      '--page-size', '10',
+      '--limit', '10',
       '--page-index', '0',
       '--include-public-image-token',
       '--workspace-cache', cachePath, '--dry-run',
@@ -912,23 +868,6 @@ testInCleanTmp('idea create missing --title errors', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('idea show missing identifier errors', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, { preferences: {} });
-
-  try {
-    await idea.run([
-      'show',
-      '--workspace-cache', cachePath, '--dry-run',
-    ]);
-    assert.fail('Expected error was not thrown');
-  } catch (exc) {
-    assert.ok(exc.message.includes('identifier'));
-    assert.ok(exc.message.includes('required'));
-    process.exitCode = 0;
-  }
-});
-
 testInCleanTmp('idea get missing id errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, { preferences: {} });
@@ -1087,40 +1026,6 @@ testInCleanTmp('idea list --product with name rejects', async (t, tmpdir) => {
   }
 });
 
-testInCleanTmp('idea show with raw id rejects', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, { preferences: {} });
-
-  try {
-    await idea.run([
-      'show', '5edca524cad2fa1125cb0630',
-      '--workspace-cache', cachePath, '--dry-run',
-    ]);
-    assert.fail('Expected error was not thrown');
-  } catch (exc) {
-    assert.ok(exc.message.includes('identifier'));
-    assert.ok(exc.message.includes('not a raw id'));
-    process.exitCode = 0;
-  }
-});
-
-testInCleanTmp('idea show with invalid identifier format rejects', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, { preferences: {} });
-
-  try {
-    await idea.run([
-      'show', 'invalid-format',
-      '--workspace-cache', cachePath, '--dry-run',
-    ]);
-    assert.fail('Expected error was not thrown');
-  } catch (exc) {
-    assert.ok(exc.message.includes('identifier'));
-    assert.ok(exc.message.includes('Invalid'));
-    process.exitCode = 0;
-  }
-});
-
 testInCleanTmp('idea update --state with name rejects', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, { preferences: {} });
@@ -1215,19 +1120,19 @@ testInCleanTmp('idea create --properties invalid JSON errors', async (t, tmpdir)
   }
 });
 
-testInCleanTmp('idea search --page-size out of range errors', async (t, tmpdir) => {
+testInCleanTmp('idea search --limit out of range errors', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, { preferences: {} });
 
   try {
     await idea.run([
       'search',
-      '--page-size', '200',
+      '--limit', '200',
       '--workspace-cache', cachePath, '--dry-run',
     ]);
     assert.fail('Expected error was not thrown');
   } catch (exc) {
-    assert.ok(exc.message.includes('page-size'));
+    assert.ok(exc.message.includes('limit'));
     assert.ok(exc.message.includes('between 1 and 100'));
     process.exitCode = 0;
   }

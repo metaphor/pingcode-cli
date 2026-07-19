@@ -517,49 +517,6 @@ testInCleanTmp('workitem create with --all-users skips default assignee', async 
   assert.strictEqual('assignee_id' in result.json, false);
 });
 
-// ── workitem show ────────────────────────────────────────────────────
-
-testInCleanTmp('workitem show identifier returns GET with identifier param', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, {
-    preferences: {
-      current_user_id: 'user-1',
-      current_project_id: 'project-1',
-      current_sprint_id: 'sprint-1',
-    },
-  });
-
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
-  try {
-    await workItem.run(['show', 'SCR-1', '--workspace-cache', cachePath, '--dry-run']);
-  } finally {
-    console.log = originalLog;
-  }
-
-  const result = JSON.parse(output.trim());
-  assert.strictEqual(result.dry_run, true);
-  assert.strictEqual(result.method, 'GET');
-  assert.strictEqual(result.path, '/v1/project/work_items');
-  assert.strictEqual(result.params.identifier, 'SCR-1');
-});
-
-testInCleanTmp('workitem show missing target errors', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, {
-    preferences: { current_user_id: 'user-1' },
-  });
-
-  try {
-    await workItem.run(['show', '--workspace-cache', cachePath, '--dry-run']);
-    assert.fail('Expected error was not thrown');
-  } catch (exc) {
-    assert.ok(exc.message.includes('id or identifier'));
-    process.exitCode = 0;
-  }
-});
-
 testInCleanTmp('workitem get by id returns GET by path', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
@@ -1113,26 +1070,6 @@ testInCleanTmp('workitem create --title empty string errors', async (t, tmpdir) 
   }
 });
 
-testInCleanTmp('workitem show with id param (non-identifier) uses id filter', async (t, tmpdir) => {
-  const cachePath = tmpFile(tmpdir, 'workspace.json');
-  writeWorkspaceCache(cachePath, {
-    preferences: { current_user_id: 'user-1' },
-  });
-
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
-  try {
-    await workItem.run(['show', 'a1b2c3d4', '--workspace-cache', cachePath, '--dry-run']);
-  } finally {
-    console.log = originalLog;
-  }
-
-  const result = JSON.parse(output.trim());
-  assert.strictEqual(result.params.id, 'a1b2c3d4');
-  assert.strictEqual('identifier' in result.params, false);
-});
-
 testInCleanTmp('workitem update --dry-run does not make network requests', async (t, tmpdir) => {
   const cachePath = tmpFile(tmpdir, 'workspace.json');
   writeWorkspaceCache(cachePath, {
@@ -1324,7 +1261,6 @@ testInCleanEnv('module help lists all subcommands', async () => {
   assert.ok(output.includes('Subcommands:'));
   assert.ok(output.includes('list [options]'));
   assert.ok(output.includes('create --title TITLE'));
-  assert.ok(output.includes('show <id|identifier>'));
   assert.ok(output.includes('get <id|identifier>'));
   assert.ok(output.includes('update <id|identifier>'));
   assert.ok(output.includes('--all-users'));
@@ -1359,20 +1295,6 @@ testInCleanEnv('create --help shows create-specific usage', async () => {
   assert.ok(output.includes('--title TITLE'));
   assert.ok(output.includes('--parent <id|identifier>'));
   assert.ok(!output.includes('list [options]'));
-});
-
-testInCleanEnv('show --help shows show-specific usage', async () => {
-  let output = '';
-  const originalLog = console.log;
-  console.log = (...args) => { output += args.join(' ') + '\n'; };
-  try {
-    await workItem.run(['show', '--help']);
-  } finally {
-    console.log = originalLog;
-  }
-  assert.ok(output.includes('Usage: pingcode workitem show <id|identifier>'));
-  assert.ok(!output.includes('list [options]'));
-  assert.ok(!output.includes('create --title TITLE'));
 });
 
 testInCleanEnv('update --help shows update-specific usage', async () => {

@@ -3,97 +3,6 @@
 const core = require('../core');
 const shared = require('./shared');
 
-// ── Global option defaults ──────────────────────────────────────────────
-const GLOBAL_BOOLEAN_FLAGS = new Set([
-  '--dry-run', '--compact', '--no-token-cache', '--no-workspace-cache',
-]);
-
-const GLOBAL_STRING_FLAGS = {
-  '--base-url': 'base_url',
-  '--client-id': 'client_id',
-  '--client-secret': 'client_secret',
-  '--token': 'token',
-  '--user-id': 'user_id',
-  '--user-name': 'user_name',
-  '--workspace-cache': 'workspace_cache',
-  '--grant-type': 'grant_type',
-};
-
-function defaultGlobalOpts() {
-  return {
-    base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
-    client_id: process.env.PINGCODE_CLIENT_ID || null,
-    client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
-    token: process.env.PINGCODE_ACCESS_TOKEN || null,
-    user_id: process.env.PINGCODE_USER_ID || null,
-    user_name: process.env.PINGCODE_USER_NAME || null,
-    no_token_cache: false,
-    workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
-    no_workspace_cache: false,
-    dry_run: false,
-    compact: false,
-    grant_type: 'auto',
-  };
-}
-
-function parseGlobalOptions(tokens) {
-  const opts = defaultGlobalOpts();
-  const remaining = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (arg === '--help' || arg === '-h') {
-      remaining.push(arg);
-      continue;
-    }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) {
-      const key = arg.replace(/^--/, '').replace(/-/g, '_');
-      opts[key] = true;
-      continue;
-    }
-    const eqIndex = arg.indexOf('=');
-    let flag, value, consumedNext = false;
-    if (eqIndex !== -1) {
-      flag = arg.slice(0, eqIndex);
-      value = arg.slice(eqIndex + 1);
-    } else if (arg.startsWith('--')) {
-      flag = arg;
-      if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
-        value = tokens[i + 1];
-        consumedNext = true;
-      } else {
-        remaining.push(arg);
-        continue;
-      }
-    } else {
-      remaining.push(arg);
-      continue;
-    }
-    if (flag in GLOBAL_STRING_FLAGS) {
-      opts[GLOBAL_STRING_FLAGS[flag]] = value;
-      if (consumedNext) i += 1;
-    } else {
-      remaining.push(arg);
-      if (consumedNext) remaining.push(value);
-      if (consumedNext) i += 1;
-    }
-  }
-  return { opts, remaining };
-}
-
-function clientFromOpts(opts) {
-  const tokenCache = opts.no_token_cache ? null : (process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE);
-  const workspaceCache = opts.no_workspace_cache ? null : opts.workspace_cache;
-  return new core.PingCodeClient({
-    base_url: opts.base_url,
-    client_id: opts.client_id,
-    client_secret: opts.client_secret,
-    token: opts.token,
-    token_cache: tokenCache,
-    workspace_cache: workspaceCache,
-    grant_type: opts.grant_type,
-  });
-}
-
 // ── Identifier helpers ─────────────────────────────────────────────────
 
 function isIdentifier(arg) {
@@ -116,7 +25,6 @@ function printHelp() {
     '  create                      Create an idea',
     '  update                      Update an idea',
     '  list                        List ideas',
-    '  show                        Show a single idea',
     '  get                         Get a single idea by id or identifier',
     '  search                      Search ideas',
     '  states                      List idea states',
@@ -202,14 +110,6 @@ function printSubcommandHelp(subcommand) {
         '  --include-public-image-token  Include image access token in response',
       ].join('\n'));
       break;
-    case 'show':
-      console.log([
-        'Usage: pingcode idea show <identifier>',
-        '',
-        'Show a single idea by identifier (e.g. SLC-1).',
-        'Only identifiers (format PROJ-123) are accepted; use `idea get` for raw ids.',
-      ].join('\n'));
-      break;
     case 'get':
       console.log([
         'Usage: pingcode idea get <id|identifier>',
@@ -230,14 +130,14 @@ function printSubcommandHelp(subcommand) {
         'Options:',
         '  --filter JSON                Filter conditions as JSON object (MongoDB-like query syntax)',
         '  --keywords TEXT              Keywords to filter by (matches identifier and title)',
-        '  --page-size NUM              Number of results per page (1-100, default 30)',
+        '  --limit NUM                  Number of results per page (1-100, default 30)',
         '  --page-index NUM             Page index starting from 0 (default 0)',
         '  --include-public-image-token  Include image access token in response',
         '',
         'Examples:',
         '  pingcode idea search --keywords "login" --compact',
         '  pingcode idea search --filter \'{"title":{"contains":"账号"}}\' --dry-run',
-        '  pingcode idea search --filter \'{"product.id":{"in":["6422711c3f12e6c1e46d40e9"]}}\' --page-size 10',
+        '  pingcode idea search --filter \'{"product.id":{"in":["6422711c3f12e6c1e46d40e9"]}}\' --limit 10',
       ].join('\n'));
       break;
     case 'states':
@@ -376,7 +276,7 @@ function parseListArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!(arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use idea list --help for usage.`);
       }
     } else {
@@ -422,70 +322,6 @@ async function runList(client, opts, args) {
   );
 }
 
-// ── Show subcommand ──────────────────────────────────────────────────
-
-function parseShowArgs(tokens) {
-  let target = null;
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (!arg.startsWith('--')) {
-      if (target === null) {
-        target = arg;
-        continue;
-      }
-      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea show --help for usage.`);
-    }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
-      i += 1;
-      continue;
-    }
-  }
-  if (!target) {
-    throw new core.PingCodeError('An idea identifier is required. Use idea show --help for usage.');
-  }
-  return { target };
-}
-
-async function runShow(client, opts, args) {
-  if (!isIdentifier(args.target)) {
-    if (isRawId(args.target)) {
-      throw new core.PingCodeError('Idea show requires an identifier, not a raw id. Use idea get for raw ids.');
-    }
-    throw new core.PingCodeError(`Invalid idea identifier: ${args.target}. Expected format like PROJ-123.`);
-  }
-
-  if (opts.dry_run) {
-    return {
-      dry_run: true,
-      resolution: {
-        method: 'GET',
-        path: '/v1/ship/ideas',
-        params: { keywords: args.target },
-      },
-      show: {
-        method: 'GET',
-        path: '/v1/ship/ideas',
-        params: { keywords: args.target },
-      },
-    };
-  }
-
-  const result = await client.request(
-    'GET',
-    '/v1/ship/ideas',
-    { keywords: args.target },
-    null,
-    { dry_run: false, use_workspace_cache: true },
-  );
-
-  const values = core.pageValues(result);
-  if (values.length === 0) {
-    throw new core.PingCodeError(`No idea found with identifier ${args.target}`);
-  }
-  return values[0];
-}
-
 // ── Get subcommand ───────────────────────────────────────────────────
 
 function parseGetArgs(tokens) {
@@ -504,8 +340,8 @@ function parseGetArgs(tokens) {
       includePublicImageToken = true;
       continue;
     }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
+    if (shared.BASE_GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
       i += 1;
       continue;
     }
@@ -582,8 +418,8 @@ function parseTransitionHistoriesArgs(tokens) {
       }
       throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea transition-histories --help for usage.`);
     }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
+    if (shared.BASE_GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
       i += 1;
       continue;
     }
@@ -651,8 +487,8 @@ function parseTransitionHistoryArgs(tokens) {
       positionals.push(arg);
       continue;
     }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
-    if (GLOBAL_STRING_FLAGS[arg]) {
+    if (shared.BASE_GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
       i += 1;
       continue;
     }
@@ -757,7 +593,7 @@ function parseCreateArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!(arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use idea create --help for usage.`);
       }
     } else {
@@ -883,7 +719,7 @@ function parseUpdateArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!(arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use idea update --help for usage.`);
       }
     }
@@ -1036,7 +872,7 @@ function parseSearchArgs(tokens) {
   const stringFlags = {
     '--filter': 'filter',
     '--keywords': 'keywords',
-    '--page-size': 'page_size',
+    '--limit': 'page_size',
     '--page-index': 'page_index',
   };
 
@@ -1062,7 +898,7 @@ function parseSearchArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!(arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use idea search --help for usage.`);
       }
     } else {
@@ -1074,7 +910,7 @@ function parseSearchArgs(tokens) {
   if (args.page_size !== null) {
     const num = Number(args.page_size);
     if (Number.isNaN(num) || num < 1 || num > 100) {
-      throw new core.PingCodeError('--page-size must be a number between 1 and 100');
+      throw new core.PingCodeError('--limit must be a number between 1 and 100');
     }
     args.page_size = num;
   }
@@ -1151,7 +987,7 @@ function parseDictionaryArgs(tokens) {
         } else {
           throw new core.PingCodeError(`Unknown option: ${flag}`);
         }
-      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+      } else if (!(arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS)) {
         throw new core.PingCodeError(`Unknown option: ${arg}. Use idea <subcommand> --help for usage.`);
       }
     } else {
@@ -1199,8 +1035,8 @@ async function run(argv) {
     return;
   }
 
-  const { opts, remaining: subArgs } = parseGlobalOptions(remaining);
-  const client = clientFromOpts(opts);
+  const { opts, remaining: subArgs } = shared.parseGlobalOptions(remaining);
+  const client = shared.clientFromOpts(opts);
 
   try {
     let result;
@@ -1208,11 +1044,6 @@ async function run(argv) {
       case 'list': {
         const listArgs = parseListArgs(subArgs);
         result = await runList(client, opts, listArgs);
-        break;
-      }
-      case 'show': {
-        const showArgs = parseShowArgs(subArgs);
-        result = await runShow(client, opts, showArgs);
         break;
       }
       case 'get': {
@@ -1271,7 +1102,7 @@ async function run(argv) {
         break;
       }
       default:
-        throw new core.PingCodeError(`Unknown idea subcommand: ${subcommand}`);
+        throw new core.PingCodeError(`Unknown idea subcommand: ${subcommand}. Use idea --help for usage.`);
     }
 
     if (opts.dry_run) {

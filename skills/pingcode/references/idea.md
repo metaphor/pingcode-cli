@@ -21,16 +21,13 @@ pingcode idea list --product PRODUCT_ID --compact
 pingcode idea list --product PRODUCT_ID --state STATE_ID --priority PRIORITY_ID --keywords "登录页面" --compact
 pingcode idea list --product PRODUCT_ID --include-public-image-token --compact
 
-# 通过 identifier 查看需求（show 只接受 identifier，如 SLC-1）
-pingcode idea show SLC-1
-
-# 通过 id 或 identifier 获取需求（get 接受 identifier 或 raw ID）
-pingcode idea get IDEA_ID
+# 通过 identifier 获取需求（get 接受 identifier 或 raw ID）
 pingcode idea get SLC-1
+pingcode idea get IDEA_ID
 
 # 搜索需求
-pingcode idea search --product PRODUCT_ID --filter '{"state": {"in": ["STATE_ID"]}}' --keywords "登录" --page-size 20 --page-index 1
-pingcode idea search --product PRODUCT_ID --include-public-image-token --page-size 50 --page-index 1
+pingcode idea search --product PRODUCT_ID --filter '{"state": {"in": ["STATE_ID"]}}' --keywords "登录" --limit 20 --page-index 1
+pingcode idea search --product PRODUCT_ID --include-public-image-token --limit 50 --page-index 1
 
 # 创建需求（--product 必须是 raw ID；--assignee 支持从缓存解析名称）
 pingcode idea create --product PRODUCT_ID --title "新增登录功能" --dry-run
@@ -62,7 +59,7 @@ pingcode idea transition-histories IDEA_ID
 3. 使用 `pingcode idea list --product PRODUCT_ID --compact` 查看需求标识符（如 `SLC-1`）。
 4. 创建需求时先加 `--dry-run` 预览，确认无误后去掉 `--dry-run` 执行真实写入。
 5. 更新需求时通过 identifier（如 `SLC-1`）定位，涉及字典 ID 的字段均使用 raw ID。
-6. 查看单条需求用 `show`（仅 identifier），需要完整接口返回用 `get`（identifier 或 raw ID 均可）。
+6. 获取单条需求用 `get`（identifier 或 raw ID 均可）。
 
 ## 安全规则
 

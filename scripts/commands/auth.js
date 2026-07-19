@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const os = require('node:os');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
@@ -29,6 +30,20 @@ const STRING_FLAGS = {
   '--base-url': 'base_url',
   '--token-cache': 'token_cache',
   '--workspace-cache': 'workspace_cache',
+};
+
+const STATUS_BOOLEAN_FLAGS = new Set([
+  '--no-token-cache', '--no-workspace-cache', '--dry-run', '--compact',
+]);
+
+const STATUS_STRING_FLAGS = {
+  '--grant-type': 'grant_type',
+  '--client-id': 'client_id',
+  '--client-secret': 'client_secret',
+  '--base-url': 'base_url',
+  '--token-cache': 'token_cache',
+  '--workspace-cache': 'workspace_cache',
+  '--token': 'token',
 };
 
 // ── Parser ─────────────────────────────────────────────────────────────
@@ -104,6 +119,64 @@ function parseLoginArgs(tokens) {
   return { opts, helpRequested };
 }
 
+function parseStatusArgs(tokens) {
+  const opts = {
+    base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
+    client_id: process.env.PINGCODE_CLIENT_ID || null,
+    client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
+    grant_type: process.env.PINGCODE_GRANT_TYPE || 'auto',
+    token_cache: process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE,
+    workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
+    token: process.env.PINGCODE_ACCESS_TOKEN || null,
+    no_token_cache: false,
+    no_workspace_cache: false,
+    dry_run: false,
+    compact: false,
+  };
+
+  let helpRequested = false;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg === '--help' || arg === '-h') {
+      helpRequested = true;
+      continue;
+    }
+    if (STATUS_BOOLEAN_FLAGS.has(arg)) {
+      const key = arg.replace(/^--/, '').replace(/-/g, '_');
+      opts[key] = true;
+      continue;
+    }
+    if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      let flag, value;
+      if (eqIndex !== -1) {
+        flag = arg.slice(0, eqIndex);
+        value = arg.slice(eqIndex + 1);
+      } else {
+        flag = arg;
+        if (!(flag in STATUS_STRING_FLAGS)) {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+        if (i + 1 < tokens.length) {
+          value = tokens[i + 1];
+          i += 1;
+        } else {
+          throw new core.PingCodeError(`Flag ${flag} requires a value`);
+        }
+      }
+      if (!(flag in STATUS_STRING_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${flag}`);
+      }
+      opts[STATUS_STRING_FLAGS[flag]] = value;
+      continue;
+    }
+    throw new core.PingCodeError(`Unexpected argument: ${arg}. Use auth status --help for usage.`);
+  }
+
+  return { opts, helpRequested };
+}
+
 // ── Client ─────────────────────────────────────────────────────────────
 
 function createClient(opts) {
@@ -113,6 +186,7 @@ function createClient(opts) {
     base_url: opts.base_url,
     client_id: opts.client_id,
     client_secret: opts.client_secret,
+    token: opts.token || null,
     token_cache: tokenCache,
     workspace_cache: workspaceCache,
     grant_type: opts.grant_type,
@@ -163,6 +237,7 @@ function printHelp() {
     '',
     'Subcommands:',
     '  login    Authenticate with your PingCode user account (OAuth2 authorization_code)',
+    '  status   Show current authentication status',
     '',
     'Run `pingcode auth <subcommand> --help` for subcommand-specific usage.',
   ].join('\n'));
@@ -199,6 +274,36 @@ function printLoginHelp() {
     '  PINGCODE_WORKSPACE_CACHE  Workspace cache file path',
     '  PINGCODE_REDIRECT_URI     Redirect URI (default: http://127.0.0.1:8765/callback)',
     '  PINGCODE_CALLBACK_PORT    Callback server port (default: 8765)',
+  ].join('\n'));
+}
+
+function printStatusHelp() {
+  console.log([
+    'PingCode auth status — Show current authentication status',
+    '',
+    'Usage: pingcode auth status [options]',
+    '',
+    'Options:',
+    '  --grant-type TYPE         OAuth grant type (default: auto)',
+    '  --client-id ID            OAuth client ID',
+    '  --client-secret SECRET    OAuth client secret',
+    '  --base-url URL            PingCode base URL',
+    '  --token-cache PATH        Token cache file path',
+    '  --no-token-cache          Disable token cache',
+    '  --workspace-cache PATH    Workspace cache file path',
+    '  --no-workspace-cache      Disable workspace cache',
+    '  --token TOKEN             Use an explicit access token (not saved)',
+    '  --dry-run                 Show planned actions without executing',
+    '  --compact                 Show compact output',
+    '  --help                    Show this help',
+    '',
+    'Credentials can also be set via environment variables:',
+    '  PINGCODE_CLIENT_ID        OAuth client ID',
+    '  PINGCODE_CLIENT_SECRET    OAuth client secret',
+    '  PINGCODE_BASE_URL         PingCode base URL',
+    '  PINGCODE_ACCESS_TOKEN     Explicit access token (not saved)',
+    '  PINGCODE_TOKEN_CACHE      Token cache file path',
+    '  PINGCODE_WORKSPACE_CACHE  Workspace cache file path',
   ].join('\n'));
 }
 
@@ -358,9 +463,83 @@ async function runLogin(argv, inputFunc) {
   }
 }
 
+// ── Status ───────────────────────────────────────────────────────────────
+
+async function runStatus(argv) {
+  const tokens = argv || [];
+
+  if (tokens.length === 1 && (tokens[0] === '--help' || tokens[0] === '-h')) {
+    printStatusHelp();
+    return;
+  }
+
+  const { opts, helpRequested } = parseStatusArgs(tokens);
+
+  if (helpRequested) {
+    printStatusHelp();
+    return;
+  }
+
+  const client = createClient(opts);
+  const tokenCachePath = client.tokenCache;
+  const workspaceCachePath = client.workspaceCachePath;
+
+  let rawToken = null;
+  let validToken = null;
+  if (tokenCachePath) {
+    rawToken = core.readRawTokenCache(tokenCachePath);
+    validToken = core.loadCachedToken(tokenCachePath);
+  }
+
+  const hasExplicitToken = typeof opts.token === 'string' && opts.token;
+  const tokenValid = !!hasExplicitToken || (validToken !== null);
+  const tokenCacheExists = tokenCachePath ? fs.existsSync(tokenCachePath) : false;
+  const workspaceCacheExists = workspaceCachePath ? fs.existsSync(workspaceCachePath) : false;
+
+  const grantType = tokenValid
+    ? client.resolveGrantType()
+    : (rawToken && typeof rawToken.grant_type === 'string' ? rawToken.grant_type : opts.grant_type);
+
+  const expiresAt = rawToken && typeof rawToken.expires_at === 'number' ? rawToken.expires_at : null;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const expiresIn = expiresAt && expiresAt > nowSeconds ? expiresAt - nowSeconds : null;
+
+  const result = {
+    authenticated: tokenValid,
+    grant_type: grantType,
+    base_url: client.baseUrl,
+    token_cache: tokenCachePath,
+    token_cache_exists: tokenCacheExists,
+    token_valid: tokenValid,
+    token_expires_at: expiresAt,
+    token_expires_in: expiresIn,
+    credentials: {
+      client_id_configured: !!(opts.client_id),
+      client_secret_configured: !!(opts.client_secret),
+    },
+    workspace_cache: workspaceCachePath,
+    workspace_cache_exists: workspaceCacheExists,
+  };
+
+  if (opts.dry_run) {
+    result.dry_run = true;
+  }
+
+  if (opts.compact) {
+    core.printJson({
+      authenticated: result.authenticated,
+      grant_type: result.grant_type,
+      token_valid: result.token_valid,
+      credentials: result.credentials,
+    });
+  } else {
+    core.printJson(result);
+  }
+}
+
 // ── Register ───────────────────────────────────────────────────────────
 
-const SUBCOMMANDS = ['login'];
+const SUBCOMMANDS = ['login', 'status'];
 
 async function run(argv, inputFunc) {
   const tokens = argv || [];
@@ -371,13 +550,20 @@ async function run(argv, inputFunc) {
     return;
   }
 
-  if (subcommand !== 'login') {
-    throw new core.PingCodeError(
-      `Unknown auth subcommand: ${subcommand}. Valid subcommands: ${SUBCOMMANDS.join(', ')}.`
-    );
-  }
+  const remaining = tokens.slice(1);
 
-  await runLogin(tokens.slice(1), inputFunc);
+  switch (subcommand) {
+    case 'login':
+      await runLogin(remaining, inputFunc);
+      return;
+    case 'status':
+      await runStatus(remaining);
+      return;
+    default:
+      throw new core.PingCodeError(
+        `Unknown auth subcommand: ${subcommand}. Use auth --help for usage.`
+      );
+  }
 }
 
 shared.registerModule('auth', {
@@ -386,4 +572,4 @@ shared.registerModule('auth', {
   run,
 });
 
-module.exports = { run, runLogin, printHelp, printLoginHelp, parseLoginArgs, createClient, buildDryRunExchange };
+module.exports = { run, runLogin, runStatus, printHelp, printLoginHelp, printStatusHelp, parseLoginArgs, parseStatusArgs, createClient, buildDryRunExchange };

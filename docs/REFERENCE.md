@@ -24,7 +24,7 @@
 | 子命令 | 说明 | 示例 |
 |---|---|---|
 | `context init` | 交互式初始化工作区上下文 | `pingcode context init` |
-| `context list` | 显示当前偏好和字典摘要 | `pingcode context list` |
+| `context list` | 以 JSON 输出当前偏好和字典条目数量 | `pingcode context list` |
 | `context set-current-user <id>` | 设置当前用户 | `pingcode context set-current-user @me` |
 | `context set-current-project <id>` | 设置当前项目 | `pingcode context set-current-project PROJECT_ID` |
 | `context set-current-sprint <id>` | 设置当前迭代 | `pingcode context set-current-sprint SPRINT_ID` |
@@ -35,15 +35,13 @@
 |---|---|---|
 | `workitem list` | 列出工作项（自动按当前用户/项目/迭代过滤） | `pingcode workitem list --assignee @me --state 进行中` |
 | `workitem create` | 创建工作项 | `pingcode workitem create --title "新任务" --type task` |
-| `workitem show <id>` | 通过列表接口按 id 或 identifier 查询 | `pingcode workitem show SCR-123` |
-| `workitem get <id\|identifier>` | 通过官方单个工作项接口查询 | `pingcode workitem get WORK_ITEM_ID` |
+| `workitem get <id\|identifier>` | 获取单个工作项 | `pingcode workitem get SCR-123` |
 | `workitem update <id>` | 更新工作项（支持 title/description/type/project/sprint/priority/assignee/parent/state 等） | `pingcode workitem update SCR-123 --state 已完成` |
 
 ```bash
 pingcode workitem list --assignee @me --state 进行中 --compact
 pingcode workitem create --title "实现登录页面" --type task --project "Core" --sprint "Sprint 1"
-pingcode workitem show SCR-123
-pingcode workitem get WORK_ITEM_ID
+pingcode workitem get SCR-123
 pingcode workitem update SCR-123 --title "修正后的标题" --priority 高 --state 已完成
 pingcode workitem create --title "test" --type task --dry-run
 ```

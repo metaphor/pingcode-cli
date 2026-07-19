@@ -1,6 +1,6 @@
 # 工作区上下文
 
-配置 `.pingcode/cache.json`，让工作项命令可以使用默认的项目、迭代和用户值。
+配置 `.pingcode/cache.json`，让工作项命令可以使用默认的项目、迭代和用户值。`pingcode context list` 以 JSON 输出当前偏好和字典条目数量。
 
 ## Agent 前台问答流程
 
@@ -18,7 +18,7 @@
 ## 命令
 
 ```bash
-# 查看当前工作区偏好和缓存字典数量
+# 以 JSON 输出当前工作区偏好和缓存字典数量
 pingcode context list
 
 # 设置当前项目
@@ -38,7 +38,7 @@ pingcode context init
 
 ## 完成确认
 
-当三项偏好均已缓存后，通过 `pingcode context list` 报告已选择的当前项目、迭代和用户。工作项命令即可使用缓存默认值执行日常工作项查询和创建。
+当三项偏好均已缓存后，通过 `pingcode context list` 以 JSON 格式报告已选择的当前项目、迭代和用户。工作项命令即可使用缓存默认值执行日常工作项查询和创建。
 
 ## 终端回退
 

@@ -3,99 +3,6 @@
 const core = require('../core');
 const shared = require('./shared');
 
-// ── Global option defaults ────────────────────────────────────────────
-const GLOBAL_BOOLEAN_FLAGS = new Set([
-  '--dry-run', '--compact', '--no-token-cache', '--no-workspace-cache',
-]);
-
-const GLOBAL_STRING_FLAGS = {
-  '--base-url': 'base_url',
-  '--client-id': 'client_id',
-  '--client-secret': 'client_secret',
-  '--token': 'token',
-  '--user-id': 'user_id',
-  '--user-name': 'user_name',
-  '--workspace-cache': 'workspace_cache',
-  '--grant-type': 'grant_type',
-};
-
-function defaultGlobalOpts() {
-  return {
-    base_url: process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL,
-    client_id: process.env.PINGCODE_CLIENT_ID || null,
-    client_secret: process.env.PINGCODE_CLIENT_SECRET || null,
-    token: process.env.PINGCODE_ACCESS_TOKEN || null,
-    user_id: process.env.PINGCODE_USER_ID || null,
-    user_name: process.env.PINGCODE_USER_NAME || null,
-    no_token_cache: false,
-    workspace_cache: process.env.PINGCODE_WORKSPACE_CACHE || core.DEFAULT_WORKSPACE_CACHE,
-    no_workspace_cache: false,
-    dry_run: false,
-    compact: false,
-    grant_type: 'auto',
-  };
-}
-
-function parseGlobalOptions(tokens) {
-  const opts = defaultGlobalOpts();
-  const remaining = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const arg = tokens[i];
-    if (arg === '--help' || arg === '-h') {
-      remaining.push(arg);
-      continue;
-    }
-    if (GLOBAL_BOOLEAN_FLAGS.has(arg)) {
-      const key = arg.replace(/^--/, '').replace(/-/g, '_');
-      opts[key] = true;
-      continue;
-    }
-    const eqIndex = arg.indexOf('=');
-    let flag, value, consumedNext = false;
-    if (eqIndex !== -1) {
-      flag = arg.slice(0, eqIndex);
-      value = arg.slice(eqIndex + 1);
-    } else if (arg.startsWith('--')) {
-      flag = arg;
-      if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
-        value = tokens[i + 1];
-        consumedNext = true;
-      } else {
-        remaining.push(arg);
-        continue;
-      }
-    } else {
-      remaining.push(arg);
-      continue;
-    }
-    if (flag in GLOBAL_STRING_FLAGS) {
-      opts[GLOBAL_STRING_FLAGS[flag]] = value;
-      if (consumedNext) i += 1;
-    } else {
-      remaining.push(arg);
-      if (consumedNext) remaining.push(value);
-      if (consumedNext) i += 1;
-    }
-  }
-  return { opts, remaining };
-}
-
-function clientFromOpts(opts) {
-  const tokenCache = opts.no_token_cache ? null : (process.env.PINGCODE_TOKEN_CACHE || core.DEFAULT_TOKEN_CACHE);
-  const workspaceCache = opts.no_workspace_cache ? null : opts.workspace_cache;
-  return new core.PingCodeClient({
-    base_url: opts.base_url,
-    client_id: opts.client_id,
-    client_secret: opts.client_secret,
-    token: opts.token,
-    token_cache: tokenCache,
-    workspace_cache: workspaceCache,
-    grant_type: opts.grant_type,
-  });
-}
-
-// ── Identifier helpers ─────────────────────────────────────────────────
-
 function isIdentifier(arg) {
   return /^[A-Z]{3,6}-\d+$/.test(arg);
 }
@@ -168,7 +75,7 @@ function parseCreateArgs(tokens) {
       positionals.push(arg);
       continue;
     }
-    if (arg in GLOBAL_BOOLEAN_FLAGS) continue;
+    if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
     if (arg in stringFlags) {
       if (i + 1 >= tokens.length) {
         throw new core.PingCodeError(`Flag ${arg} requires a value`);
@@ -183,12 +90,12 @@ function parseCreateArgs(tokens) {
       const value = arg.slice(eqIndex + 1);
       if (flag in stringFlags) {
         args[stringFlags[flag]] = value;
-      } else if (flag in GLOBAL_STRING_FLAGS) {
+      } else if (flag in shared.BASE_GLOBAL_STRING_FLAGS) {
         // pass through
       } else {
         throw new core.PingCodeError(`Unknown option: ${flag}`);
       }
-    } else if (!(arg in GLOBAL_STRING_FLAGS)) {
+    } else if (!(arg in shared.BASE_GLOBAL_STRING_FLAGS)) {
       throw new core.PingCodeError(`Unknown option: ${arg}. Use comment create --help for usage.`);
     } else if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
       i += 1; // skip value for known global string flags
@@ -272,8 +179,8 @@ function parseListArgs(tokens) {
       positionals.push(arg);
       continue;
     }
-    if (arg in GLOBAL_BOOLEAN_FLAGS) continue;
-    if (arg in GLOBAL_STRING_FLAGS) {
+    if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
+    if (arg in shared.BASE_GLOBAL_STRING_FLAGS) {
       if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
         i += 1;
       }
@@ -353,8 +260,8 @@ function parseGetArgs(tokens) {
       positionals.push(arg);
       continue;
     }
-    if (arg in GLOBAL_BOOLEAN_FLAGS) continue;
-    if (arg in GLOBAL_STRING_FLAGS) {
+    if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
+    if (arg in shared.BASE_GLOBAL_STRING_FLAGS) {
       if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
         i += 1;
       }
@@ -434,8 +341,8 @@ function parseDeleteArgs(tokens) {
       positionals.push(arg);
       continue;
     }
-    if (arg in GLOBAL_BOOLEAN_FLAGS) continue;
-    if (arg in GLOBAL_STRING_FLAGS) {
+    if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
+    if (arg in shared.BASE_GLOBAL_STRING_FLAGS) {
       if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
         i += 1;
       }
@@ -596,8 +503,8 @@ async function run(argv) {
     return;
   }
 
-  const { opts, remaining: subArgs } = parseGlobalOptions(remaining);
-  const client = clientFromOpts(opts);
+  const { opts, remaining: subArgs } = shared.parseGlobalOptions(remaining);
+  const client = shared.clientFromOpts(opts);
 
   try {
     let result;

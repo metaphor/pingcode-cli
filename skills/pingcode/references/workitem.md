@@ -25,13 +25,11 @@ pingcode workitem list --keywords "登录页面" --compact
 pingcode workitem create --title "New task" --type task --project PROJECT_ID --sprint SPRINT_ID
 pingcode workitem create --title "Bug fix" --type bug --assignee @me --priority high
 
-# 查看工作项
-pingcode workitem show SCR-123
-pingcode workitem show WI-AbCdEf
-
 # 获取工作项（单个工作项接口，通过 id 或 identifier）
 pingcode workitem get WORK_ITEM_ID
 pingcode workitem get WYT-852
+pingcode workitem get SCR-123
+pingcode workitem get WI-AbCdEf
 
 # 更新工作项（通过 identifier 或 id；支持 --title、--description、--type、--project、--sprint、--state、--priority、--assignee、--parent、--version、--board、--entry、--swimlane、--start-at、--end-at、--participants、--story-points、--estimated-workload、--remaining-workload、--properties）
 pingcode workitem update SCR-123 --state 已完成
