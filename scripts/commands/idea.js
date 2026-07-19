@@ -225,42 +225,84 @@ function printSubcommandHelp(subcommand) {
       console.log([
         'Usage: pingcode idea search [options]',
         '',
-        'Search ideas.',
+        'Search ideas using structured query filters.',
+        '',
+        'Options:',
+        '  --filter JSON                Filter conditions as JSON object (MongoDB-like query syntax)',
+        '  --keywords TEXT              Keywords to filter by (matches identifier and title)',
+        '  --page-size NUM              Number of results per page (1-100, default 30)',
+        '  --page-index NUM             Page index starting from 0 (default 0)',
+        '  --include-public-image-token  Include image access token in response',
+        '',
+        'Examples:',
+        '  pingcode idea search --keywords "login" --compact',
+        '  pingcode idea search --filter \'{"title":{"contains":"账号"}}\' --dry-run',
+        '  pingcode idea search --filter \'{"product.id":{"in":["6422711c3f12e6c1e46d40e9"]}}\' --page-size 10',
       ].join('\n'));
       break;
     case 'states':
       console.log([
         'Usage: pingcode idea states [options]',
         '',
-        'List idea states.',
+        'List idea states for a product.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '',
+        'Examples:',
+        '  pingcode idea states --product 6422711c3f12e6c1e46d40e9 --compact',
       ].join('\n'));
       break;
     case 'properties':
       console.log([
         'Usage: pingcode idea properties [options]',
         '',
-        'List idea properties.',
+        'List idea properties for a product.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '',
+        'Examples:',
+        '  pingcode idea properties --product 6422711c3f12e6c1e46d40e9 --compact',
       ].join('\n'));
       break;
     case 'suites':
       console.log([
         'Usage: pingcode idea suites [options]',
         '',
-        'List idea suites.',
+        'List idea suites (modules) for a product.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '',
+        'Examples:',
+        '  pingcode idea suites --product 6422711c3f12e6c1e46d40e9 --compact',
       ].join('\n'));
       break;
     case 'plans':
       console.log([
         'Usage: pingcode idea plans [options]',
         '',
-        'List idea plans.',
+        'List idea plans for a product.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '',
+        'Examples:',
+        '  pingcode idea plans --product 6422711c3f12e6c1e46d40e9 --compact',
       ].join('\n'));
       break;
     case 'priorities':
       console.log([
         'Usage: pingcode idea priorities [options]',
         '',
-        'List idea priorities.',
+        'List idea priorities for a product.',
+        '',
+        'Options:',
+        '  --product ID                 (required) Raw product id',
+        '',
+        'Examples:',
+        '  pingcode idea priorities --product 6422711c3f12e6c1e46d40e9 --compact',
       ].join('\n'));
       break;
     case 'transition-history':
@@ -820,6 +862,164 @@ async function runUpdate(client, opts, args) {
   );
 }
 
+// ── Search subcommand ────────────────────────────────────────────────────
+
+function parseSearchArgs(tokens) {
+  const args = {
+    filter: null,
+    keywords: null,
+    page_size: null,
+    page_index: null,
+    include_public_image_token: false,
+  };
+  const stringFlags = {
+    '--filter': 'filter',
+    '--keywords': 'keywords',
+    '--page-size': 'page_size',
+    '--page-index': 'page_index',
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      if (arg === '--include-public-image-token') {
+        args.include_public_image_token = true;
+        continue;
+      }
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use idea search --help for usage.`);
+      }
+    } else {
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea search --help for usage.`);
+    }
+  }
+
+  // Validate and convert page_size / page_index to numbers
+  if (args.page_size !== null) {
+    const num = Number(args.page_size);
+    if (Number.isNaN(num) || num < 1 || num > 100) {
+      throw new core.PingCodeError('--page-size must be a number between 1 and 100');
+    }
+    args.page_size = num;
+  }
+  if (args.page_index !== null) {
+    const num = Number(args.page_index);
+    if (Number.isNaN(num) || num < 0) {
+      throw new core.PingCodeError('--page-index must be a non-negative number');
+    }
+    args.page_index = num;
+  }
+
+  // Parse filter as JSON object
+  if (args.filter !== null) {
+    args.filter = core.parseJsonObject(args.filter, '--filter');
+  }
+
+  return args;
+}
+
+async function runSearch(client, opts, args) {
+  const payload = {};
+
+  if (args.filter !== null) {
+    payload.filter = args.filter;
+  }
+  if (args.keywords !== null) {
+    payload.keywords = args.keywords;
+  }
+  if (args.page_size !== null) {
+    payload.page_size = args.page_size;
+  }
+  if (args.page_index !== null) {
+    payload.page_index = args.page_index;
+  }
+  if (args.include_public_image_token) {
+    payload.include_public_image_token = 'description';
+  }
+
+  const body = {
+    mode: 'query',
+    payload: payload,
+  };
+
+  return await client.request(
+    'POST',
+    '/v1/ship/ideas/search',
+    null,
+    body,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
+// ── Dictionary subcommands (states, properties, suites, plans, priorities)
+
+function parseDictionaryArgs(tokens) {
+  const args = { product: null };
+  const stringFlags = { '--product': 'product' };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!(arg in GLOBAL_BOOLEAN_FLAGS)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use idea <subcommand> --help for usage.`);
+      }
+    } else {
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use idea <subcommand> --help for usage.`);
+    }
+  }
+
+  return args;
+}
+
+async function runDictionary(client, opts, args, resource) {
+  if (!args.product) {
+    throw new core.PingCodeError('--product is required and must be a raw id. Use idea <subcommand> --help for usage.');
+  }
+  if (!isRawId(args.product)) {
+    throw new core.PingCodeError('--product must be a raw id');
+  }
+
+  const params = { product_id: args.product };
+
+  return await client.request(
+    'GET',
+    `/v1/ship/idea/${resource}`,
+    params,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────
 
 async function run(argv) {
@@ -869,12 +1069,36 @@ async function run(argv) {
         result = await runUpdate(client, opts, updateArgs);
         break;
       }
-      case 'search':
-      case 'states':
-      case 'properties':
-      case 'suites':
-      case 'plans':
-      case 'priorities':
+      case 'search': {
+        const searchArgs = parseSearchArgs(subArgs);
+        result = await runSearch(client, opts, searchArgs);
+        break;
+      }
+      case 'states': {
+        const statesArgs = parseDictionaryArgs(subArgs);
+        result = await runDictionary(client, opts, statesArgs, 'states');
+        break;
+      }
+      case 'properties': {
+        const propsArgs = parseDictionaryArgs(subArgs);
+        result = await runDictionary(client, opts, propsArgs, 'properties');
+        break;
+      }
+      case 'suites': {
+        const suitesArgs = parseDictionaryArgs(subArgs);
+        result = await runDictionary(client, opts, suitesArgs, 'suites');
+        break;
+      }
+      case 'plans': {
+        const plansArgs = parseDictionaryArgs(subArgs);
+        result = await runDictionary(client, opts, plansArgs, 'plans');
+        break;
+      }
+      case 'priorities': {
+        const prioritiesArgs = parseDictionaryArgs(subArgs);
+        result = await runDictionary(client, opts, prioritiesArgs, 'priorities');
+        break;
+      }
       case 'transition-history':
       case 'transition-histories':
         throw new core.PingCodeError(`Idea subcommand not yet implemented: ${subcommand}`);
