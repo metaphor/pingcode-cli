@@ -11,10 +11,16 @@ PingCode 支持两种令牌类型：
 
 ## 用户令牌登录
 
-首次使用用户令牌前必须先运行 `auth login`，会在浏览器中完成授权：
+首次使用用户令牌前必须先运行 `auth login`。默认行为会自动打开浏览器完成授权：
 
 ```bash
 pingcode auth login --client-id ID --client-secret SECRET
+```
+
+如果当前环境无法打开浏览器（例如远程服务器、容器），可加上 `--no-browser`，改为打印授权 URL 并提示粘贴授权码：
+
+```bash
+pingcode auth login --client-id ID --client-secret SECRET --no-browser
 ```
 
 `auth login` 默认 grant_type 为 `authorization_code`，无需显式传入。
