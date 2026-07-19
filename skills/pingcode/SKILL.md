@@ -64,6 +64,7 @@ export PINGCODE_WORKSPACE_CACHE=".pingcode/cache.json"
 - 登录、切换令牌、询问认证方式或 grant_type → 阅读 `references/auth.md`
 - 选择项目/迭代/用户、初始化上下文、Agent 前台问答 → 阅读 `references/ctx.md`
 - 查询/创建/更新工作项、改状态、指派负责人 → 阅读 `references/workitem.md`
+- 查看/创建/删除工作项评论 → 阅读 `references/comment.md`
 
 ## 自然语言速查表
 
@@ -77,6 +78,8 @@ export PINGCODE_WORKSPACE_CACHE=".pingcode/cache.json"
 | 把工作项改成已完成 | `pingcode workitem update SCR-123 --state 已完成 --dry-run` |
 | 初始化当前项目/迭代/用户 | `pingcode context init` |
 | 登录 PingCode 获取用户令牌 | `pingcode auth login --client-id ID --client-secret SECRET` |
+| 查看工作项评论 | `pingcode comment list SCR-123 --compact` |
+| 添加工作项评论 | `pingcode comment create SCR-123 --content "..." --dry-run` |
 
 ## 安全规则
 
