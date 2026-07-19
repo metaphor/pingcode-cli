@@ -32,15 +32,11 @@ function expectedPaths(home, codexHome = null) {
   return {
     codex: {
       skillsRoot: path.join(codexRoot, 'skills'),
-      ctx: path.join(codexRoot, 'skills', 'pingcode-ctx'),
-      auth: path.join(codexRoot, 'skills', 'pingcode-auth'),
-      workItem: path.join(codexRoot, 'skills', 'pingcode-workitem'),
+      skill: path.join(codexRoot, 'skills', 'pingcode'),
     },
     opencode: {
       skillsRoot: path.join(home, '.config', 'opencode', 'skills'),
-      ctx: path.join(home, '.config', 'opencode', 'skills', 'pingcode-ctx'),
-      auth: path.join(home, '.config', 'opencode', 'skills', 'pingcode-auth'),
-      workItem: path.join(home, '.config', 'opencode', 'skills', 'pingcode-workitem'),
+      skill: path.join(home, '.config', 'opencode', 'skills', 'pingcode'),
     },
   };
 }
@@ -64,24 +60,28 @@ function assertInstalled(target) {
   assert.strictEqual(fs.existsSync(path.join(target, 'README.md')), false, `unexpected README.md in ${target}`);
   assert.strictEqual(fs.existsSync(path.join(target, 'agents')), false, `unexpected agents/ dir in ${target}`);
   assert.strictEqual(fs.existsSync(path.join(target, 'skills')), false, `unexpected skills/ dir in ${target}`);
+  // Verify references exist
+  assert.ok(fs.existsSync(path.join(target, 'references', 'auth.md')), `references/auth.md missing in ${target}`);
+  assert.ok(fs.existsSync(path.join(target, 'references', 'ctx.md')), `references/ctx.md missing in ${target}`);
+  assert.ok(fs.existsSync(path.join(target, 'references', 'workitem.md')), `references/workitem.md missing in ${target}`);
 }
 
 function assertNotInstalled(target) {
   assert.strictEqual(fs.existsSync(target), false, `unexpected install at ${target}`);
 }
 
-function assertAllSubSkillsInstalled(pathsEntry) {
-  assertInstalled(pathsEntry.ctx);
-  assertInstalled(pathsEntry.auth);
-  assertInstalled(pathsEntry.workItem);
+function assertSkillInstalled(pathsEntry) {
+  assertInstalled(pathsEntry.skill);
 }
 
-function assertMainSkillNotInstalled(pathsEntry) {
-  assert.strictEqual(
-    fs.existsSync(path.join(pathsEntry.skillsRoot, 'pingcode')),
-    false,
-    `unexpected pingcode main skill under ${pathsEntry.skillsRoot}`,
-  );
+function assertOldAliasesNotInstalled(pathsEntry) {
+  for (const alias of ['pingcode-auth', 'pingcode-ctx', 'pingcode-workitem']) {
+    assert.strictEqual(
+      fs.existsSync(path.join(pathsEntry.skillsRoot, alias)),
+      false,
+      `unexpected ${alias} under ${pathsEntry.skillsRoot}`,
+    );
+  }
 }
 
 function tmpDir() {
@@ -95,34 +95,33 @@ function rmDir(dir) {
 test('installed docs use pingcode command', () => {
   const tmpdir = tmpDir();
   try {
-    const target = path.join(tmpdir, 'pingcode skill');
+    const target = path.join(tmpdir, 'install-test');
     const result = runInstall(['--target', target, '--force']);
     assert.strictEqual(result.status, 0, result.stderr);
 
-    const workItemDir = path.join(target, 'pingcode-workitem');
-    const skillDoc = fs.readFileSync(path.join(workItemDir, 'SKILL.md'), 'utf8');
-    const workflows = fs.readFileSync(path.join(workItemDir, 'references', 'workflows.md'), 'utf8');
+    const skillDir = path.join(target, 'pingcode');
+    const skillDoc = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
 
-    assert.ok(result.stdout.includes('Installed PingCode skills'));
+    assert.ok(result.stdout.includes('Installed PingCode skill'));
     assert.ok(skillDoc.includes('pingcode'), 'skill doc should contain pingcode command');
-    assert.ok(workflows.includes('pingcode'), 'workflows should contain pingcode command');
 
-    for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
-      const subDoc = fs.readFileSync(path.join(target, subName, 'SKILL.md'), 'utf8');
-      assert.ok(subDoc.includes('pingcode'), `${subName} doc should contain pingcode command`);
-      assert.strictEqual(subDoc.includes('python3 scripts/pingcode.py'), false, `${subName} should not contain old python command`);
-      assert.strictEqual(subDoc.includes('python3 scripts/pingcode_ctx.py'), false, `${subName} should not contain old python ctx command`);
+    // Verify reference files
+    for (const ref of ['auth', 'ctx', 'workitem']) {
+      const refDoc = fs.readFileSync(path.join(skillDir, 'references', `${ref}.md`), 'utf8');
+      assert.ok(refDoc.includes('pingcode'), `${ref}.md should contain pingcode command`);
     }
 
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false);
-    assert.strictEqual(workflows.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false);
 
+    // No SKILL.md at target root
     assert.strictEqual(fs.existsSync(path.join(target, 'SKILL.md')), false);
-    assertNotInstalled(path.join(target, 'pingcode'));
-    for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
-      assertInstalled(path.join(target, subName));
-    }
+
+    // Old alias directories should NOT exist
+    assertOldAliasesNotInstalled({ skillsRoot: target });
+
+    // Single pingcode skill is installed
+    assertSkillInstalled({ skillsRoot: target, skill: skillDir });
   } finally {
     rmDir(tmpdir);
   }
@@ -152,8 +151,8 @@ test('default install writes existing agent roots', () => {
 
     const paths = expectedPaths(home);
     for (const key of Object.keys(paths)) {
-      assertAllSubSkillsInstalled(paths[key]);
-      assertMainSkillNotInstalled(paths[key]);
+      assertSkillInstalled(paths[key]);
+      assertOldAliasesNotInstalled(paths[key]);
       assert.ok(result.stdout.includes('[ok]'));
     }
     for (const label of ['Codex', 'OpenCode']) {
@@ -175,12 +174,11 @@ test('default install skips missing agent roots', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
-    assertAllSubSkillsInstalled(paths.codex);
-    assertMainSkillNotInstalled(paths.codex);
+    assertSkillInstalled(paths.codex);
+    assertOldAliasesNotInstalled(paths.codex);
     for (const key of ['opencode']) {
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
     }
     assert.ok(result.stdout.includes('[skip] OpenCode'));
   } finally {
@@ -198,9 +196,8 @@ test('default install no existing agent roots is noop', () => {
     assert.strictEqual(result.status, 0, result.stderr);
     const paths = expectedPaths(home);
     for (const key of Object.keys(paths)) {
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
     }
     assert.ok(result.stdout.includes('No supported agent directories were found'));
   } finally {
@@ -218,12 +215,11 @@ test('codex only scope', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
-    assertAllSubSkillsInstalled(paths.codex);
-    assertMainSkillNotInstalled(paths.codex);
+    assertSkillInstalled(paths.codex);
+    assertOldAliasesNotInstalled(paths.codex);
     for (const key of ['opencode']) {
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
     }
   } finally {
     rmDir(tmpdir);
@@ -240,12 +236,11 @@ test('opencode only scope', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
-    assertAllSubSkillsInstalled(paths.opencode);
-    assertMainSkillNotInstalled(paths.opencode);
+    assertSkillInstalled(paths.opencode);
+    assertOldAliasesNotInstalled(paths.opencode);
     for (const key of ['codex']) {
-      assertNotInstalled(paths[key].ctx);
-      assertNotInstalled(paths[key].auth);
-      assertNotInstalled(paths[key].workItem);
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
     }
   } finally {
     rmDir(tmpdir);
@@ -262,11 +257,9 @@ test('opencode project-level target install', () => {
     const result = runInstall(['--target', target, '--force'], env);
     assert.strictEqual(result.status, 0, result.stderr);
 
-    assertMainSkillNotInstalled({ skillsRoot: target });
-    for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
-      assertInstalled(path.join(target, subName));
-    }
-    const skillDoc = fs.readFileSync(path.join(target, 'pingcode-workitem', 'SKILL.md'), 'utf8');
+    assertOldAliasesNotInstalled({ skillsRoot: target });
+    assertSkillInstalled({ skillsRoot: target, skill: path.join(target, 'pingcode') });
+    const skillDoc = fs.readFileSync(path.join(target, 'pingcode', 'SKILL.md'), 'utf8');
     assert.ok(skillDoc.includes('pingcode'));
   } finally {
     rmDir(tmpdir);
@@ -283,12 +276,13 @@ test('interactive global install', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home);
-    assertAllSubSkillsInstalled(paths.opencode);
-    assertMainSkillNotInstalled(paths.opencode);
+    assertSkillInstalled(paths.opencode);
+    assertOldAliasesNotInstalled(paths.opencode);
     assert.ok(result.stdout.includes('Install summary (global)'));
     assert.ok(result.stdout.includes('OpenCode'));
     for (const key of ['codex']) {
-      assertNotInstalled(paths[key].ctx);
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
     }
   } finally {
     rmDir(tmpdir);
@@ -309,9 +303,8 @@ test('interactive project-level install', () => {
     const codexRoot = path.join(resolvedProjectDir, '.codex', 'skills');
     const opencodeRoot = path.join(resolvedProjectDir, '.opencode', 'skills');
     for (const root of [codexRoot, opencodeRoot]) {
-      for (const subName of ['pingcode-ctx', 'pingcode-auth', 'pingcode-workitem']) {
-        assertInstalled(path.join(root, subName));
-      }
+      assertInstalled(path.join(root, 'pingcode'));
+      assertOldAliasesNotInstalled({ skillsRoot: root });
     }
     assert.ok(result.stdout.includes('Install summary (project)'));
     assert.ok(result.stdout.includes('Codex'));
@@ -361,12 +354,12 @@ test('codex home only affects codex root', () => {
     assert.strictEqual(result.status, 0, result.stderr);
 
     const paths = expectedPaths(home, codexHome);
-    assertAllSubSkillsInstalled(paths.codex);
-    assertMainSkillNotInstalled(paths.codex);
+    assertSkillInstalled(paths.codex);
+    assertOldAliasesNotInstalled(paths.codex);
     const defaultCodex = path.join(home, '.codex');
     assert.strictEqual(fs.existsSync(defaultCodex), false, 'default codex location should not be touched');
-    assertAllSubSkillsInstalled(paths.opencode);
-    assertMainSkillNotInstalled(paths.opencode);
+    assertSkillInstalled(paths.opencode);
+    assertOldAliasesNotInstalled(paths.opencode);
   } finally {
     rmDir(tmpdir);
   }
@@ -394,8 +387,8 @@ test('per root failure does not abort others', () => {
     }
 
     const paths = expectedPaths(home);
-    assert.strictEqual(fs.existsSync(path.join(paths.opencode.ctx, 'SKILL.md')), false);
-    assertAllSubSkillsInstalled(paths.codex);
+    assert.strictEqual(fs.existsSync(path.join(paths.opencode.skill, 'SKILL.md')), false);
+    assertSkillInstalled(paths.codex);
     assert.strictEqual(result.status, 2, result.stdout + result.stderr);
     assert.ok(result.stderr.includes('[fail]'));
     assert.ok(result.stderr.includes('OpenCode'));
