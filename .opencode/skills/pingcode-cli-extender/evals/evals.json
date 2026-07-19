@@ -1,0 +1,23 @@
+{
+  "skill_name": "pingcode-cli-extender",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "给 pingcode cli 增加一个项目列表命令，调用 PingCode 的 GET /v1/projects 接口，支持按名称过滤，并同步更新对应的 skill 参考文档。",
+      "expected_output": "生成 scripts/commands/project.js、更新 scripts/pingcode.js、生成 skills/pingcode/references/project.md、更新 skills/pingcode/SKILL.md，新命令能 --help 正常输出。",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "给 PingCode CLI 增加迭代查询能力，子命令包括 list 和 show，list 支持 --project 指定项目，show 通过 id 获取单个迭代，并补充 skills/pingcode 的参考文档。",
+      "expected_output": "生成 scripts/commands/sprint.js（含 list 和 show 子命令）、更新 scripts/pingcode.js、生成 skills/pingcode/references/sprint.md、更新 skills/pingcode/SKILL.md。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "为 pingcode-cli 扩展成员查询能力：通过 GET /v1/projects/{project_id}/members 查询项目成员，CLI 模块名用 member，支持 --project 参数，并生成对应的 skill 文档。",
+      "expected_output": "生成 scripts/commands/member.js、更新 scripts/pingcode.js、生成 skills/pingcode/references/member.md、更新 skills/pingcode/SKILL.md，代码能语法检查通过。",
+      "files": []
+    }
+  ]
+}
