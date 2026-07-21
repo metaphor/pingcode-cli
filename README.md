@@ -123,11 +123,12 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 - 查询、创建、更新工作项（含状态更新，支持 `--dry-run` 试运行）
 - 在故事下创建子工作项（通过 `--parent`）
 - 创建、查看、删除工作项评论（通过 `--reply-to` 支持回复）
+- 上传、查看、删除附件（文件与代码片段，支持 `work_item` 等主体）
 - 查询、创建、更新需求（idea）
 - 查询产品列表和产品详情（`product list / get`）
-- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`, `idea *`, `product *`）调用 PingCode API
+- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`, `attachment *`, `idea *`, `product *`）调用 PingCode API
 
-以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md`、`comment.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作、评论操作的详细参考。
+以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md`、`comment.md`、`attachment.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作、评论操作、附件操作的详细参考。
 
 ## Skill 结构
 
@@ -142,6 +143,7 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 | `pingcode/references/idea.md` | 需求操作：`idea list / create / update / get / search` 等子命令及安全规则 |
 | `pingcode/references/product.md` | 产品操作：`product list / get` 子命令及安全规则 |
 | `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete` 子命令及安全规则 |
+| `pingcode/references/attachment.md` | 附件操作：`attachment upload-file / upload-snippet / list / get / delete` 子命令及安全规则 |
 
 ## 子命令
 
@@ -208,6 +210,37 @@ pingcode workitem update WI-AbCdEf --state 进行中 --priority 高
 # 试运行（预览 API 请求，不发送）
 pingcode workitem create --title "test" --type task --dry-run
 pingcode workitem update SCR-123 --state 已完成 --dry-run
+```
+
+### 附件管理 (`attachment`)
+
+| 子命令 | 说明 | 示例 |
+|---|---|---|
+| `attachment upload-file <principal_type> <principal_id>` | 上传文件附件 | `pingcode attachment upload-file work_item SCR-123 --file ./a.png --title 截图` |
+| `attachment upload-snippet <principal_type> <principal_id>` | 上传代码片段附件 | `pingcode attachment upload-snippet work_item SCR-123 --title 示例 --format javascript --content "console.log(1)"` |
+| `attachment list <principal_type> <principal_id>` | 列出附件 | `pingcode attachment list work_item SCR-123 --compact` |
+| `attachment get <attachment-id> <principal_type> <principal_id>` | 获取单个附件 | `pingcode attachment get att-1 work_item SCR-123` |
+| `attachment delete <attachment-id> <principal_type> <principal_id>` | 删除附件 | `pingcode attachment delete att-1 work_item SCR-123` |
+
+```bash
+# 上传文件附件
+pingcode attachment upload-file work_item SCR-123 --file ./a.png --title "截图"
+
+# 上传代码片段
+pingcode attachment upload-snippet work_item SCR-123 --title "示例" --format javascript --content "console.log(1)"
+
+# 列出附件
+pingcode attachment list work_item SCR-123 --compact
+
+# 获取单个附件
+pingcode attachment get att-1 work_item SCR-123
+
+# 删除附件
+pingcode attachment delete att-1 work_item SCR-123
+
+# 试运行（预览 API 请求，不发送）
+pingcode attachment upload-file work_item SCR-123 --file ./a.png --title "截图" --dry-run
+pingcode attachment delete att-1 work_item SCR-123 --dry-run
 ```
 
 ### 产品管理 (`product`)
@@ -353,5 +386,6 @@ pingcode context init
 - 工作区上下文：[skills/pingcode/references/ctx.md](skills/pingcode/references/ctx.md)
 - 工作项操作：[skills/pingcode/references/workitem.md](skills/pingcode/references/workitem.md)
 - 评论操作：[skills/pingcode/references/comment.md](skills/pingcode/references/comment.md)
+- 附件操作：[skills/pingcode/references/attachment.md](skills/pingcode/references/attachment.md)
 - 官方文档：https://open.pingcode.com/
 

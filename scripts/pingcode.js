@@ -13,6 +13,7 @@ module.exports = { ...core };
 // Import command modules so they self-register with the shared registry.
 // (Side-effect imports; no circular dependency because these import from
 // ./shared and ../core, never from ../pingcode.)
+require('./commands/attachment');
 require('./commands/comment');
 require('./commands/context');
 require('./commands/idea');

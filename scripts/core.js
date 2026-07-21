@@ -839,8 +839,12 @@ class PingCodeClient {
     const headers = { Accept: 'application/json' };
     let fetchBody = undefined;
     if (body !== null && body !== undefined) {
-      fetchBody = JSON.stringify(body);
-      headers['Content-Type'] = 'application/json';
+      if (body instanceof FormData) {
+        fetchBody = body;
+      } else {
+        fetchBody = JSON.stringify(body);
+        headers['Content-Type'] = 'application/json';
+      }
     }
     if (auth) {
       headers.Authorization = `Bearer ${await this.accessToken()}`;
@@ -1321,6 +1325,22 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+function buildFileUploadForm(filePath, title) {
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) {
+    throw new PingCodeError(`File not found: ${filePath}`);
+  }
+  const stats = fs.statSync(resolved);
+  if (!stats.isFile()) {
+    throw new PingCodeError(`Path is not a file: ${filePath}`);
+  }
+  const buffer = fs.readFileSync(resolved);
+  const form = new FormData();
+  form.append('title', title);
+  form.append('file', new Blob([buffer]), path.basename(resolved));
+  return form;
+}
+
 module.exports = {
   PingCodeError,
   PingCodeClient,
@@ -1386,4 +1406,5 @@ module.exports = {
   applyDefaultWorkItemCreateBody,
   resolveWorkItemIdentifier,
   printJson,
+  buildFileUploadForm,
 };
