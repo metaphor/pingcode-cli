@@ -17,6 +17,10 @@ on:
           - patch
           - minor
           - major
+      ref:
+        description: "Branch, tag, or commit SHA to release from (default: selected branch)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -27,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -46,7 +51,15 @@ jobs:
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Push commit and tag
-        run: git push origin "HEAD:${{ github.ref_name }}" --follow-tags
+        run: |
+          REF="${{ inputs.ref || github.ref_name }}"
+          if git ls-remote --exit-code --heads origin "${REF}" >/dev/null 2>&1; then
+            # Releasing from a branch: advance it with the version-bump commit
+            git push origin "HEAD:${REF}" --follow-tags
+          else
+            # Releasing from a tag/SHA: the bump commit lives on the tag only
+            git push origin "${{ steps.version.outputs.version }}"
+          fi
 
       - name: Create GitHub Release
         run: gh release create "${{ steps.version.outputs.version }}" --verify-tag --generate-notes --title "${{ steps.version.outputs.version }}"
