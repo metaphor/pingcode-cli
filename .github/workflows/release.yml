@@ -1,0 +1,59 @@
+# Auto release: bump version, create tag, create GitHub Release, publish to npm.
+# Trigger manually from Actions -> Release -> Run workflow, choosing the bump type.
+# Note: releases created with GITHUB_TOKEN do not re-trigger other workflows,
+# so npm publishing happens inside this workflow rather than via npm-publish.yml.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version and create tag
+        id: version
+        run: |
+          NEW_VERSION=$(npm version "${{ inputs.bump }}" -m "chore(release): bump version to %s")
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        run: git push origin "HEAD:${{ github.ref_name }}" --follow-tags
+
+      - name: Create GitHub Release
+        run: gh release create "${{ steps.version.outputs.version }}" --verify-tag --generate-notes --title "${{ steps.version.outputs.version }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
