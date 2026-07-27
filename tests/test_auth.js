@@ -414,6 +414,33 @@ test('openBrowser resolves on spawn event without waiting for browser close', as
   assert.strictEqual(result, true);
 });
 
+test('openBrowser uses the Windows browser launcher inside WSL', async () => {
+  const originalPlatform = os.platform;
+  const originalWslDistroName = process.env.WSL_DISTRO_NAME;
+  let invocation;
+
+  os.platform = () => 'linux';
+  process.env.WSL_DISTRO_NAME = 'Ubuntu';
+  try {
+    await authModule.openBrowser('https://example.com/auth?a=1&b=2', (command, args, opts) => {
+      invocation = { command, args };
+      return fakeSpawner(command, args, opts);
+    });
+  } finally {
+    os.platform = originalPlatform;
+    if (originalWslDistroName === undefined) {
+      delete process.env.WSL_DISTRO_NAME;
+    } else {
+      process.env.WSL_DISTRO_NAME = originalWslDistroName;
+    }
+  }
+
+  assert.deepStrictEqual(invocation, {
+    command: 'cmd.exe',
+    args: ['/d', '/s', '/c', 'start https://example.com/auth?a=1^&b=2'],
+  });
+});
+
 test('openBrowser rejects on spawn error', async () => {
   const error = new Error('spawn failed');
   const failingSpawner = (command, args, opts) => {
