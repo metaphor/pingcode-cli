@@ -201,11 +201,20 @@ function createClient(opts) {
 
 function openBrowser(url, spawner = spawn) {
   const platform = os.platform();
+  const isWsl = platform === 'linux' && (
+    process.env.WSL_DISTRO_NAME
+    || process.env.WSL_INTEROP
+    || /microsoft/i.test(os.release())
+  );
   let command, args;
 
   if (platform === 'darwin') {
     command = 'open';
     args = [url];
+  } else if (isWsl) {
+    command = 'cmd.exe';
+    const escapedUrl = url.replace(/[&|<>^]/g, '^$&');
+    args = ['/d', '/s', '/c', `start ${escapedUrl}`];
   } else if (platform === 'win32') {
     command = 'cmd';
     args = ['/c', 'start', '""', url];
