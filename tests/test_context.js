@@ -8,7 +8,8 @@ const assert = require('node:assert');
 
 const core = require('../scripts/core');
 const context = require('../scripts/commands/context');
-const { tmpFile, clearEnv, restoreEnv, writeWorkspaceCache } = require('./helpers');
+const shared = require('../scripts/commands/shared');
+const { tmpFile, clearEnv, restoreEnv, writeWorkspaceCache, mockFetch, fakeResponse } = require('./helpers');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -781,3 +782,126 @@ test('parseContextArgs defaults grant_type to auto', () => {
   const result = context.parseContextArgs([]);
   assert.strictEqual(result.opts.grant_type, 'auto');
 });
+
+// ── Work item dictionary caching ───────────────────────────────────
+
+// Routes each PingCode endpoint to a canned payload and records every path the
+// CLI asked for, so tests can assert which dictionaries were fetched.
+function mockDictionaryTenant({ failTypes = false } = {}) {
+  const requested = [];
+  mockFetch((url) => {
+    const { pathname } = new URL(url);
+    requested.push(pathname);
+    if (pathname === '/v1/auth/token') {
+      return fakeResponse({ access_token: 'tok', expires_in: 3600 });
+    }
+    if (pathname === '/v1/project/projects') {
+      return fakeResponse({ total: 1, values: [{ id: 'project-1', name: 'Core Project' }] });
+    }
+    if (pathname === '/v1/project/work_item/types') {
+      if (failTypes) return fakeResponse({ message: 'boom' }, 500);
+      return fakeResponse({ total: 2, values: [{ id: 'bug', name: '缺陷' }, { id: 'task', name: '任务' }] });
+    }
+    if (pathname === '/v1/project/work_item/priorities') {
+      return fakeResponse({ total: 1, values: [{ id: 'priority-high', name: '高' }] });
+    }
+    if (pathname === '/v1/project/work_item/states') {
+      return fakeResponse({ total: 1, values: [{ id: 'state-fixed', name: '已修复' }] });
+    }
+    if (pathname === '/v1/project/work_item/properties') {
+      return fakeResponse({ total: 1, values: [{ id: 'property-1', name: '模块' }] });
+    }
+    return fakeResponse({ total: 0, values: [] });
+  });
+  return requested;
+}
+
+function withMockedFetch(fn) {
+  const originalFetch = global.fetch;
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  };
+}
+
+testInCleanTmp('context set-current-project caches work item dictionaries', withMockedFetch(async (t, tmpdir) => {
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+  mockDictionaryTenant();
+
+  await context.run(['set-current-project', 'Core Project', '--workspace-cache', cachePath]);
+
+  const cache = readCacheJson(cachePath);
+  // The project name resolves to an id because the project list is refreshed first.
+  assert.strictEqual(cache.preferences.current_project_id, 'project-1');
+  assert.ok(cache.work_item_types['project-1'], 'work item types should be cached');
+  assert.ok(cache.work_item_priorities['project-1'], 'priorities should be cached');
+  // States and properties are keyed per (project, type) pair.
+  assert.ok(cache.work_item_states['project-1::bug'], 'bug states should be cached');
+  assert.ok(cache.work_item_states['project-1::task'], 'task states should be cached');
+  assert.ok(cache.work_item_properties['project-1::bug'], 'bug properties should be cached');
+}));
+
+testInCleanTmp('cached dictionaries let --type and --state resolve by name', withMockedFetch(async (t, tmpdir) => {
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+  mockDictionaryTenant();
+
+  await context.run(['set-current-project', 'Core Project', '--workspace-cache', cachePath]);
+
+  // This is the regression the fix targets: before dictionaries were cached,
+  // any name-based --type/--state lookup failed with "No cached ...".
+  const cache = readCacheJson(cachePath);
+  const types = core.pageValues(cache.work_item_types['project-1']);
+  assert.strictEqual(core.findCachedItem(types, '缺陷', 'work item type').id, 'bug');
+  const states = core.pageValues(cache.work_item_states['project-1::bug']);
+  assert.strictEqual(core.findCachedItem(states, '已修复', 'state').id, 'state-fixed');
+}));
+
+testInCleanTmp('context set-current-project still writes preferences when dictionaries fail', withMockedFetch(async (t, tmpdir) => {
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+  mockDictionaryTenant({ failTypes: true });
+
+  const originalError = console.error;
+  const warnings = [];
+  console.error = (...args) => warnings.push(args.join(' '));
+  try {
+    await context.run(['set-current-project', 'Core Project', '--workspace-cache', cachePath]);
+  } finally {
+    console.error = originalError;
+  }
+
+  // Caching preferences is the primary action and must survive a failed prefetch.
+  const cache = readCacheJson(cachePath);
+  assert.strictEqual(cache.preferences.current_project_id, 'project-1');
+  assert.ok(
+    warnings.some(line => line.includes('could not cache work item dictionaries')),
+    'a warning should be reported on stderr',
+  );
+}));
+
+testInCleanTmp('cacheProjectDictionaries requests states and properties per type', withMockedFetch(async (t, tmpdir) => {
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+  const requested = mockDictionaryTenant();
+
+  const client = shared.clientFromOpts({ workspace_cache: cachePath });
+  await core.cacheProjectDictionaries(client, 'project-1');
+
+  const stateCalls = requested.filter(p => p === '/v1/project/work_item/states').length;
+  const propertyCalls = requested.filter(p => p === '/v1/project/work_item/properties').length;
+  assert.strictEqual(stateCalls, 2, 'one states call per work item type');
+  assert.strictEqual(propertyCalls, 2, 'one properties call per work item type');
+}));
