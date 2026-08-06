@@ -1015,6 +1015,24 @@ async function cacheWorkItemProperties(client, projectId, workItemTypeId) {
   return await refreshCommand(client, '/v1/project/work_item/properties', { project_id: projectId, work_item_type_id: workItemTypeId });
 }
 
+// Fetch every work item dictionary a project needs so that name-based lookups
+// (--type/--state/--priority) can resolve offline. States and properties are
+// keyed by (project_id, work_item_type_id), so they are fetched per type.
+async function cacheProjectDictionaries(client, projectId) {
+  if (typeof projectId !== 'string' || !projectId) {
+    throw new PingCodeError('A project id is required to cache work item dictionaries.');
+  }
+  const types = await cacheWorkItemTypes(client, projectId);
+  await cacheWorkItemPriorities(client, projectId);
+  for (const type of pageValues(types)) {
+    const typeId = normalizedEntity(type).id;
+    if (typeof typeId !== 'string' || !typeId) continue;
+    await cacheWorkItemStates(client, projectId, typeId);
+    await cacheWorkItemProperties(client, projectId, typeId);
+  }
+  return types;
+}
+
 async function cacheUsers(client, projectId = null) {
   const selectedProjectId = projectId || (client.workspaceCache.preferences || {}).current_project_id;
   if (typeof selectedProjectId === 'string' && selectedProjectId) {
@@ -1397,6 +1415,7 @@ module.exports = {
   cacheWorkItemPriorities,
   cacheWorkItemStates,
   cacheWorkItemProperties,
+  cacheProjectDictionaries,
   cacheUsers,
   setCurrentUser,
   setCurrentProject,
