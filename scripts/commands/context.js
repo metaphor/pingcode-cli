@@ -78,7 +78,23 @@ async function fetchUsers(client, projectId, refresh = false) {
   return usersCache;
 }
 
-async function cacheContext(client, project, sprint, user) {
+// Prefetching dictionaries is best effort: writing the preferences is the
+// primary action and must not fail because an optional fetch did. Failures are
+// reported on stderr and in the command's JSON result rather than swallowed.
+async function tryCacheProjectDictionaries(client, projectId) {
+  if (typeof projectId !== 'string' || !projectId) {
+    return { cached: false, reason: 'no project id resolved' };
+  }
+  try {
+    await core.cacheProjectDictionaries(client, projectId);
+    return { cached: true };
+  } catch (exc) {
+    console.error(`warning: could not cache work item dictionaries: ${exc.message}`);
+    return { cached: false, reason: exc.message };
+  }
+}
+
+async function cacheContext(client, project, sprint, user, dictionaries) {
   if (!client.workspaceCache.preferences) client.workspaceCache.preferences = {};
   const preferences = client.workspaceCache.preferences;
   preferences.current_project_id = core.itemId(project, 'project');
@@ -92,6 +108,8 @@ async function cacheContext(client, project, sprint, user) {
     message: 'PingCode workspace context cached',
     workspace_cache: client.workspaceCachePath || null,
     preferences,
+    dictionaries_cached: Boolean(dictionaries && dictionaries.cached),
+    ...(dictionaries && dictionaries.reason ? { dictionaries_error: dictionaries.reason } : {}),
   };
 }
 
@@ -298,7 +316,8 @@ async function handleInit(opts, inputFunc) {
   const projectId = core.itemId(project, 'project');
   const sprint = await promptChoice('sprint', core.pageValues(await fetchSprints(client, projectId, refresh)), inputFunc);
   const user = await promptChoice('user', core.pageValues(await fetchUsers(client, projectId, refresh)), inputFunc);
-    const result = await cacheContext(client, project, sprint, user);
+    const dictionaries = await tryCacheProjectDictionaries(client, projectId);
+    const result = await cacheContext(client, project, sprint, user, dictionaries);
     core.printJson(result);
   } finally {
     if (rl) rl.close();
@@ -365,7 +384,19 @@ async function handleSetCurrentProject(value, opts) {
     return;
   }
 
+  // Resolving a project by name needs the projects dictionary, so make sure it
+  // is cached before delegating; otherwise the raw name would be stored as id.
+  // Offline/unreachable tenants keep the previous cache-only behaviour.
+  try {
+    await fetchProjects(client, false);
+  } catch (exc) {
+    console.error(`warning: could not refresh the project list: ${exc.message}`);
+  }
   const result = await core.setCurrentProject(client, value);
+  const resolvedProjectId = (result.preferences || {}).current_project_id;
+  const dictionaries = await tryCacheProjectDictionaries(client, resolvedProjectId);
+  result.dictionaries_cached = Boolean(dictionaries.cached);
+  if (dictionaries.reason) result.dictionaries_error = dictionaries.reason;
   core.printJson(result);
 }
 
