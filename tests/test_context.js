@@ -30,6 +30,7 @@ function testInCleanTmp(name, fn) {
   test(name, async (t) => {
     const original = clearEnv();
     const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-test-'));
+    process.env.PINGCODE_TOKEN_CACHE = path.join(tmpdir, 'token.json');
     try {
       await fn(t, tmpdir);
     } finally {
@@ -897,7 +898,7 @@ testInCleanTmp('cacheProjectDictionaries requests states and properties per type
   writeWorkspaceCache(cachePath, {});
   const requested = mockDictionaryTenant();
 
-  const client = shared.clientFromOpts({ workspace_cache: cachePath });
+  const client = shared.clientFromOpts({ workspace_cache: cachePath, token: 'fake-token', no_token_cache: true });
   await core.cacheProjectDictionaries(client, 'project-1');
 
   const stateCalls = requested.filter(p => p === '/v1/project/work_item/states').length;
