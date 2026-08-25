@@ -38,6 +38,10 @@ function expectedPaths(home, codexHome = null) {
       skillsRoot: path.join(home, '.config', 'opencode', 'skills'),
       skill: path.join(home, '.config', 'opencode', 'skills', 'pingcode'),
     },
+    general: {
+      skillsRoot: path.join(home, '.agents', 'skills'),
+      skill: path.join(home, '.agents', 'skills', 'pingcode'),
+    },
   };
 }
 
@@ -155,7 +159,7 @@ test('default install writes existing agent roots', () => {
       assertOldAliasesNotInstalled(paths[key]);
       assert.ok(result.stdout.includes('[ok]'));
     }
-    for (const label of ['Codex', 'OpenCode']) {
+    for (const label of ['Codex', 'OpenCode', 'General']) {
       assert.ok(result.stdout.includes(label));
     }
   } finally {
@@ -176,11 +180,12 @@ test('default install skips missing agent roots', () => {
     const paths = expectedPaths(home);
     assertSkillInstalled(paths.codex);
     assertOldAliasesNotInstalled(paths.codex);
-    for (const key of ['opencode']) {
+    for (const key of ['opencode', 'general']) {
       assertNotInstalled(paths[key].skill);
       assertOldAliasesNotInstalled(paths[key]);
     }
     assert.ok(result.stdout.includes('[skip] OpenCode'));
+    assert.ok(result.stdout.includes('[skip] General'));
   } finally {
     rmDir(tmpdir);
   }
@@ -217,7 +222,7 @@ test('codex only scope', () => {
     const paths = expectedPaths(home);
     assertSkillInstalled(paths.codex);
     assertOldAliasesNotInstalled(paths.codex);
-    for (const key of ['opencode']) {
+    for (const key of ['opencode', 'general']) {
       assertNotInstalled(paths[key].skill);
       assertOldAliasesNotInstalled(paths[key]);
     }
@@ -238,7 +243,7 @@ test('opencode only scope', () => {
     const paths = expectedPaths(home);
     assertSkillInstalled(paths.opencode);
     assertOldAliasesNotInstalled(paths.opencode);
-    for (const key of ['codex']) {
+    for (const key of ['codex', 'general']) {
       assertNotInstalled(paths[key].skill);
       assertOldAliasesNotInstalled(paths[key]);
     }
@@ -266,6 +271,46 @@ test('opencode project-level target install', () => {
   }
 });
 
+test('general project-level target install', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const target = path.join(home, 'project', '.agents', 'skills');
+    const result = runInstall(['--target', target, '--force'], env);
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    assertOldAliasesNotInstalled({ skillsRoot: target });
+    assertSkillInstalled({ skillsRoot: target, skill: path.join(target, 'pingcode') });
+    const skillDoc = fs.readFileSync(path.join(target, 'pingcode', 'SKILL.md'), 'utf8');
+    assert.ok(skillDoc.includes('pingcode'));
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
+test('general only scope', () => {
+  const tmpdir = tmpDir();
+  try {
+    const home = path.join(tmpdir, 'home');
+    fs.mkdirSync(home, { recursive: true });
+    const env = isolatedHomeEnv(home);
+    const result = runInstall(['--general-only'], env);
+    assert.strictEqual(result.status, 0, result.stderr);
+
+    const paths = expectedPaths(home);
+    assertSkillInstalled(paths.general);
+    assertOldAliasesNotInstalled(paths.general);
+    for (const key of ['codex', 'opencode']) {
+      assertNotInstalled(paths[key].skill);
+      assertOldAliasesNotInstalled(paths[key]);
+    }
+  } finally {
+    rmDir(tmpdir);
+  }
+});
+
 test('interactive global install', () => {
   const tmpdir = tmpDir();
   try {
@@ -280,7 +325,7 @@ test('interactive global install', () => {
     assertOldAliasesNotInstalled(paths.opencode);
     assert.ok(result.stdout.includes('Install summary (global)'));
     assert.ok(result.stdout.includes('OpenCode'));
-    for (const key of ['codex']) {
+    for (const key of ['codex', 'general']) {
       assertNotInstalled(paths[key].skill);
       assertOldAliasesNotInstalled(paths[key]);
     }
@@ -302,10 +347,13 @@ test('interactive project-level install', () => {
 
     const codexRoot = path.join(resolvedProjectDir, '.codex', 'skills');
     const opencodeRoot = path.join(resolvedProjectDir, '.opencode', 'skills');
+    const generalRoot = path.join(resolvedProjectDir, '.agents', 'skills');
     for (const root of [codexRoot, opencodeRoot]) {
       assertInstalled(path.join(root, 'pingcode'));
       assertOldAliasesNotInstalled({ skillsRoot: root });
     }
+    assertNotInstalled(path.join(generalRoot, 'pingcode'));
+    assertOldAliasesNotInstalled({ skillsRoot: generalRoot });
     assert.ok(result.stdout.includes('Install summary (project)'));
     assert.ok(result.stdout.includes('Codex'));
     assert.ok(result.stdout.includes('OpenCode'));
