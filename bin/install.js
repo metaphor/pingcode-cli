@@ -14,7 +14,7 @@ const SKILL = {
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
-const AGENT_KEYS = ["codex", "opencode"];
+const AGENT_KEYS = ["codex", "opencode", "general"];
 
 function defaultAgentRoots() {
   const home = os.homedir();
@@ -32,6 +32,11 @@ function defaultAgentRoots() {
       agentHome: path.join(home, ".config", "opencode"),
       skillsRoot: path.join(home, ".config", "opencode", "skills"),
     },
+    general: {
+      label: "General",
+      agentHome: path.join(home, ".agents"),
+      skillsRoot: path.join(home, ".agents", "skills"),
+    },
   };
 }
 
@@ -46,13 +51,17 @@ function projectAgentRoots() {
       label: "OpenCode",
       skillsRoot: path.join(cwd, ".opencode", "skills"),
     },
+    general: {
+      label: "General",
+      skillsRoot: path.join(cwd, ".agents", "skills"),
+    },
   };
 }
 
 function usage() {
   return [
     "Usage: npx @metaphorli/pingcode-cli [--force] [--target <dir>]",
-    "                        [--codex-only|--opencode-only]",
+    "                        [--codex-only|--opencode-only|--general-only]",
     "                        [--interactive|--non-interactive]",
     "",
     "Default behavior installs the PingCode skill",
@@ -60,9 +69,11 @@ function usage() {
     "only into supported agent homes that already exist for the current user:",
     "  Codex:     ~/.codex/skills/pingcode",
     "  OpenCode:  ~/.config/opencode/skills/pingcode",
+    "  General:   ~/.agents/skills/pingcode",
     "",
-    "Project-level OpenCode install is supported via --target:",
+    "Project-level install is supported via --target:",
     "  npx @metaphorli/pingcode-cli --target \".opencode/skills\" --force",
+    "  npx @metaphorli/pingcode-cli --target \".agents/skills\" --force",
     "",
     "Interactive install lets you choose global/project scope and agents:",
     "  npx @metaphorli/pingcode-cli --interactive",
@@ -75,6 +86,7 @@ function usage() {
     "  --target DIR       Install only into DIR (skips the multi-root flow)",
     "  --codex-only       Install only into the Codex skills root",
     "  --opencode-only    Install only into the OpenCode skills root",
+    "  --general-only     Install only into the General skills root",
     "  --interactive      Prompt for install scope and agent selection",
     "  --non-interactive  Skip prompts and use the default auto-install behavior",
     "  -h, --help         Show this help",
@@ -95,6 +107,7 @@ function parseArgs(argv) {
   const onlyFlags = {
     "--codex-only": "codex",
     "--opencode-only": "opencode",
+    "--general-only": "general",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -116,7 +129,7 @@ function parseArgs(argv) {
     } else if (Object.prototype.hasOwnProperty.call(onlyFlags, arg)) {
       if (options.only && options.only !== onlyFlags[arg]) {
         throw new Error(
-          "Only one of --codex-only / --opencode-only may be set",
+          "Only one of --codex-only / --opencode-only / --general-only may be set",
         );
       }
       options.only = onlyFlags[arg];
@@ -125,7 +138,7 @@ function parseArgs(argv) {
     }
   }
   if (options.target && options.only) {
-    throw new Error("--target cannot be combined with --codex-only / --opencode-only");
+    throw new Error("--target cannot be combined with --codex-only / --opencode-only / --general-only");
   }
   if (options.interactive && (options.target || options.only)) {
     throw new Error("--interactive cannot be combined with --target or --*-only flags");
