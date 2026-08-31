@@ -14,7 +14,7 @@ const SKILL = {
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";
 
-const AGENT_KEYS = ["codex", "opencode"];
+const AGENT_KEYS = ["codex", "opencode", "agents"];
 
 function defaultAgentRoots() {
   const home = os.homedir();
@@ -32,6 +32,11 @@ function defaultAgentRoots() {
       agentHome: path.join(home, ".config", "opencode"),
       skillsRoot: path.join(home, ".config", "opencode", "skills"),
     },
+    agents: {
+      label: "Shared Agents",
+      agentHome: path.join(home, ".agents"),
+      skillsRoot: path.join(home, ".agents", "skills"),
+    },
   };
 }
 
@@ -45,6 +50,10 @@ function projectAgentRoots() {
     opencode: {
       label: "OpenCode",
       skillsRoot: path.join(cwd, ".opencode", "skills"),
+    },
+    agents: {
+      label: "Shared Agents",
+      skillsRoot: path.join(cwd, ".agents", "skills"),
     },
   };
 }
@@ -60,8 +69,9 @@ function usage() {
     "only into supported agent homes that already exist for the current user:",
     "  Codex:     ~/.codex/skills/pingcode",
     "  OpenCode:  ~/.config/opencode/skills/pingcode",
+    "  Shared Agents: ~/.agents/skills/pingcode",
     "",
-    "Project-level OpenCode install is supported via --target:",
+    "Project-level install is supported via --target:",
     "  npx @metaphorli/pingcode-cli --target \".opencode/skills\" --force",
     "",
     "Interactive install lets you choose global/project scope and agents:",
@@ -75,6 +85,7 @@ function usage() {
     "  --target DIR       Install only into DIR (skips the multi-root flow)",
     "  --codex-only       Install only into the Codex skills root",
     "  --opencode-only    Install only into the OpenCode skills root",
+    "  --agents-only      Install only into the Shared Agents skills root",
     "  --interactive      Prompt for install scope and agent selection",
     "  --non-interactive  Skip prompts and use the default auto-install behavior",
     "  -h, --help         Show this help",
@@ -95,6 +106,7 @@ function parseArgs(argv) {
   const onlyFlags = {
     "--codex-only": "codex",
     "--opencode-only": "opencode",
+    "--agents-only": "agents",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -124,12 +136,12 @@ function parseArgs(argv) {
       throw new Error(`Unknown option: ${arg}`);
     }
   }
-  if (options.target && options.only) {
-    throw new Error("--target cannot be combined with --codex-only / --opencode-only");
-  }
-  if (options.interactive && (options.target || options.only)) {
-    throw new Error("--interactive cannot be combined with --target or --*-only flags");
-  }
+      if (options.target && options.only) {
+      throw new Error("--target cannot be combined with --codex-only / --opencode-only / --agents-only");
+    }
+      if (options.interactive && (options.target || options.only)) {
+      throw new Error("--interactive cannot be combined with --target or --*-only flags");
+    }
   if (options.interactive && options.nonInteractive) {
     throw new Error("--interactive and --non-interactive cannot be combined");
   }

@@ -1,6 +1,6 @@
 # PingCode CLI
 
-用于让 Codex、OpenCode 等 AI agent 通过 PingCode 官方 REST API 操作项目管理和产品管理数据的 Node.js CLI 与 skill。
+用于让 Codex、OpenCode、Shared Agents 等 AI agent 通过 PingCode 官方 REST API 操作项目管理和产品管理数据的 Node.js CLI 与 skill。
 
 ## 安装
 
@@ -8,7 +8,7 @@
 npx @metaphorli/pingcode-cli@latest
 ```
 
-一条命令会检测当前用户已存在的 Codex / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录，其中包含 `references/` 子目录：
+一条命令会检测当前用户已存在的 Codex / OpenCode / Shared Agents 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录，其中包含 `references/` 子目录：
 
 ```text
 ~/.codex/skills/pingcode
@@ -21,6 +21,11 @@ npx @metaphorli/pingcode-cli@latest
 ~/.config/opencode/skills/pingcode/references/ctx.md
 ~/.config/opencode/skills/pingcode/references/workitem.md
 ~/.config/opencode/skills/pingcode/references/comment.md
+~/.agents/skills/pingcode
+~/.agents/skills/pingcode/references/auth.md
+~/.agents/skills/pingcode/references/ctx.md
+~/.agents/skills/pingcode/references/workitem.md
+~/.agents/skills/pingcode/references/comment.md
 ```
 
 默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
@@ -44,8 +49,8 @@ npx @metaphorli/pingcode-cli@latest
 
 流程：
 1. 选择安装范围：
-   - **Global**（全局，安装到 `~/.codex`、`~/.config/opencode` 等）
-   - **Project-level**（项目级，安装到当前目录的 `.codex`、`.opencode` 等）
+   - **Global**（全局，安装到 `~/.codex`、`~/.config/opencode`、`~/.agents` 等）
+   - **Project-level**（项目级，安装到当前目录的 `.codex`、`.opencode`、`.agents` 等）
 2. 选择要安装的 Agent（可多选）
 3. 安装完成后会打印摘要和凭证配置提示
 
@@ -60,7 +65,8 @@ Enter choice (1-2, default: 1): 1
 Select agents to install (comma-separated numbers, default: all):
   1) Codex
   2) OpenCode
-Enter choices (1-2): 2
+  3) Shared Agents
+Enter choices (1-3): 2
 ```
 
 ### 非交互式安装（CI/脚本）
@@ -86,17 +92,19 @@ npx @metaphorli/pingcode-cli@latest --force
 ```bash
 npx @metaphorli/pingcode-cli@latest --codex-only --force
 npx @metaphorli/pingcode-cli@latest --opencode-only --force
+npx @metaphorli/pingcode-cli@latest --agents-only --force
 ```
 
-安装到自定义目录（例如项目本地的 `.codex/skills` 或 OpenCode 项目级 `.opencode/skills`）：
+安装到自定义目录（例如项目本地的 `.codex/skills`、OpenCode 项目级 `.opencode/skills` 或 Shared Agents 项目级 `.agents/skills`）：
 
 ```bash
 npx @metaphorli/pingcode-cli@latest --target ".codex/skills" --force
 npx @metaphorli/pingcode-cli@latest --target "$HOME/.config/opencode/skills" --force
 npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
+npx @metaphorli/pingcode-cli@latest --target ".agents/skills" --force
 ```
 
-`--target` 与 `--codex-only` / `--opencode-only` 互斥；指定 `--target` 后只会安装到给定目录，不再走多 Agent 默认流程。
+`--target` 与 `--codex-only` / `--opencode-only` / `--agents-only` 互斥；指定 `--target` 后只会安装到给定目录，不再走多 Agent 默认流程。
 
 ## 复制给 AI Agent 的安装提示词
 
@@ -107,10 +115,11 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 
 安装要求：
 1. 直接运行：npx @metaphorli/pingcode-cli@latest --force
-   该命令会检测当前用户已存在的 Codex 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
+   该命令会检测当前用户已存在的 Codex、OpenCode 和 Shared Agents 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
 2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode` 目录，且目录里有 SKILL.md 入口文件和 `references/` 子目录（按你当前使用的 Agent 选择对应路径即可）：
    - ~/.codex/skills/pingcode/SKILL.md
    - ~/.config/opencode/skills/pingcode/SKILL.md
+   - ~/.agents/skills/pingcode/SKILL.md
 3. 安装完成后，引导我配置环境变量 PINGCODE_CLIENT_ID 和 PINGCODE_CLIENT_SECRET；不要把 secret 写入仓库文件，也不要在对话里回显完整 secret。
 4. 如果我还需要默认查询“我的任务”，请继续引导我配置 PINGCODE_USER_NAME 或 PINGCODE_USER_ID。
 ```
