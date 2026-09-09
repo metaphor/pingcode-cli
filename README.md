@@ -385,7 +385,7 @@ pingcode comment delete cmt-456 SCR-123 --dry-run
 | `ticket property-resource-create` | 创建企业级工单属性 |
 | `ticket state-resource-create` | 创建企业级工单状态 |
 | `ticket property-plan-property-add <plan_id> <property_id>` | 添加方案内工单属性 |
-| `ticket state-plan-flow-add <plan_id> <flow_id>` | 添加方案内状态流转 |
+| `ticket state-plan-flow-add <plan_id> <from_state_id> <to_state_id>` | 添加方案内状态流转 |
 | `ticket state-plan-state-add <plan_id> <state_id>` | 添加方案内工单状态 |
 | `ticket get` | 查看单个工单 |
 | `ticket priority-resource-get` | 查看企业级工单优先级 |
@@ -430,7 +430,7 @@ pingcode comment delete cmt-456 SCR-123 --dry-run
 | `testhub case-search` | 高级搜索用例（POST search） |
 | `testhub run-search` | 高级搜索执行用例（POST search） |
 | `testhub case-create` | 创建用例（--test-library-id/--title 必填） |
-| `testhub case-property-create` | 创建用例属性 |
+| `ticket state-plan-flow-get <plan_id> <flow_id>` | 查看方案内状态流转 |
 | `testhub plan-create` | 创建测试计划（--name/--type-id/--start-at/--end-at/--assignee-id 必填） |
 | `testhub run-create` | 创建执行用例 |
 | `testhub case-bulk-create` | 批量创建用例（--items JSON） |
@@ -440,6 +440,7 @@ pingcode comment delete cmt-456 SCR-123 --dry-run
 | `testhub suite-add <library_id> <suite_id>` | 添加用例模块 |
 | `testhub case-get` | 查看测试用例 |
 | `testhub case-important-level-get` | 查看用例重要程度 |
+| `testhub case-property-create` | 创建用例属性（--name/--type 必填，--options JSON） |
 | `testhub case-property-get` | 查看用例属性 |
 | `testhub case-property-plan-get` | 查看用例属性方案 |
 | `testhub case-property-plan-property-get <plan_id> <property_id>` | 查看方案内用例属性 |
@@ -749,7 +750,7 @@ pingcode comment delete cmt-456 SCR-123 --dry-run
 | `review list` | 查询评审（--principal-type/--pilot-id 必填） |
 | `review principal-list <review_id>` | 列出评审内容 |
 | `review create` | 创建评审（--principal-type/--pilot-id 必填） |
-| `review principal-add <review_id> <principal_id>` | 添加评审内容 |
+| `review principal-add <review_id> --principal-id USER_ID --type user` | 添加评审内容 |
 | `review get` | 查看评审（--principal-type/--principal-id 必填） |
 | `review principal-get <review_id> <principal_id>` | 查看评审内容 |
 | `review delete` | 删除评审（--principal-type/--principal-id 必填） |
@@ -803,8 +804,6 @@ pingcode workitem list --state 进行中 --compact
 ## 工作区缓存
 
 CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，该目录已被 `.gitignore` 忽略。缓存内容包括：
-
-- 当前用户 ID / 名称
 - 当前项目 ID / 名称
 - 当前迭代 ID / 名称
 - 用户列表或项目成员列表
