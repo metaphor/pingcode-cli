@@ -186,8 +186,12 @@ pingcode context set-current-project my-project
 |---|---|---|
 | `workitem list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `pingcode workitem list --assignee @me --state 进行中` |
 | `workitem create` | 创建工作项 | `pingcode workitem create --title "新任务" --type task` |
-| `workitem get <id|identifier>` | 获取单个工作项（官方单个工作项接口；identifier 会先解析为 id） | `pingcode workitem get SCR-123` |
 | `workitem update <id>` | 更新工作项 | `pingcode workitem update SCR-123 --state 已完成` |
+| `workitem delete <id|identifier>` | 删除工作项（identifier 自动解析） | `pingcode workitem delete SCR-123 --dry-run` |
+| `workitem search` | 高级搜索（组合过滤/日期/自定义属性，POST search 接口） | `pingcode workitem search --keywords "登录" --compact` |
+| `workitem batch-update` | 批量更新工作项属性（`--ids` + `--property-name/--property-value`） | `pingcode workitem batch-update --ids ID1,ID2 --property-name priority_id --property-value P1 --dry-run` |
+| `workitem transitions <id|identifier>` | 查询工作项状态流转记录列表 | `pingcode workitem transitions SCR-123 --compact` |
+| `workitem transition <hid> <id|identifier>` | 查看单条状态流转记录 | `pingcode workitem transition HISTORY_ID SCR-123` |
 
 ```bash
 # 查看当前用户的未完成任务
@@ -253,12 +257,51 @@ pingcode attachment upload-file work_item SCR-123 --file ./a.png --title "截图
 pingcode attachment delete att-1 work_item SCR-123 --dry-run
 ```
 
+### 需求管理 (`idea`)
+
+| 子命令 | 说明 |
+|---|---|
+| `idea list` | 查询需求列表（`--product` 必填，支持状态/优先级/关键词过滤） |
+| `idea get <id\|identifier>` | 查看单个需求（identifier 自动解析） |
+| `idea create` | 创建需求（`--product`/`--title` 必填） |
+| `idea update <id\|identifier>` | 更新需求 |
+| `idea search` | 高级搜索（组合过滤 POST search 接口） |
+| `idea states` / `idea properties` / `idea suites` / `idea plans` / `idea priorities` | 产品级字典（`--product` 必填） |
+| `idea transition-histories <id\|identifier>` | 查询需求状态流转记录列表 |
+| `idea transition-history <hid> <id\|identifier>` | 查看单条流转记录 |
+| `idea state-resource-list` / `state-resource-get` | 企业级需求状态（company-wide，区别于产品级字典） |
+| `idea priority-resource-list` / `priority-resource-get` | 企业级需求优先级 |
+| `idea property-resource-list` / `create` / `get` / `update` | 企业级需求属性 CRUD |
+| `idea property-plan-list` / `property-plan-get` | 需求属性方案 |
+| `idea property-plan-property-add/get/list/remove` | 方案内属性装配管理 |
+
+```bash
+# 查看某产品下的需求
+pingcode idea list --product PRODUCT_ID --compact
+
+# 组合条件搜索
+pingcode idea search --product PRODUCT_ID --filter '{"state": {"in": ["STATE_ID"]}}' --compact
+
+# 企业级配置
+pingcode idea state-resource-list
+pingcode idea property-plan-property-add PLAN_ID PROPERTY_ID --dry-run
+```
+
 ### 产品管理 (`product`)
 
 | 子命令 | 说明 | 示例 |
 |---|---|---|
 | `product list` | 列出产品 | `pingcode product list --compact` |
 | `product get <id>` | 获取单个产品详情 | `pingcode product get PRODUCT_ID` |
+| `product create` / `product update <id>` | 创建 / 更新产品 | `pingcode product create --name "新产品" --identifier NEWPROD --dry-run` |
+| `product member-add / member-get / member-list / member-remove` | 产品成员管理（`--type user\|user_group`） | `pingcode product member-add PRODUCT_ID USER_ID --type user` |
+| `product tag-add / tag-get / tag-list / tag-remove` | 产品标签管理 | `pingcode product tag-add PRODUCT_ID --name 核心词 --dry-run` |
+| `product suite-add / suite-get / suite-list / suite-delete` | 需求模块管理（`--type product\|module`） | `pingcode product suite-add PRODUCT_ID --name 登录模块 --dry-run` |
+| `product plan-list / plan-get` | 查询需求排期 | `pingcode product plan-list PRODUCT_ID --compact` |
+| `product channel-list / channel-get` | 查询工单渠道 | `pingcode product channel-list PRODUCT_ID --compact` |
+| `product ticket-type-list / ticket-type-get` | 查询产品工单类型 | `pingcode product ticket-type-list PRODUCT_ID --compact` |
+| `product customer-list / customer-create / customer-get / customer-update` | 客户管理 | `pingcode product customer-create PRODUCT_ID --name 客户A --dry-run` |
+| `product extuser-list / extuser-create / extuser-get / extuser-update / extuser-delete` | 外部用户管理（创建需 email 或 mobile） | `pingcode product extuser-create PRODUCT_ID --name 外部用户 --email a@b.com --dry-run` |
 
 ```bash
 # 查看产品列表
@@ -283,6 +326,7 @@ pingcode product get PRODUCT_ID --dry-run
 | `comment list <id\|identifier>` | 列出工作项评论 | `pingcode comment list SCR-123 --compact` |
 | `comment get <comment-id> <id\|identifier>` | 获取单条评论 | `pingcode comment get cmt-456 SCR-123` |
 | `comment delete <comment-id> <id\|identifier>` | 删除评论 | `pingcode comment delete cmt-456 SCR-123` |
+| `comment <sub> --principal-type TYPE` | 所有评论子命令支持其他主体：`work_item`（默认）、`work_item_deliverable`、`test_case`、`test_run`、`idea`、`ticket`、`page`；identifier（SCR-123）仅 work_item 系支持 | `pingcode comment create PAGE_ID --content "..." --principal-type page` |
 
 ```bash
 # 创建工作项评论
@@ -305,41 +349,152 @@ pingcode comment create SCR-123 --content "hello" --dry-run
 pingcode comment delete cmt-456 SCR-123 --dry-run
 ```
 
-### 全域能力 (`ticket` / `testhub` / `project` / `sprint` / `board` / `version` / `tag` / `relation` / `deliverable` / `config` / `plans` / `wiki` / `scm` / `release` / `build` / `workload` / `review` / `directory` / `platform`)
+### 工单管理 (`ticket`)
 
-除上述模块外，CLI 还覆盖官方 REST API 的其余业务域。各模块均支持 `--dry-run` / `--compact` 与全局连接选项，详细子命令见 `pingcode <module> --help` 或 `skills/pingcode/references/` 下对应参考文档。
+| 子命令 | 说明 |
+|---|---|
+| `ticket list` / `get` / `create` / `update` | 工单 CRUD（`list`/`create` 需 `--product`；`create` 另需 `--title`/`--type`） |
+| `ticket search` | 高级搜索（`mode: query` + MongoDB 风格 `payload.filter`） |
+| `ticket transitions <id>` / `transition <hid> <id>` | 工单状态流转记录 |
+| `ticket types` / `states` / `properties` / `channels` / `priorities` / `solutions` / `tags` | 产品级工单字典（`--product` 必填） |
+| `ticket state-resource-create / -get / -update / -list-all` | 企业级工单状态（文档未定义删除） |
+| `ticket state-plan-list / -get` | 工单状态方案 |
+| `ticket state-plan-state-add / -get / -list / -remove` | 方案内状态装配 |
+| `ticket state-plan-flow-add / -get / -list / -remove` | 方案内状态流转 |
+| `ticket property-resource-create / -get / -update / -list-all` | 企业级工单属性 |
+| `ticket property-plan-list / -get` | 工单属性方案 |
+| `ticket property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
+| `ticket type-resource-list / -get` | 企业级工单类型（只读） |
+| `ticket priority-resource-list / -get` | 企业级工单优先级（只读） |
+| `ticket solution-list / -get` | 工单解决方案（只读） |
 
-```bash
-# 工单：CRUD、搜索、字典与企业级配置
-pingcode ticket list --product PRODUCT_ID --compact
-pingcode ticket search --filter '{"channel.id":{"in":["CHANNEL_ID"]}}' --compact
-pingcode ticket states --product PRODUCT_ID
+### 测试管理 (`testhub`)
 
-# 测试管理：测试库、用例、计划、执行
-pingcode testhub library-list --compact
-pingcode testhub case-search --keywords 登录 --compact
-pingcode testhub run-update RUN_ID --status-id STATUS_ID --dry-run
+| 子命令 | 说明 |
+|---|---|
+| `testhub library-list / -create / -get / -update` | 测试库管理（API 无删除接口） |
+| `testhub library-member-add / -get / -list / -update / -remove` | 测试库成员 |
+| `testhub suite-add / -get / -list / -update / -delete` | 用例模块（`suite-list` 支持 `--parent-id`） |
+| `testhub case-list / -create / -get / -update / -delete` | 测试用例 CRUD |
+| `testhub case-bulk-create / case-bulk-update` | 批量创建 / 更新用例（`--items JSON`） |
+| `testhub case-search` | 高级搜索用例 |
+| `testhub case-histories <case_id>` | 用例各执行的最后一次结果 |
+| `testhub plan-list / -create / -get / -update` | 测试计划（`<library_id>` 前缀定位） |
+| `testhub plan-type-list / -get` | 计划类型 |
+| `testhub run-list / -create / -get / -update` | 执行用例（`run-update` 提交执行结果，`--status-id` 必填） |
+| `testhub run-bulk-create / run-bulk-update` | 批量创建 / 更新执行用例 |
+| `testhub run-search` | 高级搜索执行用例 |
+| `testhub run-histories <run_id>` / `run-history <hid>` | 执行结果记录 |
+| `testhub case-states / -state-get` | 用例状态字典 |
+| `testhub case-types / -type-get` | 用例类型字典 |
+| `testhub case-important-levels / -get` | 用例重要程度 |
+| `testhub plan-states / -state-get` | 计划状态字典 |
+| `testhub run-statuses / -status-get` | 执行结果状态字典 |
+| `testhub case-property-list / -create / -get / -update` | 用例属性 CRUD |
+| `testhub case-property-plan-list / -get` | 用例属性方案 |
+| `testhub case-property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
 
-# 项目实体：项目 / 迭代 / 看板 / 发布版本 / 标签 / 关联 / 交付目标
-pingcode project progress PROJECT_ID
-pingcode sprint list PROJECT_ID --compact
-pingcode board list PROJECT_ID --compact
-pingcode version list PROJECT_ID --compact
-pingcode tag add SCR-123 TAG_ID --dry-run
-pingcode relation add SCR-123 TARGET_ID --relation-type relates_to --dry-run
+### 项目实体 (`project` / `sprint` / `board` / `version`)
 
-# 企业配置：类型 / 状态 / 属性与方案
-pingcode config type-list-all
-pingcode plans state-plan-list
+| 子命令 | 说明 |
+|---|---|
+| `project create` / `get` / `update` / `clone` | 项目管理 |
+| `project progress <project_id>` | 项目工作项统计进度 |
+| `project project-states` | 项目状态字典 |
+| `project member-add / -get / -update / -list / -remove` | 项目成员管理 |
+| `project prop-add / -get / -list / -remove` | 项目属性管理 |
+| `project local-config-enable <project_id>` | 开启项目本地配置 |
+| `sprint list / create / get / update` | 迭代管理（`<project_id>` 前缀；API 无删除接口） |
+| `sprint bulk-create` | 批量创建迭代（`--items JSON`） |
+| `sprint section-*`（list/create/get/update/delete） | 迭代分组 |
+| `sprint category-*`（list/create/get/update/delete） | 迭代类别 |
+| `board list / create / get / update / delete` | 看板管理 |
+| `board entry-*`（list/create/get/update/delete） | 看板栏（`--wip-limit` 等） |
+| `board swimlane-*`（list/create/get/update/delete） | 泳道 |
+| `version list / create / get / update / delete / bulk-create` | 发布版本管理 |
+| `version stage-*`（list/create/get/update/delete） | 发布阶段（全局 `/v1/pjm/stages`） |
+| `version section-*`（list/create/get/update/delete） | 发布分组 |
+| `version category-*`（list/create/get/update/delete） | 发布类别 |
 
-# 知识库 / 工时 / 评审 / 组织 / 平台
-pingcode wiki space-list --compact
-pingcode wiki content-update PAGE_ID --content "..." --format-type markdown --dry-run
-pingcode workload create --principal-type work_item --principal-id ID --duration 120 --report-at 1736985600 --dry-run
-pingcode review list --principal-type idea --pilot-id PRODUCT_ID --compact
-pingcode directory me
-pingcode platform participant-add SCR-123 --participant-id USER_ID --type user --dry-run
-```
+### 标签 / 关联 / 交付目标 (`tag` / `relation` / `deliverable`)
+
+| 子命令 | 说明 |
+|---|---|
+| `tag list / create / get / update / delete` | 工作项标签库管理 |
+| `tag add <id\|identifier> <tag_id>` / `tag get` / `tag remove` | 工作项打标与移标（identifier 自动解析） |
+| `relation add <id\|identifier> <target_id> --relation-type` / `relation get` / `list` / `remove` | 工作项关联管理 |
+| `relation type-list / type-get` | 关联类型字典（9 种） |
+| `deliverable list / create / get / update / delete` | 工作项交付目标 CRUD（`list` 支持 `--project-id`/`--work-item-id`） |
+
+### 企业配置 (`config` / `plans`)
+
+| 子命令 | 说明 |
+|---|---|
+| `config type-list-all / -create / -get / -update / -delete` | 自定义工作项类型 |
+| `config state-list / -create / -get / -update` | 自定义工作项状态（更新仅限非系统状态，无删除） |
+| `config property-list / -create / -get / -update` | 自定义工作项属性（无删除） |
+| `config priority-get <priority_id>` | 工作项优先级（仅单查） |
+| `config process-list / -get` | 项目流程（只读） |
+| `config project-state-get <state_id>` | 项目状态（仅单查） |
+| `config project-property-list / -create / -get / -update` | 全局项目属性 |
+| `plans type-plan-list / -get` | 工作项类型方案 |
+| `plans type-plan-type-add / -get / -list / -update / -remove` | 方案内类型装配（update 设 `--sub-type-ids`） |
+| `plans state-plan-list / -get` | 工作项状态方案 |
+| `plans state-plan-state-add / -get / -list / -remove` | 方案内状态装配 |
+| `plans flow-add / -get / -list / -remove` | 方案内状态流转 |
+| `plans property-plan-list / -get` | 工作项属性方案 |
+| `plans property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
+
+### 知识库 (`wiki`)
+
+| 子命令 | 说明 |
+|---|---|
+| `wiki space-list / -create / -get / -update / -delete` | 知识空间管理 |
+| `wiki member-add / -get / -list / -remove` | 空间成员管理 |
+| `wiki page-list / -create / -get / -update / -delete` | 页面管理（`page-create` 需 `--space-id`+`--name`） |
+| `wiki content-get <page_id>` | 读取文档正文 |
+| `wiki content-update <page_id>` | 更新文档正文（PUT 全量替换，`--content`+`--format-type`） |
+| `wiki version-list / -get <page_id>` | 页面版本 |
+| `wiki version-restore <page_id> <version_id>` | 恢复页面到指定版本 |
+
+### DevOps (`scm` / `release` / `build`)
+
+| 子命令 | 说明 |
+|---|---|
+| `scm platform-list / -create / -get / -update` | 代码托管平台管理 |
+| `scm user-list / -create / -get / -update` | 托管平台用户 |
+| `scm repo-list / -create / -get / -update` | 代码仓库管理 |
+| `scm branch-list / -create / -get / -update / -delete` | 代码分支（SCM 域唯一有删除的资源） |
+| `scm commit-create / -get / -list` | 提交上报与查询 |
+| `scm ref-create / -get / -list` | 提交引用（`--meta-type`/`--meta-id` 必填） |
+| `scm pr-list / -create / -get / -update` | 拉取请求 |
+| `scm review-list / -create / -get / -update` | PR 代码评审 |
+| `release env-list / -create / -get / -update / -patch / -delete` | 部署环境（update=PUT 全量，patch=PATCH 局部） |
+| `release deploy-list / -create / -get / -update / -patch / -delete` | 部署记录 |
+| `build list / create / get / update / patch / delete` | 构建记录（provider: bamboo/bitbucket/jenkins/other） |
+
+### 组织与平台 (`directory` / `platform` / `workload` / `review`)
+
+| 子命令 | 说明 |
+|---|---|
+| `directory me` | 当前登录用户信息 |
+| `directory team` | 企业信息 |
+| `directory user-list / -create / -get / -update / -bulk-update` | 企业成员管理 |
+| `directory group-list / -create / -get / -update` | 团队管理 |
+| `directory group-member-add / -get / -list / -remove` | 团队成员管理 |
+| `directory department-list / -create / -get / -update / -delete` | 部门管理 |
+| `directory job-list / -get` | 职位（只读） |
+| `directory role-list / -get` | 角色（只读） |
+| `platform participant-add / -list / -get / -remove` | 关注人管理（work_item 主体支持 identifier） |
+| `platform link-create / -get / -list / -remove` | 跨资源通用关联 |
+| `platform activity-list / -get` | 资源动态记录 |
+| `platform audit-logs` / `login-logs` | 审计日志 / 登录日志（只读，`--operated-between`/`--logged-between` 必填） |
+| `workload list / create / get / update / delete` | 工时登记管理（`--duration` 单位分钟） |
+| `workload type-list / -get` | 工时类型 |
+| `review list / create / get / delete` | 评审管理（`--principal-type`+`--pilot-id`/`--principal-id` 定位） |
+| `review principal-add / -list / -get / -remove` | 评审内容管理 |
+
+所有模块均支持全局选项 `--dry-run`（预览请求不发送）、`--compact`（精简输出）、`--no-token-cache`、`--no-workspace-cache` 及连接/凭证选项；完整参数见 `pingcode <module> --help` 与 `pingcode <module> <subcommand> --help`。
 
 ## 凭证配置
 
