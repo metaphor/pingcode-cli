@@ -1535,3 +1535,445 @@ testInCleanTmp('workitem list with cached user token and no current user does no
     else delete process.env.PINGCODE_TOKEN_CACHE;
   }
 });
+
+// ── workitem delete / search / batch-update / transitions / transition ─
+
+const { mockFetch, fakeResponse } = require('./helpers');
+
+testInCleanTmp('workitem delete by id returns flat DELETE dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['delete', 'a1b2c3d4e5f6', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'DELETE');
+  assert.strictEqual(result.path, '/v1/pjm/work_items/a1b2c3d4e5f6');
+  assert.strictEqual('resolution' in result, false);
+});
+
+testInCleanTmp('workitem delete by identifier returns compound dry-run shape', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['delete', 'SCR-1', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.ok(result.resolution);
+  assert.strictEqual(result.resolution.method, 'GET');
+  assert.strictEqual(result.resolution.path, '/v1/project/work_items');
+  assert.strictEqual(result.resolution.params.identifier, 'SCR-1');
+  assert.ok(result.delete);
+  assert.strictEqual(result.delete.method, 'DELETE');
+  assert.strictEqual(result.delete.path, '/v1/pjm/work_items/{id}');
+});
+
+testInCleanTmp('workitem delete missing target errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['delete', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('id or identifier is required'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem delete by identifier resolves then deletes', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+
+  const queue = [
+    fakeResponse({ access_token: 'tok', expires_in: 3600 }),
+    fakeResponse({ page_size: 30, page_index: 0, total: 1, values: [{ id: 'resolved-id' }] }),
+    fakeResponse({ id: 'resolved-id', identifier: 'SCR-1' }),
+  ];
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(String(url));
+    return queue.shift();
+  };
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['delete', 'SCR-1', '--workspace-cache', cachePath]);
+  } finally {
+    console.log = originalLog;
+    global.fetch = originalFetch;
+  }
+
+  assert.strictEqual(calls.length, 3, 'token, resolution, and delete requests expected');
+  assert.ok(calls[1].includes('/v1/project/work_items'), 'second call resolves the identifier');
+  assert.ok(calls[2].includes('/v1/pjm/work_items/resolved-id'), 'delete targets the resolved id');
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.id, 'resolved-id');
+});
+
+// ── workitem search ──────────────────────────────────────────────────
+
+testInCleanTmp('workitem search dry-run posts structured query body', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'search',
+      '--filter', '{"title":{"contains":"bug"}}',
+      '--keywords', '用户故事',
+      '--page-size', '10',
+      '--page-index', '2',
+      '--include-deleted',
+      '--include-archived',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'POST');
+  assert.strictEqual(result.path, '/v1/pjm/work_items/search');
+  assert.strictEqual(result.json.mode, 'query');
+  assert.deepStrictEqual(result.json.payload.filter, { title: { contains: 'bug' } });
+  assert.strictEqual(result.json.payload.keywords, '用户故事');
+  assert.strictEqual(result.json.payload.page_size, 10);
+  assert.strictEqual(result.json.payload.page_index, 2);
+  assert.strictEqual(result.json.payload.include_deleted, true);
+  assert.strictEqual(result.json.payload.include_archived, true);
+});
+
+testInCleanTmp('workitem search with no flags sends empty payload', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['search', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.method, 'POST');
+  assert.strictEqual(result.path, '/v1/pjm/work_items/search');
+  assert.strictEqual(result.json.mode, 'query');
+  assert.deepStrictEqual(result.json.payload, {});
+});
+
+testInCleanTmp('workitem search invalid filter JSON errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['search', '--filter', '{bad', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('--filter must be valid JSON'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem search invalid page-size errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['search', '--page-size', '0', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('--page-size must be a number between 1 and 100'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem search unknown option errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['search', '--bogus', 'x', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('Unknown option'));
+    process.exitCode = 0;
+  }
+});
+
+// ── workitem batch-update ────────────────────────────────────────────
+
+testInCleanTmp('workitem batch-update dry-run sends PATCH with ids and property', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'batch-update',
+      '--ids', 'id1, id2 ,,id3',
+      '--property-name', 'title',
+      '--property-value', '新标题',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'PATCH');
+  assert.strictEqual(result.path, '/v1/pjm/work_items');
+  assert.deepStrictEqual(result.json.ids, ['id1', 'id2', 'id3']);
+  assert.strictEqual(result.json.property_name, 'title');
+  assert.strictEqual(result.json.property_value, '新标题');
+});
+
+testInCleanTmp('workitem batch-update property-value is optional', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'batch-update',
+      '--ids', 'id1',
+      '--property-name', 'state_id',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.property_name, 'state_id');
+  assert.strictEqual('property_value' in result.json, false);
+});
+
+testInCleanTmp('workitem batch-update missing ids errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['batch-update', '--property-name', 'title', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('--ids is required'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem batch-update missing property-name errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['batch-update', '--ids', 'id1', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('--property-name is required'));
+    process.exitCode = 0;
+  }
+});
+
+// ── workitem transitions / transition ────────────────────────────────
+
+testInCleanTmp('workitem transitions by id returns flat GET dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['transitions', 'a1b2c3d4e5f6', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'GET');
+  assert.strictEqual(result.path, '/v1/pjm/work_items/a1b2c3d4e5f6/transition_histories');
+  assert.strictEqual('resolution' in result, false);
+});
+
+testInCleanTmp('workitem transitions by identifier returns compound dry-run shape', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['transitions', 'SCR-1', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.ok(result.resolution);
+  assert.strictEqual(result.resolution.method, 'GET');
+  assert.strictEqual(result.resolution.path, '/v1/project/work_items');
+  assert.strictEqual(result.resolution.params.identifier, 'SCR-1');
+  assert.ok(result.list);
+  assert.strictEqual(result.list.method, 'GET');
+  assert.strictEqual(result.list.path, '/v1/pjm/work_items/{id}/transition_histories');
+});
+
+testInCleanTmp('workitem transitions missing target errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['transitions', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('id or identifier is required'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem transition by id returns flat GET dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['transition', 'hist-1', 'a1b2c3d4e5f6', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'GET');
+  assert.strictEqual(result.path, '/v1/pjm/work_items/a1b2c3d4e5f6/transition_histories/hist-1');
+  assert.strictEqual('resolution' in result, false);
+});
+
+testInCleanTmp('workitem transition by identifier returns compound dry-run shape', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['transition', 'hist-1', 'SCR-1', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.ok(result.resolution);
+  assert.strictEqual(result.resolution.method, 'GET');
+  assert.strictEqual(result.resolution.path, '/v1/project/work_items');
+  assert.strictEqual(result.resolution.params.identifier, 'SCR-1');
+  assert.ok(result.get);
+  assert.strictEqual(result.get.method, 'GET');
+  assert.strictEqual(result.get.path, '/v1/pjm/work_items/{id}/transition_histories/hist-1');
+});
+
+testInCleanTmp('workitem transition missing work item errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['transition', 'hist-1', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('transition history id and a work item id/identifier are required'));
+    process.exitCode = 0;
+  }
+});
+
+testInCleanTmp('workitem transition extra positional errors', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: { current_user_id: 'user-1' } });
+
+  try {
+    await workItem.run(['transition', 'h1', 'id1', 'extra', '--workspace-cache', cachePath, '--dry-run']);
+    assert.fail('Expected error was not thrown');
+  } catch (exc) {
+    assert.ok(exc.message.includes('Unexpected argument: extra'));
+    process.exitCode = 0;
+  }
+});
+
+// ── help for new subcommands ─────────────────────────────────────────
+
+testInCleanEnv('workitem --help lists new subcommands', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('delete <id|identifier>'));
+  assert.ok(output.includes('search [options]'));
+  assert.ok(output.includes('batch-update [options]'));
+  assert.ok(output.includes('transitions <id|identifier>'));
+  assert.ok(output.includes('transition <history_id> <id|identifier>'));
+});
+
+testInCleanEnv('workitem new subcommands show their own usage', async () => {
+  const cases = [
+    ['delete', ['Usage: pingcode workitem delete <id|identifier>']],
+    ['search', ['Usage: pingcode workitem search [options]', '--filter JSON', '--page-size N', '--include-deleted', '--include-archived']],
+    ['batch-update', ['Usage: pingcode workitem batch-update --ids LIST --property-name NAME [options]', '--ids LIST', '--property-value VALUE']],
+    ['transitions', ['Usage: pingcode workitem transitions <id|identifier>']],
+    ['transition', ['Usage: pingcode workitem transition <history_id> <id|identifier>']],
+  ];
+  for (const [sub, expects] of cases) {
+    let output = '';
+    const originalLog = console.log;
+    console.log = (...args) => { output += args.join(' ') + '\n'; };
+    try {
+      await workItem.run([sub, '--help']);
+    } finally {
+      console.log = originalLog;
+    }
+    for (const expected of expects) {
+      assert.ok(output.includes(expected), `${sub} help should include "${expected}"`);
+    }
+  }
+});

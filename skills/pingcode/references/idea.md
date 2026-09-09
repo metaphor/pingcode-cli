@@ -48,6 +48,19 @@ pingcode idea priorities --product PRODUCT_ID
 pingcode idea transition-history TRANSITION_HISTORY_ID SLC-1
 pingcode idea transition-histories SLC-1
 pingcode idea transition-histories IDEA_ID
+
+# 企业级需求配置资源（company-wide，区别于上面的产品级字典 states/priorities/properties）
+pingcode idea state-resource-list
+pingcode idea state-resource-get STATE_ID
+pingcode idea priority-resource-list
+pingcode idea priority-resource-get PRIORITY_ID
+pingcode idea property-resource-list
+pingcode idea property-resource-create --name 复核 --type single_select --options '[{"text":"是"}]'
+pingcode idea property-resource-update PROPERTY_ID --name 新名 --dry-run
+pingcode idea property-plan-list
+pingcode idea property-plan-get PLAN_ID
+pingcode idea property-plan-property-add PLAN_ID PROPERTY_ID --dry-run
+pingcode idea property-plan-property-list PLAN_ID
 ```
 
 查询/列表输出默认使用 `--compact`。写操作加 `--dry-run` 可预览请求而不实际发送。

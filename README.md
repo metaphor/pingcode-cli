@@ -118,17 +118,21 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 ## 能力范围
 
 - 使用 `client_credentials` 获取 PingCode 企业令牌
-- 通过 OAuth2 `authorization_code` 获取用户令牌（`pingcode auth login`）
-- 查询项目、迭代、看板、工作项类型、状态、优先级
-- 查询、创建、更新工作项（含状态更新，支持 `--dry-run` 试运行）
-- 在故事下创建子工作项（通过 `--parent`）
-- 创建、查看、删除工作项评论（通过 `--reply-to` 支持回复）
-- 上传、查看、删除附件（文件与代码片段，支持 `work_item` 等主体）
-- 查询、创建、更新需求（idea）
-- 查询产品列表和产品详情（`product list / get`）
-- 通过子命令（`context *`, `workitem *`, `auth *`, `comment *`, `attachment *`, `idea *`, `product *`）调用 PingCode API
+- 通过 OAuth2 `authorization_code` 获取用户令牌（`pingcode auth login`，含 `refresh_token` 自动刷新）
+- 工作项全生命周期：查询、高级搜索（`workitem search` 组合过滤）、创建、更新、批量更新、删除、流转记录、子工作项
+- 项目管理：项目 CRUD/克隆/进度/成员/项目属性，迭代（含分组/类别/批量创建），看板（看板栏/泳道），发布版本（阶段/分组/类别）
+- 工作项标签、关联、交付目标、关注人、跨资源关联、活动记录
+- 企业级配置：自定义类型/状态/属性、流程，以及类型/状态/属性方案（含状态流转）
+- 需求（idea）：查询、搜索、创建、更新、字典与流转记录，企业级需求配置
+- 产品：CRUD、成员、标签、需求模块、排期、渠道、工单类型、客户、外部用户
+- 工单：CRUD、高级搜索、流转记录、7 类字典与企业级状态/属性/方案管理
+- 测试管理：测试库、用例、测试计划、执行用例与执行结果、用例模块、成员、全套字典
+- 知识库：空间、页面、正文读写、版本与恢复
+- DevOps：代码托管（仓库/分支/提交/引用/PR/评审）、部署环境与部署记录、构建记录
+- 协作：评论（多主体 `--principal-type`）、工时登记、评审、组织（成员/团队/部门/职位/角色/企业信息）、审计与登录日志
+- 通过子命令（`context`/`workitem`/`auth`/`comment`/`attachment`/`idea`/`product`/`ticket`/`testhub`/`project`/`sprint`/`board`/`version`/`tag`/`relation`/`deliverable`/`config`/`plans`/`wiki`/`scm`/`release`/`build`/`workload`/`review`/`directory`/`platform`）调用 PingCode API
 
-以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的 `auth.md`、`ctx.md`、`workitem.md`、`comment.md`、`attachment.md` 分别补充用户令牌登录、工作区上下文初始化、工作项操作、评论操作、附件操作的详细参考。
+以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的主题参考文档（`auth.md`、`ctx.md`、`workitem.md`、`comment.md`、`attachment.md`、`idea.md`、`product.md`、`ticket.md`、`testhub.md`、`entities.md`、`config.md`、`devops.md`、`collab.md`）补充详细用法与安全规则。
 
 ## Skill 结构
 
@@ -139,11 +143,17 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 | `pingcode/SKILL.md` | 路由入口，统一提供 PingCode CLI 的各项能力 |
 | `pingcode/references/auth.md` | 用户令牌登录：`pingcode auth login`、grant-type 自动识别与覆盖、令牌类型说明 |
 | `pingcode/references/ctx.md` | 工作区上下文初始化：在 Agent 前台按编号选择当前项目、迭代、用户并写入缓存 |
-| `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / get / update` 子命令及完整参数；含共享安全规则 |
-| `pingcode/references/idea.md` | 需求操作：`idea list / create / update / get / search` 等子命令及安全规则 |
-| `pingcode/references/product.md` | 产品操作：`product list / get` 子命令及安全规则 |
-| `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete` 子命令及安全规则 |
+| `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / get / update / delete / search / batch-update / transitions` 子命令及完整参数；含共享安全规则 |
+| `pingcode/references/idea.md` | 需求操作：`idea list / create / update / get / search` 等子命令、字典、流转记录及企业级配置；含安全规则 |
+| `pingcode/references/product.md` | 产品操作：`product list / get / create / update`、成员、标签、模块、排期、渠道、客户、外部用户及安全规则 |
+| `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete`（多主体 `--principal-type`）及安全规则 |
 | `pingcode/references/attachment.md` | 附件操作：`attachment upload-file / upload-snippet / list / get / delete` 子命令及安全规则 |
+| `pingcode/references/ticket.md` | 工单操作：CRUD、搜索、流转记录、字典与企业级状态/属性/方案管理 |
+| `pingcode/references/testhub.md` | 测试管理：测试库、用例、测试计划、执行用例与字典 |
+| `pingcode/references/entities.md` | 项目实体：项目、迭代、看板、发布版本、标签、关联、交付目标 |
+| `pingcode/references/config.md` | 企业配置：自定义类型/状态/属性、流程与类型/状态/属性方案 |
+| `pingcode/references/devops.md` | DevOps 集成：代码托管、部署环境与构建记录 |
+| `pingcode/references/collab.md` | 协作与组织：知识库、工时、评审、组织成员、关注人、审计日志 |
 
 ## 子命令
 
@@ -293,6 +303,42 @@ pingcode comment delete cmt-456 SCR-123
 # 试运行（预览 API 请求，不发送）
 pingcode comment create SCR-123 --content "hello" --dry-run
 pingcode comment delete cmt-456 SCR-123 --dry-run
+```
+
+### 全域能力 (`ticket` / `testhub` / `project` / `sprint` / `board` / `version` / `tag` / `relation` / `deliverable` / `config` / `plans` / `wiki` / `scm` / `release` / `build` / `workload` / `review` / `directory` / `platform`)
+
+除上述模块外，CLI 还覆盖官方 REST API 的其余业务域。各模块均支持 `--dry-run` / `--compact` 与全局连接选项，详细子命令见 `pingcode <module> --help` 或 `skills/pingcode/references/` 下对应参考文档。
+
+```bash
+# 工单：CRUD、搜索、字典与企业级配置
+pingcode ticket list --product PRODUCT_ID --compact
+pingcode ticket search --filter '{"channel.id":{"in":["CHANNEL_ID"]}}' --compact
+pingcode ticket states --product PRODUCT_ID
+
+# 测试管理：测试库、用例、计划、执行
+pingcode testhub library-list --compact
+pingcode testhub case-search --keywords 登录 --compact
+pingcode testhub run-update RUN_ID --status-id STATUS_ID --dry-run
+
+# 项目实体：项目 / 迭代 / 看板 / 发布版本 / 标签 / 关联 / 交付目标
+pingcode project progress PROJECT_ID
+pingcode sprint list PROJECT_ID --compact
+pingcode board list PROJECT_ID --compact
+pingcode version list PROJECT_ID --compact
+pingcode tag add SCR-123 TAG_ID --dry-run
+pingcode relation add SCR-123 TARGET_ID --relation-type relates_to --dry-run
+
+# 企业配置：类型 / 状态 / 属性与方案
+pingcode config type-list-all
+pingcode plans state-plan-list
+
+# 知识库 / 工时 / 评审 / 组织 / 平台
+pingcode wiki space-list --compact
+pingcode wiki content-update PAGE_ID --content "..." --format-type markdown --dry-run
+pingcode workload create --principal-type work_item --principal-id ID --duration 120 --report-at 1736985600 --dry-run
+pingcode review list --principal-type idea --pilot-id PRODUCT_ID --compact
+pingcode directory me
+pingcode platform participant-add SCR-123 --participant-id USER_ID --type user --dry-run
 ```
 
 ## 凭证配置

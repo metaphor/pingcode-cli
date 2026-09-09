@@ -32,6 +32,11 @@ pingcode comment get cmt-456 SCR-123
 
 # 删除评论
 pingcode comment delete cmt-456 SCR-123
+
+# 其他主体上的评论（--principal-type，默认 work_item；identifier 仅支持 work_item 系）
+pingcode comment create PAGE_ID --content "..." --principal-type page
+pingcode comment list PAGE_ID --principal-type page --compact
+pingcode comment delete cmt-456 PAGE_ID --principal-type page
 ```
 
 写操作加 `--dry-run` 可预览请求而不实际发送。列表/获取输出默认使用 `--compact`。
