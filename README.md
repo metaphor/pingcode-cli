@@ -180,12 +180,20 @@ pingcode context init
 pingcode context set-current-project my-project
 ```
 
+### 认证管理 (`auth`)
+
+| 子命令 | 说明 |
+|---|---|
+| `auth login` | OAuth2 用户令牌登录（默认打开浏览器；`--no-browser` 走 URL+授权码；grant-type 自动识别，`--grant-type` 可覆盖） |
+| `auth status` | 查看当前认证状态（缓存令牌的类型与有效期） |
+
 ### 工作项管理 (`workitem`)
 
 | 子命令 | 说明 | 示例 |
 |---|---|---|
 | `workitem list` | 列出工作项（自动加当前用户/项目/迭代过滤） | `pingcode workitem list --assignee @me --state 进行中` |
 | `workitem create` | 创建工作项 | `pingcode workitem create --title "新任务" --type task` |
+| `workitem get <id|identifier>` | 获取单个工作项（identifier 自动解析为 id） | `pingcode workitem get SCR-123` |
 | `workitem update <id>` | 更新工作项 | `pingcode workitem update SCR-123 --state 已完成` |
 | `workitem delete <id|identifier>` | 删除工作项（identifier 自动解析） | `pingcode workitem delete SCR-123 --dry-run` |
 | `workitem search` | 高级搜索（组合过滤/日期/自定义属性，POST search 接口） | `pingcode workitem search --keywords "登录" --compact` |
@@ -261,62 +269,69 @@ pingcode attachment delete att-1 work_item SCR-123 --dry-run
 
 | 子命令 | 说明 |
 |---|---|
-| `idea list` | 查询需求列表（`--product` 必填，支持状态/优先级/关键词过滤） |
-| `idea get <id\|identifier>` | 查看单个需求（identifier 自动解析） |
-| `idea create` | 创建需求（`--product`/`--title` 必填） |
-| `idea update <id\|identifier>` | 更新需求 |
-| `idea search` | 高级搜索（组合过滤 POST search 接口） |
-| `idea states` / `idea properties` / `idea suites` / `idea plans` / `idea priorities` | 产品级字典（`--product` 必填） |
-| `idea transition-histories <id\|identifier>` | 查询需求状态流转记录列表 |
-| `idea transition-history <hid> <id\|identifier>` | 查看单条流转记录 |
-| `idea state-resource-list` / `state-resource-get` | 企业级需求状态（company-wide，区别于产品级字典） |
-| `idea priority-resource-list` / `priority-resource-get` | 企业级需求优先级 |
-| `idea property-resource-list` / `create` / `get` / `update` | 企业级需求属性 CRUD |
-| `idea property-plan-list` / `property-plan-get` | 需求属性方案 |
-| `idea property-plan-property-add/get/list/remove` | 方案内属性装配管理 |
-
-```bash
-# 查看某产品下的需求
-pingcode idea list --product PRODUCT_ID --compact
-
-# 组合条件搜索
-pingcode idea search --product PRODUCT_ID --filter '{"state": {"in": ["STATE_ID"]}}' --compact
-
-# 企业级配置
-pingcode idea state-resource-list
-pingcode idea property-plan-property-add PLAN_ID PROPERTY_ID --dry-run
-```
+| `idea list` | 查询需求列表（--product 必填） |
+| `idea priority-resource-list` | 列出企业级需求优先级 |
+| `idea property-plan-list` | 列出需求属性方案 |
+| `idea property-plan-property-list <plan_id>` | 列出方案内需求属性 |
+| `idea property-resource-list` | 列出企业级需求属性 |
+| `idea state-resource-list` | 列出企业级需求状态 |
+| `idea search` | 高级搜索需求（POST search） |
+| `idea create` | 创建需求（--product/--title 必填） |
+| `idea property-resource-create` | 创建企业级需求属性（--options JSON） |
+| `idea property-plan-property-add <plan_id> <property_id>` | 添加方案内需求属性 |
+| `idea get` | 查看单个需求（identifier 自动解析） |
+| `idea priority-resource-get` | 查看企业级需求优先级 |
+| `idea property-plan-get` | 查看需求属性方案 |
+| `idea property-plan-property-get <plan_id> <property_id>` | 查看方案内需求属性 |
+| `idea property-resource-get` | 查看企业级需求属性 |
+| `idea state-resource-get` | 查看企业级需求状态 |
+| `idea property-resource-update` | 更新企业级需求属性 |
+| `idea update` | 更新需求 |
+| `idea property-plan-property-remove <plan_id> <property_id>` | 移除方案内需求属性 |
+| `idea plans` | 产品级需求排期字典（--product 必填） |
+| `idea priorities` | 产品级需求优先级字典（--product 必填） |
+| `idea properties` | 产品级需求属性字典（--product 必填） |
+| `idea states` | 产品级需求状态字典（--product 必填） |
+| `idea suites` | 产品级需求模块字典（--product 必填） |
+| `idea transition-histories` | 查询需求状态流转记录列表 |
+| `idea transition-history` | 查看单条需求状态流转记录 |
 
 ### 产品管理 (`product`)
 
-| 子命令 | 说明 | 示例 |
-|---|---|---|
-| `product list` | 列出产品 | `pingcode product list --compact` |
-| `product get <id>` | 获取单个产品详情 | `pingcode product get PRODUCT_ID` |
-| `product create` / `product update <id>` | 创建 / 更新产品 | `pingcode product create --name "新产品" --identifier NEWPROD --dry-run` |
-| `product member-add / member-get / member-list / member-remove` | 产品成员管理（`--type user\|user_group`） | `pingcode product member-add PRODUCT_ID USER_ID --type user` |
-| `product tag-add / tag-get / tag-list / tag-remove` | 产品标签管理 | `pingcode product tag-add PRODUCT_ID --name 核心词 --dry-run` |
-| `product suite-add / suite-get / suite-list / suite-delete` | 需求模块管理（`--type product\|module`） | `pingcode product suite-add PRODUCT_ID --name 登录模块 --dry-run` |
-| `product plan-list / plan-get` | 查询需求排期 | `pingcode product plan-list PRODUCT_ID --compact` |
-| `product channel-list / channel-get` | 查询工单渠道 | `pingcode product channel-list PRODUCT_ID --compact` |
-| `product ticket-type-list / ticket-type-get` | 查询产品工单类型 | `pingcode product ticket-type-list PRODUCT_ID --compact` |
-| `product customer-list / customer-create / customer-get / customer-update` | 客户管理 | `pingcode product customer-create PRODUCT_ID --name 客户A --dry-run` |
-| `product extuser-list / extuser-create / extuser-get / extuser-update / extuser-delete` | 外部用户管理（创建需 email 或 mobile） | `pingcode product extuser-create PRODUCT_ID --name 外部用户 --email a@b.com --dry-run` |
+| 子命令 | 说明 |
+|---|---|
+| `product channel-list <product_id>` | 列出工单渠道 |
+| `product customer-list <product_id>` | 列出客户 |
+| `product extuser-list <product_id>` | 列出外部用户 |
+| `product list` | 列出product |
+| `product member-list <product_id>` | 列出产品成员 |
+| `product plan-list <product_id>` | 列出需求排期 |
+| `product suite-list <product_id>` | 列出需求模块 |
+| `product tag-list <product_id>` | 列出产品标签 |
+| `product ticket-type-list <product_id>` | 列出产品工单类型 |
+| `product create` | 创建产品（--name/--identifier 必填） |
+| `product customer-create` | 创建客户 |
+| `product extuser-create` | 创建外部用户（需 email 或 mobile） |
+| `product member-add` | 向产品添加成员 |
+| `product suite-add` | 添加需求模块 |
+| `product tag-add` | 添加产品标签 |
+| `product channel-get <product_id> <channel_id>` | 查看工单渠道 |
+| `product customer-get <product_id> <customer_id>` | 查看客户 |
+| `product extuser-get <product_id> <user_id>` | 查看外部用户 |
+| `product get` | 查看product |
+| `product member-get <product_id> <member_id>` | 查看产品成员 |
+| `product plan-get <product_id>` | 查看需求排期 |
+| `product suite-get <product_id> <suite_id>` | 查看需求模块 |
+| `product tag-get <product_id> <tag_id>` | 查看产品标签 |
+| `product ticket-type-get <product_id> <ticket_type_id>` | 查看产品工单类型 |
+| `product customer-update <product_id> <customer_id>` | 更新客户 |
+| `product extuser-update <product_id> <user_id>` | 更新外部用户 |
+| `product update` | 更新产品 |
+| `product extuser-delete <product_id> <user_id>` | 删除外部用户 |
+| `product suite-delete <product_id> <suite_id>` | 删除需求模块 |
+| `product member-remove <product_id> <member_id>` | 移除产品成员 |
+| `product tag-remove <product_id> <tag_id>` | 移除产品标签 |
 
-```bash
-# 查看产品列表
-pingcode product list --compact
-
-# 按关键词搜索产品
-pingcode product list --keywords "核心产品" --compact
-
-# 获取产品详情
-pingcode product get PRODUCT_ID
-
-# 试运行（预览 API 请求，不发送）
-pingcode product list --dry-run
-pingcode product get PRODUCT_ID --dry-run
-```
 
 ### 评论管理 (`comment`)
 
@@ -349,150 +364,396 @@ pingcode comment create SCR-123 --content "hello" --dry-run
 pingcode comment delete cmt-456 SCR-123 --dry-run
 ```
 
+
 ### 工单管理 (`ticket`)
 
 | 子命令 | 说明 |
 |---|---|
-| `ticket list` / `get` / `create` / `update` | 工单 CRUD（`list`/`create` 需 `--product`；`create` 另需 `--title`/`--type`） |
-| `ticket search` | 高级搜索（`mode: query` + MongoDB 风格 `payload.filter`） |
-| `ticket transitions <id>` / `transition <hid> <id>` | 工单状态流转记录 |
-| `ticket types` / `states` / `properties` / `channels` / `priorities` / `solutions` / `tags` | 产品级工单字典（`--product` 必填） |
-| `ticket state-resource-create / -get / -update / -list-all` | 企业级工单状态（文档未定义删除） |
-| `ticket state-plan-list / -get` | 工单状态方案 |
-| `ticket state-plan-state-add / -get / -list / -remove` | 方案内状态装配 |
-| `ticket state-plan-flow-add / -get / -list / -remove` | 方案内状态流转 |
-| `ticket property-resource-create / -get / -update / -list-all` | 企业级工单属性 |
-| `ticket property-plan-list / -get` | 工单属性方案 |
-| `ticket property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
-| `ticket type-resource-list / -get` | 企业级工单类型（只读） |
-| `ticket priority-resource-list / -get` | 企业级工单优先级（只读） |
-| `ticket solution-list / -get` | 工单解决方案（只读） |
+| `ticket list` | 查询工单（--product 必填） |
+| `ticket priority-resource-list` | 列出企业级工单优先级 |
+| `ticket property-plan-list` | 列出工单属性方案 |
+| `ticket property-plan-property-list <plan_id>` | 列出方案内工单属性 |
+| `ticket property-resource-list-all` | 列出全部企业级工单属性 |
+| `ticket solution-list` | 列出工单解决方案 |
+| `ticket state-plan-flow-list <plan_id>` | 列出方案内状态流转 |
+| `ticket state-plan-list` | 列出工单状态方案 |
+| `ticket state-plan-state-list <plan_id>` | 列出方案内工单状态 |
+| `ticket state-resource-list-all` | 列出全部企业级工单状态 |
+| `ticket type-resource-list` | 列出企业级工单类型 |
+| `ticket search` | 高级搜索工单（mode:query + payload.filter） |
+| `ticket create` | 创建工单（--product/--title/--type 必填） |
+| `ticket property-resource-create` | 创建企业级工单属性 |
+| `ticket state-resource-create` | 创建企业级工单状态 |
+| `ticket property-plan-property-add <plan_id> <property_id>` | 添加方案内工单属性 |
+| `ticket state-plan-flow-add <plan_id> <flow_id>` | 添加方案内状态流转 |
+| `ticket state-plan-state-add <plan_id> <state_id>` | 添加方案内工单状态 |
+| `ticket get` | 查看单个工单 |
+| `ticket priority-resource-get` | 查看企业级工单优先级 |
+| `ticket property-plan-get` | 查看工单属性方案 |
+| `ticket property-plan-property-get <plan_id> <property_id>` | 查看方案内工单属性 |
+| `ticket property-resource-get` | 查看企业级工单属性 |
+| `ticket solution-get` | 查看工单解决方案 |
+| `ticket state-plan-flow-get <plan_id> <flow_id>` | 查看方案内状态流转 |
+| `ticket state-plan-get` | 查看工单状态方案 |
+| `ticket state-plan-state-get <plan_id> <state_id>` | 查看方案内工单状态 |
+| `ticket state-resource-get` | 查看企业级工单状态 |
+| `ticket type-resource-get` | 查看企业级工单类型 |
+| `ticket property-resource-update` | 更新企业级工单属性 |
+| `ticket state-resource-update` | 更新企业级工单状态 |
+| `ticket update` | 更新工单（至少一个字段） |
+| `ticket property-plan-property-remove <plan_id> <property_id>` | 移除方案内工单属性 |
+| `ticket state-plan-flow-remove <plan_id> <flow_id>` | 移除方案内状态流转 |
+| `ticket state-plan-state-remove <plan_id> <state_id>` | 移除方案内工单状态 |
+| `ticket channels` | 产品级工单渠道字典（--product 必填） |
+| `ticket priorities` | 产品级工单优先级字典（--product 必填） |
+| `ticket properties` | 产品级工单属性字典（--product 必填） |
+| `ticket solutions` | 产品级工单解决方案字典（--product 必填） |
+| `ticket states` | 产品级工单状态字典（--product 必填） |
+| `ticket tags` | 产品级工单标签字典（--product 必填） |
+| `ticket transition` | 查看单条工单状态流转记录 |
+| `ticket transitions` | 查询工单状态流转记录列表 |
+| `ticket types` | 产品级工单类型字典（--product 必填） |
 
 ### 测试管理 (`testhub`)
 
 | 子命令 | 说明 |
 |---|---|
-| `testhub library-list / -create / -get / -update` | 测试库管理（API 无删除接口） |
-| `testhub library-member-add / -get / -list / -update / -remove` | 测试库成员 |
-| `testhub suite-add / -get / -list / -update / -delete` | 用例模块（`suite-list` 支持 `--parent-id`） |
-| `testhub case-list / -create / -get / -update / -delete` | 测试用例 CRUD |
-| `testhub case-bulk-create / case-bulk-update` | 批量创建 / 更新用例（`--items JSON`） |
-| `testhub case-search` | 高级搜索用例 |
-| `testhub case-histories <case_id>` | 用例各执行的最后一次结果 |
-| `testhub plan-list / -create / -get / -update` | 测试计划（`<library_id>` 前缀定位） |
-| `testhub plan-type-list / -get` | 计划类型 |
-| `testhub run-list / -create / -get / -update` | 执行用例（`run-update` 提交执行结果，`--status-id` 必填） |
-| `testhub run-bulk-create / run-bulk-update` | 批量创建 / 更新执行用例 |
-| `testhub run-search` | 高级搜索执行用例 |
-| `testhub run-histories <run_id>` / `run-history <hid>` | 执行结果记录 |
-| `testhub case-states / -state-get` | 用例状态字典 |
-| `testhub case-types / -type-get` | 用例类型字典 |
-| `testhub case-important-levels / -get` | 用例重要程度 |
-| `testhub plan-states / -state-get` | 计划状态字典 |
-| `testhub run-statuses / -status-get` | 执行结果状态字典 |
-| `testhub case-property-list / -create / -get / -update` | 用例属性 CRUD |
-| `testhub case-property-plan-list / -get` | 用例属性方案 |
-| `testhub case-property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
+| `testhub case-list` | 查询用例列表（--library-id 必填） |
+| `testhub case-property-list` | 列出用例属性 |
+| `testhub case-property-plan-list` | 列出用例属性方案 |
+| `testhub case-property-plan-property-list <plan_id>` | 列出方案内用例属性 |
+| `testhub library-member-list <library_id>` | 列出测试库成员 |
+| `testhub plan-list <library_id>` | 列出测试计划 |
+| `testhub plan-type-list <library_id>` | 列出计划类型 |
+| `testhub run-list` | 列出执行用例 |
+| `testhub suite-list` | 查询用例模块（--parent-id 可选） |
+| `testhub case-search` | 高级搜索用例（POST search） |
+| `testhub run-search` | 高级搜索执行用例（POST search） |
+| `testhub case-create` | 创建用例（--test-library-id/--title 必填） |
+| `testhub case-property-create` | 创建用例属性 |
+| `testhub plan-create` | 创建测试计划（--name/--type-id/--start-at/--end-at/--assignee-id 必填） |
+| `testhub run-create` | 创建执行用例 |
+| `testhub case-bulk-create` | 批量创建用例（--items JSON） |
+| `testhub run-bulk-create` | 批量创建执行用例（--items JSON） |
+| `testhub case-property-plan-property-add <plan_id> <property_id>` | 添加方案内用例属性 |
+| `testhub library-member-add <library_id> <member_id>` | 添加测试库成员 |
+| `testhub suite-add <library_id> <suite_id>` | 添加用例模块 |
+| `testhub case-get` | 查看测试用例 |
+| `testhub case-important-level-get` | 查看用例重要程度 |
+| `testhub case-property-get` | 查看用例属性 |
+| `testhub case-property-plan-get` | 查看用例属性方案 |
+| `testhub case-property-plan-property-get <plan_id> <property_id>` | 查看方案内用例属性 |
+| `testhub case-state-get` | 查看用例状态 |
+| `testhub case-type-get` | 查看用例类型 |
+| `testhub library-member-get <library_id> <member_id>` | 查看测试库成员 |
+| `testhub plan-get <library_id> <plan_id>` | 查看测试计划 |
+| `testhub plan-state-get` | 查看计划状态 |
+| `testhub plan-type-get <library_id>` | 查看计划类型 |
+| `testhub run-get` | 查看执行用例 |
+| `testhub run-status-get` | 查看执行结果状态 |
+| `testhub suite-get <library_id> <suite_id>` | 查看用例模块 |
+| `testhub case-property-update` | 更新用例属性 |
+| `testhub case-update` | 更新测试用例 |
+| `testhub library-member-update <library_id> <member_id>` | 更新测试库成员 |
+| `testhub plan-update <library_id> <plan_id>` | 更新测试计划 |
+| `testhub run-update` | 更新执行用例（提交执行结果，--status-id 必填） |
+| `testhub suite-update <library_id> <suite_id>` | 更新用例模块 |
+| `testhub case-bulk-update` | 批量更新用例（--items JSON） |
+| `testhub run-bulk-update` | 批量更新执行用例（--items JSON） |
+| `testhub case-delete` | 删除测试用例 |
+| `testhub suite-delete <library_id> <suite_id>` | 删除用例模块 |
+| `testhub case-property-plan-property-remove <plan_id> <property_id>` | 移除方案内用例属性 |
+| `testhub library-member-remove <library_id> <member_id>` | 移除测试库成员 |
+| `testhub case-histories` | 查询用例各执行的最后一次执行结果 |
+| `testhub run-histories` | 查询执行用例的结果记录列表 |
+| `testhub run-history` | 查看单条执行结果记录 |
+| `testhub case-important-levels` | 测试用例 · important-levels |
+| `testhub case-states` | 测试用例 · states |
+| `testhub case-types` | 测试用例 · types |
+| `testhub library-create` | 创建测试库（--name/--identifier 必填） |
+| `testhub library-get` | 查看测试库 |
+| `testhub library-list` | 查询测试库列表 |
+| `testhub library-update` | 更新测试库 |
+| `testhub plan-states` | 测试计划 · states |
+| `testhub run-statuses` | 执行用例 · statuses |
 
 ### 项目实体 (`project` / `sprint` / `board` / `version`)
 
 | 子命令 | 说明 |
 |---|---|
-| `project create` / `get` / `update` / `clone` | 项目管理 |
-| `project progress <project_id>` | 项目工作项统计进度 |
-| `project project-states` | 项目状态字典 |
-| `project member-add / -get / -update / -list / -remove` | 项目成员管理 |
-| `project prop-add / -get / -list / -remove` | 项目属性管理 |
-| `project local-config-enable <project_id>` | 开启项目本地配置 |
-| `sprint list / create / get / update` | 迭代管理（`<project_id>` 前缀；API 无删除接口） |
-| `sprint bulk-create` | 批量创建迭代（`--items JSON`） |
-| `sprint section-*`（list/create/get/update/delete） | 迭代分组 |
-| `sprint category-*`（list/create/get/update/delete） | 迭代类别 |
-| `board list / create / get / update / delete` | 看板管理 |
-| `board entry-*`（list/create/get/update/delete） | 看板栏（`--wip-limit` 等） |
-| `board swimlane-*`（list/create/get/update/delete） | 泳道 |
-| `version list / create / get / update / delete / bulk-create` | 发布版本管理 |
-| `version stage-*`（list/create/get/update/delete） | 发布阶段（全局 `/v1/pjm/stages`） |
-| `version section-*`（list/create/get/update/delete） | 发布分组 |
-| `version category-*`（list/create/get/update/delete） | 发布类别 |
+| `project member-list <project_id>` | 列出项目成员 |
+| `project prop-list <project_id>` | 列出项目属性 |
+| `project create` | 创建项目 |
+| `project member-add` | 向项目添加成员（--type user|user_group，--role-id 可选） |
+| `project prop-add <project_id> <property_id>` | 添加项目属性 |
+| `project get` | 查看项目 |
+| `project member-get <project_id> <member_id>` | 查看项目成员 |
+| `project prop-get <project_id> <property_id>` | 查看项目属性 |
+| `project member-update <project_id> <member_id>` | 更新项目成员 |
+| `project update` | 更新项目 |
+| `project member-remove <project_id> <member_id>` | 移除项目成员 |
+| `project prop-remove <project_id> <property_id>` | 移除项目属性 |
+| `project clone` | 克隆项目 |
+| `project local-config-enable` | 开启项目本地配置 |
+| `project progress` | 查看项目工作项统计进度 |
+| `project project-states` | 查询项目状态字典 |
+| `sprint category-list <project_id>` | 列出迭代类别 |
+| `sprint list <project_id>` | 列出迭代 |
+| `sprint section-list <project_id>` | 列出迭代分组 |
+| `sprint category-create <project_id>` | 创建迭代类别 |
+| `sprint create <project_id>` | 创建迭代 |
+| `sprint section-create <project_id>` | 创建迭代分组 |
+| `sprint bulk-create` | 批量创建迭代（--items JSON，全局接口） |
+| `sprint category-get <project_id> <category_id>` | 查看迭代类别 |
+| `sprint get <project_id> <sprint_id>` | 查看迭代 |
+| `sprint section-get <project_id> <section_id>` | 查看迭代分组 |
+| `sprint category-update <project_id> <category_id>` | 更新迭代类别 |
+| `sprint section-update <project_id> <section_id>` | 更新迭代分组 |
+| `sprint update <project_id> <sprint_id>` | 更新迭代 |
+| `sprint category-delete <project_id> <category_id>` | 删除迭代类别 |
+| `sprint section-delete <project_id> <section_id>` | 删除迭代分组 |
+| `board entry-list <project_id> <board_id>` | 列出看板栏 |
+| `board list <project_id>` | 列出看板 |
+| `board swimlane-list <project_id> <board_id>` | 列出泳道 |
+| `board create <project_id>` | 创建看板 |
+| `board entry-create <project_id> <board_id>` | 创建看板栏 |
+| `board swimlane-create <project_id> <board_id>` | 创建泳道 |
+| `board entry-get <project_id> <board_id> <entry_id>` | 查看看板栏 |
+| `board get <project_id> <board_id>` | 查看看板 |
+| `board swimlane-get <project_id> <board_id> <swimlane_id>` | 查看泳道 |
+| `board entry-update <project_id> <board_id> <entry_id>` | 更新看板栏 |
+| `board swimlane-update <project_id> <board_id> <swimlane_id>` | 更新泳道 |
+| `board update <project_id> <board_id>` | 更新看板 |
+| `board delete <project_id> <board_id>` | 删除看板 |
+| `board entry-delete <project_id> <board_id> <entry_id>` | 删除看板栏 |
+| `board swimlane-delete <project_id> <board_id> <swimlane_id>` | 删除泳道 |
+| `version category-list <project_id>` | 列出发布类别 |
+| `version list <project_id>` | 列出发布版本 |
+| `version section-list <project_id>` | 列出发布分组 |
+| `version stage-list` | 列出发布阶段 |
+| `version category-create <project_id>` | 创建发布类别 |
+| `version create <project_id>` | 创建发布版本 |
+| `version section-create <project_id>` | 创建发布分组 |
+| `version stage-create` | 创建发布阶段 |
+| `version bulk-create <project_id>` | 批量创建发布版本 |
+| `version category-get <project_id> <category_id>` | 查看发布类别 |
+| `version get <project_id> <version_id>` | 查看发布版本 |
+| `version section-get <project_id> <section_id>` | 查看发布分组 |
+| `version stage-get` | 查看发布阶段 |
+| `version category-update <project_id> <category_id>` | 更新发布类别 |
+| `version section-update <project_id> <section_id>` | 更新发布分组 |
+| `version stage-update` | 更新发布阶段 |
+| `version update <project_id> <version_id>` | 更新发布版本 |
+| `version category-delete <project_id> <category_id>` | 删除发布类别 |
+| `version delete <project_id> <version_id>` | 删除发布版本 |
+| `version section-delete <project_id> <section_id>` | 删除发布分组 |
+| `version stage-delete` | 删除发布阶段 |
 
 ### 标签 / 关联 / 交付目标 (`tag` / `relation` / `deliverable`)
 
 | 子命令 | 说明 |
 |---|---|
-| `tag list / create / get / update / delete` | 工作项标签库管理 |
-| `tag add <id\|identifier> <tag_id>` / `tag get` / `tag remove` | 工作项打标与移标（identifier 自动解析） |
-| `relation add <id\|identifier> <target_id> --relation-type` / `relation get` / `list` / `remove` | 工作项关联管理 |
-| `relation type-list / type-get` | 关联类型字典（9 种） |
-| `deliverable list / create / get / update / delete` | 工作项交付目标 CRUD（`list` 支持 `--project-id`/`--work-item-id`） |
+| `tag list` | 列出工作项标签 |
+| `tag create` | 创建工作项标签 |
+| `tag add` | 向工作项添加标签（identifier 自动解析） |
+| `tag get` | 查看工作项标签 |
+| `tag update` | 更新工作项标签 |
+| `tag delete` | 删除工作项标签 |
+| `tag remove` | 从工作项移除标签（identifier 自动解析） |
+| `relation list` | 查询工作项的关联列表 |
+| `relation type-list` | 列出工作项关联类型 |
+| `relation add` | 创建工作项关联（--relation-type 必填） |
+| `relation get <id|identifier> <relation_id>` | 查看工作项关联 |
+| `relation type-get` | 查看工作项关联类型 |
+| `relation remove <id|identifier> <relation_id>` | 移除工作项关联 |
+| `deliverable list` | 查询交付目标（--project-id/--work-item-id 可选） |
+| `deliverable create` | 创建交付目标（--work-item-id/--name 必填） |
+| `deliverable get` | 查看交付目标 |
+| `deliverable update` | 更新交付目标 |
+| `deliverable delete` | 删除交付目标 |
 
 ### 企业配置 (`config` / `plans`)
 
 | 子命令 | 说明 |
 |---|---|
-| `config type-list-all / -create / -get / -update / -delete` | 自定义工作项类型 |
-| `config state-list / -create / -get / -update` | 自定义工作项状态（更新仅限非系统状态，无删除） |
-| `config property-list / -create / -get / -update` | 自定义工作项属性（无删除） |
-| `config priority-get <priority_id>` | 工作项优先级（仅单查） |
-| `config process-list / -get` | 项目流程（只读） |
-| `config project-state-get <state_id>` | 项目状态（仅单查） |
-| `config project-property-list / -create / -get / -update` | 全局项目属性 |
-| `plans type-plan-list / -get` | 工作项类型方案 |
-| `plans type-plan-type-add / -get / -list / -update / -remove` | 方案内类型装配（update 设 `--sub-type-ids`） |
-| `plans state-plan-list / -get` | 工作项状态方案 |
-| `plans state-plan-state-add / -get / -list / -remove` | 方案内状态装配 |
-| `plans flow-add / -get / -list / -remove` | 方案内状态流转 |
-| `plans property-plan-list / -get` | 工作项属性方案 |
-| `plans property-plan-property-add / -get / -list / -remove` | 方案内属性装配 |
+| `config process-list` | 列出项目流程 |
+| `config project-property-list` | 列出全局项目属性 |
+| `config property-list` | 列出工作项属性 |
+| `config state-list` | 列出工作项状态 |
+| `config type-list-all` | 查询全部工作项类型（企业级） |
+| `config project-property-create` | 创建全局项目属性 |
+| `config property-create` | 创建工作项属性 |
+| `config state-create` | 创建工作项状态 |
+| `config type-create` | 创建工作项类型 |
+| `config priority-get` | 查看工作项优先级 |
+| `config process-get` | 查看项目流程 |
+| `config project-property-get` | 查看全局项目属性 |
+| `config project-state-get` | 查看项目状态 |
+| `config property-get` | 查看工作项属性 |
+| `config state-get` | 查看工作项状态 |
+| `config type-get` | 查看工作项类型 |
+| `config project-property-update` | 更新全局项目属性 |
+| `config property-update` | 更新工作项属性 |
+| `config state-update` | 更新工作项状态（仅非系统状态） |
+| `config type-update` | 更新工作项类型 |
+| `config type-delete` | 删除工作项类型 |
+| `plans flow-list <plan_id>` | 列出状态流转 |
+| `plans property-plan-list` | 列出属性方案 |
+| `plans property-plan-property-list <plan_id>` | 列出方案内属性 |
+| `plans state-plan-list` | 列出状态方案 |
+| `plans state-plan-state-list <plan_id>` | 列出方案内状态 |
+| `plans type-plan-list` | 列出类型方案 |
+| `plans type-plan-type-list <plan_id>` | 列出方案内类型 |
+| `plans flow-add <plan_id> <flow_id>` | 添加状态流转 |
+| `plans property-plan-property-add <plan_id> <property_id>` | 添加方案内属性 |
+| `plans state-plan-state-add <plan_id> <state_id>` | 添加方案内状态 |
+| `plans type-plan-type-add <plan_id> <type_id>` | 添加方案内类型 |
+| `plans flow-get <plan_id> <flow_id>` | 查看状态流转 |
+| `plans property-plan-get` | 查看属性方案 |
+| `plans property-plan-property-get <plan_id> <property_id>` | 查看方案内属性 |
+| `plans state-plan-get` | 查看状态方案 |
+| `plans state-plan-state-get <plan_id> <state_id>` | 查看方案内状态 |
+| `plans type-plan-get` | 查看类型方案 |
+| `plans type-plan-type-get <plan_id> <type_id>` | 查看方案内类型 |
+| `plans type-plan-type-update <plan_id> <type_id>` | 更新方案内类型 |
+| `plans flow-remove <plan_id> <flow_id>` | 移除状态流转 |
+| `plans property-plan-property-remove <plan_id> <property_id>` | 移除方案内属性 |
+| `plans state-plan-state-remove <plan_id> <state_id>` | 移除方案内状态 |
+| `plans type-plan-type-remove <plan_id> <type_id>` | 移除方案内类型 |
 
 ### 知识库 (`wiki`)
 
 | 子命令 | 说明 |
 |---|---|
-| `wiki space-list / -create / -get / -update / -delete` | 知识空间管理 |
-| `wiki member-add / -get / -list / -remove` | 空间成员管理 |
-| `wiki page-list / -create / -get / -update / -delete` | 页面管理（`page-create` 需 `--space-id`+`--name`） |
-| `wiki content-get <page_id>` | 读取文档正文 |
-| `wiki content-update <page_id>` | 更新文档正文（PUT 全量替换，`--content`+`--format-type`） |
-| `wiki version-list / -get <page_id>` | 页面版本 |
-| `wiki version-restore <page_id> <version_id>` | 恢复页面到指定版本 |
+| `wiki member-list <space_id>` | 列出空间成员 |
+| `wiki page-list` | 查询页面（--space-id 必填） |
+| `wiki space-list` | 列出知识空间 |
+| `wiki version-list <page_id>` | 列出页面版本 |
+| `wiki page-create` | 创建页面（--space-id/--name 必填，--content+--format-type 可选） |
+| `wiki space-create` | 创建知识空间 |
+| `wiki member-add <space_id> <member_id>` | 添加空间成员 |
+| `wiki content-get` | 读取文档正文 |
+| `wiki member-get <space_id> <member_id>` | 查看空间成员 |
+| `wiki page-get` | 查看页面 |
+| `wiki space-get` | 查看知识空间 |
+| `wiki version-get <page_id> <version_id>` | 查看页面版本 |
+| `wiki content-update` | 更新文档正文（PUT 全量替换） |
+| `wiki page-update` | 更新页面 |
+| `wiki space-update` | 更新知识空间 |
+| `wiki page-delete` | 删除页面 |
+| `wiki space-delete` | 删除知识空间 |
+| `wiki member-remove <space_id> <member_id>` | 移除空间成员 |
+| `wiki version-restore` | 恢复页面到指定版本 |
 
 ### DevOps (`scm` / `release` / `build`)
 
 | 子命令 | 说明 |
 |---|---|
-| `scm platform-list / -create / -get / -update` | 代码托管平台管理 |
-| `scm user-list / -create / -get / -update` | 托管平台用户 |
-| `scm repo-list / -create / -get / -update` | 代码仓库管理 |
-| `scm branch-list / -create / -get / -update / -delete` | 代码分支（SCM 域唯一有删除的资源） |
-| `scm commit-create / -get / -list` | 提交上报与查询 |
-| `scm ref-create / -get / -list` | 提交引用（`--meta-type`/`--meta-id` 必填） |
-| `scm pr-list / -create / -get / -update` | 拉取请求 |
-| `scm review-list / -create / -get / -update` | PR 代码评审 |
-| `release env-list / -create / -get / -update / -patch / -delete` | 部署环境（update=PUT 全量，patch=PATCH 局部） |
-| `release deploy-list / -create / -get / -update / -patch / -delete` | 部署记录 |
-| `build list / create / get / update / patch / delete` | 构建记录（provider: bamboo/bitbucket/jenkins/other） |
+| `scm branch-list <platform_id> <repository_id>` | 列出代码分支 |
+| `scm commit-list` | 列出代码提交 |
+| `scm platform-list` | 列出托管平台 |
+| `scm pr-list <platform_id> <repository_id>` | 列出拉取请求 |
+| `scm ref-list` | 查询提交引用（--meta-type/--meta-id 必填） |
+| `scm repo-list <platform_id>` | 列出代码仓库 |
+| `scm review-list <platform_id> <repository_id> <pull_request_id>` | 列出PR 代码评审 |
+| `scm user-list <platform_id>` | 列出平台用户 |
+| `scm branch-create <platform_id> <repository_id>` | 创建代码分支 |
+| `scm commit-create` | 上报代码提交 |
+| `scm platform-create` | 创建托管平台 |
+| `scm pr-create <platform_id> <repository_id>` | 创建拉取请求 |
+| `scm ref-create` | 创建提交引用（--meta-type/--meta-id 必填） |
+| `scm repo-create <platform_id>` | 创建代码仓库 |
+| `scm review-create <platform_id> <repository_id> <pull_request_id>` | 创建PR 代码评审 |
+| `scm user-create <platform_id>` | 创建平台用户 |
+| `scm branch-get <platform_id> <repository_id> <branch_id>` | 查看代码分支 |
+| `scm commit-get` | 查看提交（id 或 sha） |
+| `scm platform-get` | 查看托管平台 |
+| `scm pr-get <platform_id> <repository_id> <pull_request_id>` | 查看拉取请求 |
+| `scm ref-get <platform_id> <repository_id> <ref_id>` | 查看提交引用 |
+| `scm repo-get <platform_id> <repository_id>` | 查看代码仓库 |
+| `scm review-get <platform_id> <repository_id> <pull_request_id> <review_id>` | 查看PR 代码评审 |
+| `scm user-get <platform_id> <user_id>` | 查看平台用户 |
+| `scm branch-update <platform_id> <repository_id> <branch_id>` | 更新代码分支 |
+| `scm platform-update` | 更新托管平台 |
+| `scm pr-update <platform_id> <repository_id> <pull_request_id>` | 更新拉取请求 |
+| `scm repo-update <platform_id> <repository_id>` | 更新代码仓库 |
+| `scm review-update <platform_id> <repository_id> <pull_request_id> <review_id>` | 更新PR 代码评审 |
+| `scm user-update <platform_id> <user_id>` | 更新平台用户 |
+| `scm branch-delete` | 删除分支（默认分支不可删） |
+| `release deploy-list` | 查询部署记录（--status 枚举校验） |
+| `release env-list` | 查询部署环境（--name 必填） |
+| `release deploy-create` | 创建部署记录 |
+| `release env-create` | 创建部署环境 |
+| `release deploy-get` | 查看部署记录 |
+| `release env-get` | 查看部署环境 |
+| `release deploy-update` | 全量更新部署记录（PUT，字段齐全） |
+| `release env-update` | 全量更新部署环境（PUT，字段齐全） |
+| `release deploy-patch` | 局部更新部署记录 |
+| `release env-patch` | 局部更新部署环境 |
+| `release deploy-delete` | 删除部署记录 |
+| `release env-delete` | 删除部署环境 |
+| `build list` | 列出构建记录 |
+| `build create` | 创建构建记录 |
+| `build get` | 查看构建记录 |
+| `build update` | 全量更新构建记录（PUT，字段齐全） |
+| `build patch` | 局部更新构建记录 |
+| `build delete` | 删除构建记录 |
 
 ### 组织与平台 (`directory` / `platform` / `workload` / `review`)
 
 | 子命令 | 说明 |
 |---|---|
-| `directory me` | 当前登录用户信息 |
-| `directory team` | 企业信息 |
-| `directory user-list / -create / -get / -update / -bulk-update` | 企业成员管理 |
-| `directory group-list / -create / -get / -update` | 团队管理 |
-| `directory group-member-add / -get / -list / -remove` | 团队成员管理 |
-| `directory department-list / -create / -get / -update / -delete` | 部门管理 |
-| `directory job-list / -get` | 职位（只读） |
-| `directory role-list / -get` | 角色（只读） |
-| `platform participant-add / -list / -get / -remove` | 关注人管理（work_item 主体支持 identifier） |
-| `platform link-create / -get / -list / -remove` | 跨资源通用关联 |
-| `platform activity-list / -get` | 资源动态记录 |
-| `platform audit-logs` / `login-logs` | 审计日志 / 登录日志（只读，`--operated-between`/`--logged-between` 必填） |
-| `workload list / create / get / update / delete` | 工时登记管理（`--duration` 单位分钟） |
-| `workload type-list / -get` | 工时类型 |
-| `review list / create / get / delete` | 评审管理（`--principal-type`+`--pilot-id`/`--principal-id` 定位） |
-| `review principal-add / -list / -get / -remove` | 评审内容管理 |
+| `directory department-list` | 列出部门 |
+| `directory group-list` | 列出团队 |
+| `directory group-member-list <group_id>` | 列出团队成员 |
+| `directory job-list` | 列出职位 |
+| `directory role-list` | 列出角色 |
+| `directory user-list` | 列出企业成员 |
+| `directory department-create` | 创建部门 |
+| `directory group-create` | 创建团队 |
+| `directory user-create` | 创建企业成员 |
+| `directory group-member-add` | 向团队添加成员 |
+| `directory department-get` | 查看部门 |
+| `directory group-get` | 查看团队 |
+| `directory group-member-get <group_id> <member_id>` | 查看团队成员 |
+| `directory job-get` | 查看职位 |
+| `directory role-get` | 查看角色 |
+| `directory user-get` | 查看企业成员 |
+| `directory department-update` | 更新部门 |
+| `directory group-update` | 更新团队 |
+| `directory user-update` | 更新企业成员 |
+| `directory user-bulk-update` | 批量更新企业成员（--items JSON） |
+| `directory department-delete` | 删除部门 |
+| `directory group-member-remove <group_id> <member_id>` | 移除团队成员 |
+| `directory me` | 查看当前登录用户信息 |
+| `directory team` | 查看企业信息 |
+| `platform activity-list` | 查询动态（--principal-type/--principal-id 必填） |
+| `platform link-list` | 查询通用关联（--target-type 必填） |
+| `platform participant-list` | 查询关注人（--principal-type 必填） |
+| `platform link-create` | 创建跨资源关联（principal/target 四参数必填） |
+| `platform participant-add` | 添加关注人（--participant-id/--type 必填；work_item 主体支持 identifier） |
+| `platform activity-get` | 查看动态（--principal-type/--principal-id 必填） |
+| `platform link-get` | 查看通用关联 |
+| `platform participant-get` | 查看关注人（--principal-type 必填） |
+| `platform link-remove` | 移除通用关联 |
+| `platform participant-remove` | 移除关注人（--principal-type 必填） |
+| `platform audit-logs` | 查询审计日志（--operated-between 必填，只读） |
+| `platform login-logs` | 查询登录日志（--logged-between 必填，只读） |
+| `workload list` | 查询工时（--principal-type/--principal-id 必填） |
+| `workload type-list` | 列出工时类型 |
+| `workload create` | 登记工时（--duration 单位分钟，--report-at 必填） |
+| `workload get` | 查看工时 |
+| `workload type-get` | 查看工时类型 |
+| `workload update` | 更新工时 |
+| `workload delete` | 删除工时 |
+| `review list` | 查询评审（--principal-type/--pilot-id 必填） |
+| `review principal-list <review_id>` | 列出评审内容 |
+| `review create` | 创建评审（--principal-type/--pilot-id 必填） |
+| `review principal-add <review_id> <principal_id>` | 添加评审内容 |
+| `review get` | 查看评审（--principal-type/--principal-id 必填） |
+| `review principal-get <review_id> <principal_id>` | 查看评审内容 |
+| `review delete` | 删除评审（--principal-type/--principal-id 必填） |
+| `review principal-remove <review_id> <principal_id>` | 移除评审内容 |
 
 所有模块均支持全局选项 `--dry-run`（预览请求不发送）、`--compact`（精简输出）、`--no-token-cache`、`--no-workspace-cache` 及连接/凭证选项；完整参数见 `pingcode <module> --help` 与 `pingcode <module> <subcommand> --help`。
 
