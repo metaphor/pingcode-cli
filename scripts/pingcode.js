@@ -14,12 +14,31 @@ module.exports = { ...core };
 // (Side-effect imports; no circular dependency because these import from
 // ./shared and ../core, never from ../pingcode.)
 require('./commands/attachment');
-require('./commands/comment');
-require('./commands/context');
-require('./commands/idea');
-require('./commands/product');
-require('./commands/workitem');
 require('./commands/auth');
+require('./commands/board');
+require('./commands/build');
+require('./commands/comment');
+require('./commands/config');
+require('./commands/context');
+require('./commands/deliverable');
+require('./commands/directory');
+require('./commands/idea');
+require('./commands/plans');
+require('./commands/platform');
+require('./commands/product');
+require('./commands/project');
+require('./commands/relation');
+require('./commands/release');
+require('./commands/review');
+require('./commands/scm');
+require('./commands/sprint');
+require('./commands/tag');
+require('./commands/testhub');
+require('./commands/ticket');
+require('./commands/version');
+require('./commands/wiki');
+require('./commands/workitem');
+require('./commands/workload');
 
 const shared = require('./commands/shared');
 

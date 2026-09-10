@@ -31,6 +31,29 @@ pingcode product get PRODUCT_ID
 # 预览 API 请求而不实际发送
 pingcode product list --dry-run
 pingcode product get PRODUCT_ID --dry-run
+
+# 创建/更新产品
+pingcode product create --name "新产品" --identifier NEWPROD --dry-run
+pingcode product update PRODUCT_ID --description "..." --dry-run
+
+# 产品成员 / 标签 / 需求模块 / 排期
+pingcode product member-add PRODUCT_ID USER_ID --type user
+pingcode product member-list PRODUCT_ID
+pingcode product tag-add PRODUCT_ID --name 核心词
+pingcode product tag-list PRODUCT_ID
+pingcode product suite-add PRODUCT_ID --name 登录模块 --type module
+pingcode product suite-list PRODUCT_ID
+pingcode product plan-list PRODUCT_ID --compact
+
+# 渠道 / 工单类型（只读）
+pingcode product channel-list PRODUCT_ID
+pingcode product ticket-type-list PRODUCT_ID
+
+# 客户与外部用户
+pingcode product customer-list PRODUCT_ID
+pingcode product customer-create PRODUCT_ID --name 客户A
+pingcode product extuser-list PRODUCT_ID
+pingcode product extuser-create PRODUCT_ID --name 外部用户 --email a@b.com
 ```
 
 ## 操作流程

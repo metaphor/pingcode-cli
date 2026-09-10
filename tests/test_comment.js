@@ -787,3 +787,83 @@ testInCleanTmp('resolveWorkItemIdentifier throws when none found', async (t, tmp
     else delete process.env.PINGCODE_TOKEN_CACHE;
   }
 });
+
+// ── Principal type generalization ─────────────────────────────────────
+
+testInCleanTmp('comment create with raw id and non-work-item principal returns flat dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await comment.run([
+      'create', '5edca524cad2fa112b06305c',
+      '--content', 'doc comment',
+      '--principal-type', 'page',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'POST');
+  assert.strictEqual(result.path, '/v1/comments');
+  assert.strictEqual(result.json.principal_type, 'page');
+  assert.strictEqual(result.json.principal_id, '5edca524cad2fa112b06305c');
+});
+
+testInCleanTmp('comment list accepts principal type in equals form', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await comment.run([
+      'list', '5edca524cad2fa112b06305c',
+      '--principal-type=ticket',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.params.principal_type, 'ticket');
+  assert.strictEqual(result.params.principal_id, '5edca524cad2fa112b06305c');
+});
+
+testInCleanTmp('comment create rejects identifier ref for non-work-item principal', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  await assert.rejects(
+    () => comment.run(['create', 'SCR-123', '--content', 'x', '--principal-type', 'page', '--workspace-cache', cachePath, '--dry-run']),
+    /Identifier refs like SCR-123/,
+  );
+});
+
+testInCleanTmp('comment rejects unknown principal type', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  await assert.rejects(
+    () => comment.run(['list', '5edca524cad2fa112b06305c', '--principal-type', 'bogus', '--workspace-cache', cachePath, '--dry-run']),
+    /Invalid --principal-type 'bogus'/,
+  );
+});
+
+testInCleanTmp('comment principal type flag requires a value', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  await assert.rejects(
+    () => comment.run(['list', '5edca524cad2fa112b06305c', '--principal-type', '--workspace-cache', cachePath, '--dry-run']),
+    /Flag --principal-type requires a value/,
+  );
+});
