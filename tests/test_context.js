@@ -30,9 +30,6 @@ function testInCleanTmp(name, fn) {
   test(name, async (t) => {
     const original = clearEnv();
     const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-test-'));
-    // Isolate the token cache: without this, clientFromOpts falls back to the
-    // real ~/.cache/pingcode/token.json and a locally authenticated token of a
-    // different grant_type fails the grant-type mismatch check.
     process.env.PINGCODE_TOKEN_CACHE = path.join(tmpdir, 'token.json');
     try {
       await fn(t, tmpdir);
@@ -901,13 +898,9 @@ testInCleanTmp('cacheProjectDictionaries requests states and properties per type
   writeWorkspaceCache(cachePath, {});
   const requested = mockDictionaryTenant();
 
-  // Build the client the same way modules do: parseGlobalOptions seeds
-  // credentials and grant_type from the environment (set above and by
-  // testInCleanTmp), then only the workspace cache is pointed at the fixture.
-  const { opts } = shared.parseGlobalOptions([]);
-  opts.workspace_cache = cachePath;
-  const client = shared.clientFromOpts(opts);
+  const client = shared.clientFromOpts({ workspace_cache: cachePath, token: 'fake-token', no_token_cache: true });
   await core.cacheProjectDictionaries(client, 'project-1');
+
   const stateCalls = requested.filter(p => p === '/v1/project/work_item/states').length;
   const propertyCalls = requested.filter(p => p === '/v1/project/work_item/properties').length;
   assert.strictEqual(stateCalls, 2, 'one states call per work item type');
