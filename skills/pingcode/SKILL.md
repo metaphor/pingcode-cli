@@ -1,6 +1,6 @@
 ---
 name: pingcode
-description: 当用户提到 PingCode、工作项、任务、缺陷、故事、需求/idea、项目、迭代、测试用例、测试计划、工单、知识库、页面、工时、代码仓库、分支、提交、拉取请求、构建、部署、评审、用户令牌、OAuth 登录、认证、查看我的任务、创建或更新工作项时使用此 skill。即使未明确点名，只要请求涉及 PingCode 数据操作，就优先触发此 skill。
+description: 当用户提到 PingCode、工作项、任务、缺陷、故事、需求/idea、项目、迭代、用户令牌、OAuth 登录、认证、查看我的任务、创建或更新工作项时使用此 skill。即使未明确点名，只要请求涉及 PingCode 数据操作，就优先触发此 skill。
 ---
 
 # PingCode
@@ -11,10 +11,8 @@ description: 当用户提到 PingCode、工作项、任务、缺陷、故事、�
 
 只要用户请求涉及 PingCode 数据，就优先触发：
 
-- 查看/查询工作项、任务、缺陷、故事、需求/idea、产品、附件、工单、测试用例/测试计划/执行结果、知识库页面、工时、代码仓库/分支/提交/PR、构建/部署/评审、标签/关联/交付物
-- 创建/更新/删除/搜索工作项或需求，或修改状态、负责人、迭代，批量更新工作项
-- 创建/更新测试库、用例、测试计划，提交执行结果；创建工单；读写知识库页面正文；登记工时
-- 管理项目/迭代/看板/发布版本、企业级配置（类型/状态/属性方案）、客户、团队成员
+- 查看/查询工作项、任务、缺陷、故事、需求/idea、产品、附件
+- 创建/更新/完成工作项或需求，或修改状态、负责人、迭代
 - 上传、查看、删除 PingCode 附件（文件或代码片段）
 - 初始化或切换项目、迭代、用户上下文
 - 登录 PingCode、切换令牌类型、处理认证问题
@@ -69,17 +67,11 @@ export PINGCODE_WORKSPACE_CACHE=".pingcode/cache.json"
 
 - 登录、切换令牌、询问认证方式或 grant_type、查看当前认证状态 → 阅读 `references/auth.md`
 - 选择项目/迭代/用户、初始化上下文、Agent 前台问答 → 阅读 `references/ctx.md`
-- 查询/创建/更新/删除/搜索工作项、改状态、指派负责人、批量更新、流转记录 → 阅读 `references/workitem.md`
-- 查询/创建/更新需求及其企业级配置 → 阅读 `references/idea.md`
-- 查询产品及成员/标签/模块/客户/外部用户 → 阅读 `references/product.md`
-- 查看/创建/删除工作项或其他主体评论 → 阅读 `references/comment.md`
+- 查询/创建/更新工作项、改状态、指派负责人 → 阅读 `references/workitem.md`
+- 查询/创建/更新需求 → 阅读 `references/idea.md`
+- 查询产品列表/产品详情 → 阅读 `references/product.md`
+- 查看/创建/删除工作项评论 → 阅读 `references/comment.md`
 - 上传/查看/删除附件 → 阅读 `references/attachment.md`
-- 工单 CRUD/搜索/字典/企业配置 → 阅读 `references/ticket.md`
-- 测试库/用例/测试计划/执行用例 → 阅读 `references/testhub.md`
-- 项目/迭代/看板/发布版本/标签/关联/交付目标 → 阅读 `references/entities.md`
-- 企业级类型/状态/属性及配置方案 → 阅读 `references/config.md`
-- 代码托管/部署环境/构建记录 → 阅读 `references/devops.md`
-- 知识库/工时/评审/组织成员/关注人/审计日志 → 阅读 `references/collab.md`
 
 ## 自然语言速查表
 
@@ -104,16 +96,7 @@ export PINGCODE_WORKSPACE_CACHE=".pingcode/cache.json"
 | 查看工作项附件列表 | `pingcode attachment list work_item SCR-123 --compact` |
 | 上传文件到工作项 | `pingcode attachment upload-file work_item SCR-123 --file ./a.png --title "截图" --dry-run` |
 | 上传代码片段到工作项 | `pingcode attachment upload-snippet work_item SCR-123 --title "示例" --format javascript --content "..." --dry-run` |
-| 删除工作项 | `pingcode workitem delete SCR-123 --dry-run` |
-| 组合条件搜索工作项 | `pingcode workitem search --keywords "登录" --compact` |
-| 查看工作项流转记录 | `pingcode workitem transitions SCR-123 --compact` |
-| 查看测试用例列表 | `pingcode testhub case-list --library-id LIBRARY_ID --compact` |
-| 提交用例执行结果 | `pingcode testhub run-update RUN_ID --status-id STATUS_ID --dry-run` |
-| 创建知识库页面 | `pingcode wiki page-create --space-id SPACE_ID --name 纪要 --dry-run` |
-| 登记工时 | `pingcode workload create --principal-type work_item --principal-id ID --duration 120 --report-at 1736985600 --dry-run` |
-| 给工作项打标签 | `pingcode tag add SCR-123 TAG_ID --dry-run` |
-| 查看当前用户信息 | `pingcode directory me` |
-| 在页面上添加评论 | `pingcode comment create PAGE_ID --content "..." --principal-type page` |
+| 删除工作项附件 | `pingcode attachment delete att-1 work_item SCR-123 --dry-run` |
 
 ## 安全规则
 

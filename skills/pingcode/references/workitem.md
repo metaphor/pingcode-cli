@@ -35,20 +35,6 @@ pingcode workitem get WI-AbCdEf
 pingcode workitem update SCR-123 --state 已完成
 pingcode workitem update WI-AbCdEf --state 进行中 --priority high
 pingcode workitem update SCR-123 --title "Updated title" --story-points 3 --start-at 1736985600
-# 删除工作项（identifier 自动解析）
-pingcode workitem delete SCR-123 --dry-run
-
-# 高级搜索（组合过滤，类 MongoDB filter；复杂查询必须用 search）
-pingcode workitem search --keywords "登录" --page-size 20 --compact
-pingcode workitem search --filter '{"project.id":{"in":["PROJECT_ID"]},"story_points":{"gt":3}}' --compact
-pingcode workitem search --include-deleted --include-archived --compact
-
-# 批量更新（body 为 {ids, property_name, property_value}）
-pingcode workitem batch-update --ids ID1,ID2 --property-name priority_id --property-value PRIORITY_ID --dry-run
-
-# 流转记录
-pingcode workitem transitions SCR-123 --compact
-pingcode workitem transition HISTORY_ID SCR-123
 ```
 
 查询/列表输出默认使用 `--compact`。写操作加 `--dry-run` 可预览请求而不实际发送。

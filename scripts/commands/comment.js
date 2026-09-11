@@ -7,20 +7,6 @@ function isIdentifier(arg) {
   return /^[A-Z]{3,6}-\d+$/.test(arg);
 }
 
-const COMMENT_PRINCIPAL_TYPES = new Set([
-  'work_item',
-  'work_item_deliverable',
-  'test_case',
-  'test_run',
-  'idea',
-  'ticket',
-  'page',
-]);
-
-function isWorkItemPrincipal(type) {
-  return type === 'work_item' || type === 'work_item_deliverable';
-}
-
 // ── Comment-specific compact helper ────────────────────────────────────
 
 function compactComment(item) {
@@ -72,12 +58,10 @@ function parseCreateArgs(tokens) {
   const args = {
     content: null,
     reply_to: null,
-    principal_type: null,
   };
   const stringFlags = {
     '--content': 'content',
     '--reply-to': 'reply_to',
-    '--principal-type': 'principal_type',
   };
   const positionals = [];
 
@@ -129,18 +113,13 @@ async function runCreate(client, opts, args, positionals) {
   }
 
   const workItemRef = positionals[0];
-  const principalType = args.principal_type || 'work_item';
-
-  if (!COMMENT_PRINCIPAL_TYPES.has(principalType)) {
-    throw new core.PingCodeError(`Invalid --principal-type '${principalType}'. Allowed: ${Array.from(COMMENT_PRINCIPAL_TYPES).join(', ')}`);
-  }
 
   if (typeof args.content !== 'string' || !args.content.trim()) {
     throw new core.PingCodeError('--content is required and must be non-empty. Use comment create --help for usage.');
   }
 
   const body = {
-    principal_type: principalType,
+    principal_type: 'work_item',
     content: args.content,
   };
 
@@ -149,9 +128,6 @@ async function runCreate(client, opts, args, positionals) {
   }
 
   if (isIdentifier(workItemRef)) {
-    if (!isWorkItemPrincipal(principalType)) {
-      throw new core.PingCodeError(`Identifier refs like ${workItemRef} are only supported for work_item/work_item_deliverable principals; pass a raw id for '${principalType}'.`);
-    }
     if (opts.dry_run) {
       return {
         dry_run: true,
@@ -192,7 +168,6 @@ async function runCreate(client, opts, args, positionals) {
 // ── List subcommand ───────────────────────────────────────────────────
 
 function parseListArgs(tokens) {
-  let principalType = null;
   const positionals = [];
   for (let i = 0; i < tokens.length; i++) {
     const arg = tokens[i];
@@ -202,14 +177,6 @@ function parseListArgs(tokens) {
     }
     if (arg === '--help' || arg === '-h') {
       positionals.push(arg);
-      continue;
-    }
-    if (arg === '--principal-type') {
-      if (i + 1 >= tokens.length) {
-        throw new core.PingCodeError(`Flag ${arg} requires a value`);
-      }
-      principalType = tokens[i + 1];
-      i += 1;
       continue;
     }
     if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
@@ -222,18 +189,15 @@ function parseListArgs(tokens) {
     const eqIndex = arg.indexOf('=');
     if (eqIndex !== -1) {
       const flag = arg.slice(0, eqIndex);
-      if (flag === '--principal-type') {
-        principalType = arg.slice(eqIndex + 1);
-      }
       // skip value
     } else if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
       i += 1; // skip value
     }
   }
-  return { positionals, principal_type: principalType || 'work_item' };
+  return { positionals };
 }
 
-async function runList(client, opts, positionals, principalType = 'work_item') {
+async function runList(client, opts, positionals) {
   if (positionals.length === 0) {
     throw new core.PingCodeError('A work item id or identifier is required. Use comment list --help for usage.');
   }
@@ -241,52 +205,42 @@ async function runList(client, opts, positionals, principalType = 'work_item') {
     throw new core.PingCodeError(`Unexpected argument: ${positionals[1]}. Use comment list --help for usage.`);
   }
 
-  if (!COMMENT_PRINCIPAL_TYPES.has(principalType)) {
-    throw new core.PingCodeError(`Invalid --principal-type '${principalType}'. Allowed: ${Array.from(COMMENT_PRINCIPAL_TYPES).join(', ')}`);
-  }
+  const workItemRef = positionals[0];
 
-  const principalRef = positionals[0];
-  const params = { principal_type: principalType };
-
-  if (isIdentifier(principalRef)) {
-    if (!isWorkItemPrincipal(principalType)) {
-      throw new core.PingCodeError(`Identifier refs like ${principalRef} are only supported for work_item/work_item_deliverable principals; pass a raw id for '${principalType}'.`);
-    }
+  if (isIdentifier(workItemRef)) {
     if (opts.dry_run) {
       return {
         dry_run: true,
         resolution: {
           method: 'GET',
           path: '/v1/project/work_items',
-          params: { identifier: principalRef },
+          params: { identifier: workItemRef },
         },
         get: {
           method: 'GET',
           path: '/v1/comments',
           params: {
             principal_id: '{id}',
-            principal_type: principalType,
+            principal_type: 'work_item',
           },
         },
       };
     }
 
-    const resolvedId = await core.resolveWorkItemIdentifier(client, principalRef);
-    params.principal_id = resolvedId;
+    const resolvedId = await core.resolveWorkItemIdentifier(client, workItemRef);
     return await client.request(
       'GET',
       '/v1/comments',
-      params,
+      { principal_type: 'work_item', principal_id: resolvedId },
       null,
       { dry_run: false, use_workspace_cache: true },
     );
   }
 
-  params.principal_id = principalRef;
   return await client.request(
     'GET',
     '/v1/comments',
-    params,
+    { principal_type: 'work_item', principal_id: workItemRef },
     null,
     { dry_run: opts.dry_run, use_workspace_cache: true },
   );
@@ -295,7 +249,6 @@ async function runList(client, opts, positionals, principalType = 'work_item') {
 // ── Get subcommand ────────────────────────────────────────────────────
 
 function parseGetArgs(tokens) {
-  let principalType = null;
   const positionals = [];
   for (let i = 0; i < tokens.length; i++) {
     const arg = tokens[i];
@@ -305,14 +258,6 @@ function parseGetArgs(tokens) {
     }
     if (arg === '--help' || arg === '-h') {
       positionals.push(arg);
-      continue;
-    }
-    if (arg === '--principal-type') {
-      if (i + 1 >= tokens.length) {
-        throw new core.PingCodeError(`Flag ${arg} requires a value`);
-      }
-      principalType = tokens[i + 1];
-      i += 1;
       continue;
     }
     if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
@@ -325,18 +270,14 @@ function parseGetArgs(tokens) {
     const eqIndex = arg.indexOf('=');
     if (eqIndex !== -1) {
       const flag = arg.slice(0, eqIndex);
-      if (flag === '--principal-type') {
-        principalType = arg.slice(eqIndex + 1);
-      }
-      // skip value
     } else if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
-      i += 1; // skip value
+      i += 1;
     }
   }
-  return { positionals, principal_type: principalType || 'work_item' };
+  return { positionals };
 }
 
-async function runGet(client, opts, positionals, principalType = 'work_item') {
+async function runGet(client, opts, positionals) {
   if (positionals.length < 2) {
     throw new core.PingCodeError('A comment id and work item id/identifier are required. Use comment get --help for usage.');
   }
@@ -344,53 +285,43 @@ async function runGet(client, opts, positionals, principalType = 'work_item') {
     throw new core.PingCodeError(`Unexpected argument: ${positionals[2]}. Use comment get --help for usage.`);
   }
 
-  if (!COMMENT_PRINCIPAL_TYPES.has(principalType)) {
-    throw new core.PingCodeError(`Invalid --principal-type '${principalType}'. Allowed: ${Array.from(COMMENT_PRINCIPAL_TYPES).join(', ')}`);
-  }
-
   const commentId = positionals[0];
-  const principalRef = positionals[1];
-  const params = { principal_type: principalType };
+  const workItemRef = positionals[1];
 
-  if (isIdentifier(principalRef)) {
-    if (!isWorkItemPrincipal(principalType)) {
-      throw new core.PingCodeError(`Identifier refs like ${principalRef} are only supported for work_item/work_item_deliverable principals; pass a raw id for '${principalType}'.`);
-    }
+  if (isIdentifier(workItemRef)) {
     if (opts.dry_run) {
       return {
         dry_run: true,
         resolution: {
           method: 'GET',
           path: '/v1/project/work_items',
-          params: { identifier: principalRef },
+          params: { identifier: workItemRef },
         },
         get: {
           method: 'GET',
           path: `/v1/comments/${commentId}`,
           params: {
             principal_id: '{id}',
-            principal_type: principalType,
+            principal_type: 'work_item',
           },
         },
       };
     }
 
-    const resolvedId = await core.resolveWorkItemIdentifier(client, principalRef);
-    params.principal_id = resolvedId;
+    const resolvedId = await core.resolveWorkItemIdentifier(client, workItemRef);
     return await client.request(
       'GET',
       `/v1/comments/${commentId}`,
-      params,
+      { principal_type: 'work_item', principal_id: resolvedId },
       null,
       { dry_run: false, use_workspace_cache: true },
     );
   }
 
-  params.principal_id = principalRef;
   return await client.request(
     'GET',
     `/v1/comments/${commentId}`,
-    params,
+    { principal_type: 'work_item', principal_id: workItemRef },
     null,
     { dry_run: opts.dry_run, use_workspace_cache: true },
   );
@@ -399,7 +330,6 @@ async function runGet(client, opts, positionals, principalType = 'work_item') {
 // ── Delete subcommand ─────────────────────────────────────────────────
 
 function parseDeleteArgs(tokens) {
-  let principalType = null;
   const positionals = [];
   for (let i = 0; i < tokens.length; i++) {
     const arg = tokens[i];
@@ -409,14 +339,6 @@ function parseDeleteArgs(tokens) {
     }
     if (arg === '--help' || arg === '-h') {
       positionals.push(arg);
-      continue;
-    }
-    if (arg === '--principal-type') {
-      if (i + 1 >= tokens.length) {
-        throw new core.PingCodeError(`Flag ${arg} requires a value`);
-      }
-      principalType = tokens[i + 1];
-      i += 1;
       continue;
     }
     if (arg in shared.BASE_GLOBAL_BOOLEAN_FLAGS) continue;
@@ -429,18 +351,14 @@ function parseDeleteArgs(tokens) {
     const eqIndex = arg.indexOf('=');
     if (eqIndex !== -1) {
       const flag = arg.slice(0, eqIndex);
-      if (flag === '--principal-type') {
-        principalType = arg.slice(eqIndex + 1);
-      }
-      // skip value
     } else if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
-      i += 1; // skip value
+      i += 1;
     }
   }
-  return { positionals, principal_type: principalType || 'work_item' };
+  return { positionals };
 }
 
-async function runDelete(client, opts, positionals, principalType = 'work_item') {
+async function runDelete(client, opts, positionals) {
   if (positionals.length < 2) {
     throw new core.PingCodeError('A comment id and work item id/identifier are required. Use comment delete --help for usage.');
   }
@@ -448,53 +366,43 @@ async function runDelete(client, opts, positionals, principalType = 'work_item')
     throw new core.PingCodeError(`Unexpected argument: ${positionals[2]}. Use comment delete --help for usage.`);
   }
 
-  if (!COMMENT_PRINCIPAL_TYPES.has(principalType)) {
-    throw new core.PingCodeError(`Invalid --principal-type '${principalType}'. Allowed: ${Array.from(COMMENT_PRINCIPAL_TYPES).join(', ')}`);
-  }
-
   const commentId = positionals[0];
-  const principalRef = positionals[1];
-  const params = { principal_type: principalType };
+  const workItemRef = positionals[1];
 
-  if (isIdentifier(principalRef)) {
-    if (!isWorkItemPrincipal(principalType)) {
-      throw new core.PingCodeError(`Identifier refs like ${principalRef} are only supported for work_item/work_item_deliverable principals; pass a raw id for '${principalType}'.`);
-    }
+  if (isIdentifier(workItemRef)) {
     if (opts.dry_run) {
       return {
         dry_run: true,
         resolution: {
           method: 'GET',
           path: '/v1/project/work_items',
-          params: { identifier: principalRef },
+          params: { identifier: workItemRef },
         },
         delete: {
           method: 'DELETE',
           path: `/v1/comments/${commentId}`,
           params: {
             principal_id: '{id}',
-            principal_type: principalType,
+            principal_type: 'work_item',
           },
         },
       };
     }
 
-    const resolvedId = await core.resolveWorkItemIdentifier(client, principalRef);
-    params.principal_id = resolvedId;
+    const resolvedId = await core.resolveWorkItemIdentifier(client, workItemRef);
     return await client.request(
       'DELETE',
       `/v1/comments/${commentId}`,
-      params,
+      { principal_type: 'work_item', principal_id: resolvedId },
       null,
       { dry_run: false, use_workspace_cache: true },
     );
   }
 
-  params.principal_id = principalRef;
   return await client.request(
     'DELETE',
     `/v1/comments/${commentId}`,
-    params,
+    { principal_type: 'work_item', principal_id: workItemRef },
     null,
     { dry_run: opts.dry_run, use_workspace_cache: true },
   );
@@ -512,7 +420,6 @@ function printHelp() {
     '  create <id|identifier>     Create a comment on a work item',
     '    --content TEXT            Comment content (required)',
     '    --reply-to COMMENT_ID     Reply to an existing comment',
-    '    --principal-type TYPE     Principal type (default: work_item)',
     '',
     '  list <id|identifier>       List comments on a work item',
     '',
@@ -521,11 +428,6 @@ function printHelp() {
     '',
     '  delete <comment-id> <id|identifier>',
     '                             Delete a comment',
-    '',
-    'All subcommands accept --principal-type TYPE to target other principals:',
-    '  work_item (default), work_item_deliverable, test_case, test_run, idea, ticket, page.',
-    'Identifier refs like SCR-123 resolve only for work_item/work_item_deliverable;',
-    'other principals need a raw id.',
     '',
     'Global options:',
     '  --base-url URL              PingCode base URL',
@@ -550,33 +452,32 @@ function printSubcommandHelp(subcommand) {
       console.log([
         'Usage: pingcode comment create <id|identifier> --content TEXT [options]',
         '',
-        'Create a comment on a principal. --principal-type defaults to work_item.',
+        'Create a comment on a work item. principal_type is always work_item.',
         '',
         'Options:',
         '  --content TEXT            Comment content (required, non-empty)',
         '  --reply-to COMMENT_ID     Reply to an existing comment',
-        '  --principal-type TYPE     Principal type (default: work_item; also work_item_deliverable, test_case, test_run, idea, ticket, page)',
       ].join('\n'));
       break;
     case 'list':
       console.log([
-        'Usage: pingcode comment list <id|identifier> [--principal-type TYPE]',
+        'Usage: pingcode comment list <id|identifier>',
         '',
-        'List all comments on a principal. --principal-type defaults to work_item.',
+        'List all comments on a work item.',
       ].join('\n'));
       break;
     case 'get':
       console.log([
-        'Usage: pingcode comment get <comment-id> <id|identifier> [--principal-type TYPE]',
+        'Usage: pingcode comment get <comment-id> <id|identifier>',
         '',
-        'Get a single comment by its id and principal reference. --principal-type defaults to work_item.',
+        'Get a single comment by its id and work item reference.',
       ].join('\n'));
       break;
     case 'delete':
       console.log([
-        'Usage: pingcode comment delete <comment-id> <id|identifier> [--principal-type TYPE]',
+        'Usage: pingcode comment delete <comment-id> <id|identifier>',
         '',
-        'Delete a comment by its id and principal reference. --principal-type defaults to work_item.',
+        'Delete a comment by its id and work item reference.',
       ].join('\n'));
       break;
     default:
@@ -614,18 +515,18 @@ async function run(argv) {
         break;
       }
       case 'list': {
-        const { positionals, principal_type } = parseListArgs(subArgs);
-        result = await runList(client, opts, positionals, principal_type);
+        const { positionals } = parseListArgs(subArgs);
+        result = await runList(client, opts, positionals);
         break;
       }
       case 'get': {
-        const { positionals, principal_type } = parseGetArgs(subArgs);
-        result = await runGet(client, opts, positionals, principal_type);
+        const { positionals } = parseGetArgs(subArgs);
+        result = await runGet(client, opts, positionals);
         break;
       }
       case 'delete': {
-        const { positionals, principal_type } = parseDeleteArgs(subArgs);
-        result = await runDelete(client, opts, positionals, principal_type);
+        const { positionals } = parseDeleteArgs(subArgs);
+        result = await runDelete(client, opts, positionals);
         break;
       }
       default:
