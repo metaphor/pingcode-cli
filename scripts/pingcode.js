@@ -23,6 +23,7 @@ require('./commands/context');
 require('./commands/deliverable');
 require('./commands/directory');
 require('./commands/idea');
+require('./commands/mcp');
 require('./commands/plans');
 require('./commands/platform');
 require('./commands/product');

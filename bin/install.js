@@ -9,7 +9,7 @@ const { stdin, stdout } = require("node:process");
 const packageRoot = path.resolve(__dirname, "..");
 const SKILL = {
   name: "pingcode",
-  entries: ["skills/pingcode/SKILL.md", "skills/pingcode/references"],
+  entries: ["skills/pingcode/SKILL.md"],
 };
 
 const WRAPPER_PATH_BLOCK = "# pingcode-cli PATH";

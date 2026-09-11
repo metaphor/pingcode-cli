@@ -64,10 +64,8 @@ function assertInstalled(target) {
   assert.strictEqual(fs.existsSync(path.join(target, 'README.md')), false, `unexpected README.md in ${target}`);
   assert.strictEqual(fs.existsSync(path.join(target, 'agents')), false, `unexpected agents/ dir in ${target}`);
   assert.strictEqual(fs.existsSync(path.join(target, 'skills')), false, `unexpected skills/ dir in ${target}`);
-  // Verify references exist
-  assert.ok(fs.existsSync(path.join(target, 'references', 'auth.md')), `references/auth.md missing in ${target}`);
-  assert.ok(fs.existsSync(path.join(target, 'references', 'ctx.md')), `references/ctx.md missing in ${target}`);
-  assert.ok(fs.existsSync(path.join(target, 'references', 'workitem.md')), `references/workitem.md missing in ${target}`);
+  // Single-entry skill: references/ directory is no longer shipped
+  assert.strictEqual(fs.existsSync(path.join(target, 'references')), false, `unexpected references/ dir in ${target}`);
 }
 
 function assertNotInstalled(target) {
@@ -109,11 +107,8 @@ test('installed docs use pingcode command', () => {
     assert.ok(result.stdout.includes('Installed PingCode skill'));
     assert.ok(skillDoc.includes('pingcode'), 'skill doc should contain pingcode command');
 
-    // Verify reference files
-    for (const ref of ['auth', 'ctx', 'workitem']) {
-      const refDoc = fs.readFileSync(path.join(skillDir, 'references', `${ref}.md`), 'utf8');
-      assert.ok(refDoc.includes('pingcode'), `${ref}.md should contain pingcode command`);
-    }
+    // references/ directory is no longer shipped
+    assert.strictEqual(fs.existsSync(path.join(skillDir, 'references')), false);
 
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode.py'), false);
     assert.strictEqual(skillDoc.includes('python3 scripts/pingcode_ctx.py'), false);

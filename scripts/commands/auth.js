@@ -255,6 +255,14 @@ function printHelp() {
     '  login    Authenticate with your PingCode user account (OAuth2 authorization_code)',
     '  status   Show current authentication status',
     '',
+    'Examples:',
+    '  # 打开浏览器完成 OAuth 登录',
+    '  pingcode auth login',
+    '  # 无浏览器环境：打印授权链接，手动粘贴授权码',
+    '  pingcode auth login --no-browser',
+    '  # 查看当前认证状态',
+    '  pingcode auth status --compact',
+    '',
     'Run `pingcode auth <subcommand> --help` for subcommand-specific usage.',
   ].join('\n'));
 }
