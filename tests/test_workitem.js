@@ -1977,3 +1977,244 @@ testInCleanEnv('workitem new subcommands show their own usage', async () => {
     }
   }
 });
+
+// ── my / start / done (high-frequency scenarios) ─────────────────────
+
+testInCleanTmp('workitem my dry-run builds correct request from cache', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['my', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'GET');
+  assert.strictEqual(result.path, '/v1/project/work_items');
+  assert.strictEqual(result.params.assignee_ids, 'user-1');
+  assert.strictEqual(result.params.project_ids, 'project-1');
+  assert.strictEqual(result.params.sprint_ids, 'sprint-1');
+});
+
+testInCleanTmp('workitem my filters terminal states with cached dictionary', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    work_item_states: {
+      'project-1::bug': {
+        values: [
+          { id: 'st-progress', name: '进行中', type: 'in_progress' },
+          { id: 'st-done', name: '已完成', type: 'completed' },
+        ],
+      },
+    },
+  });
+  mockFetch(fakeResponse({
+    total: 2,
+    values: [
+      { id: 'w-open', state: { id: 'st-progress' } },
+      { id: 'w-done', state: { id: 'st-done' } },
+    ],
+  }));
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['my', '--workspace-cache', cachePath]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.values.length, 1);
+  assert.strictEqual(result.values[0].id, 'w-open');
+});
+
+testInCleanTmp('workitem my without cached states hints and shows all', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+  });
+  mockFetch(fakeResponse({
+    total: 2,
+    values: [
+      { id: 'w-open', state_id: 'unknown-1' },
+      { id: 'w-done', state_id: 'unknown-2' },
+    ],
+  }));
+
+  const errors = [];
+  const originalError = console.error;
+  const originalLog = console.log;
+  console.error = (...args) => errors.push(args.join(' '));
+  console.log = (...args) => { output_str.push(args.join(' ')); };
+  const output_str = [];
+  try {
+    await workItem.run(['my', '--workspace-cache', cachePath]);
+  } finally {
+    console.error = originalError;
+    console.log = originalLog;
+  }
+
+  assert.ok(errors.some((l) => l.includes('no cached work item states')), 'stderr hint expected');
+  const result = JSON.parse(output_str.join('\n').trim());
+  assert.strictEqual(result.values.length, 2);
+});
+
+testInCleanTmp('workitem start raw id dry-run patches cached in-progress state', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+    work_item_states: {
+      'project-1::bug': {
+        values: [
+          { id: 'st-progress', name: '进行中', type: 'in_progress' },
+          { id: 'st-done', name: '已完成', type: 'completed' },
+        ],
+      },
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['start', '5edca524cad2fa112b06305c', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.method, 'PATCH');
+  assert.strictEqual(result.path, '/v1/project/work_items/5edca524cad2fa112b06305c');
+  assert.strictEqual(result.json.state_id, 'st-progress');
+});
+
+testInCleanTmp('workitem done with identifier returns compound dry-run', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+    work_item_states: {
+      'project-1::bug': {
+        values: [
+          { id: 'st-progress', name: '进行中', type: 'in_progress' },
+          { id: 'st-done', name: '已完成', type: 'completed' },
+        ],
+      },
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['done', 'SCR-123', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.dry_run, true);
+  assert.strictEqual(result.resolution.params.identifier, 'SCR-123');
+  assert.strictEqual(result.patch.method, 'PATCH');
+  assert.strictEqual(result.patch.path, '/v1/project/work_items/{id}');
+  assert.strictEqual(result.patch.json.state_id, 'st-done');
+});
+
+testInCleanTmp('workitem done --state overrides target state', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+    work_item_states: {
+      'project-1::bug': {
+        values: [
+          { id: 'st-progress', name: '进行中', type: 'in_progress' },
+          { id: 'st-closed', name: '已关闭', type: 'closed' },
+        ],
+      },
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['done', '5edca524cad2fa112b06305c', '--state', '已关闭', '--workspace-cache', cachePath, '--dry-run']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.state_id, 'st-closed');
+});
+
+testInCleanTmp('workitem start without cached states explains how to proceed', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {});
+
+  await assert.rejects(
+    () => workItem.run(['start', '5edca524cad2fa112b06305c', '--workspace-cache', cachePath, '--dry-run']),
+    /No cached work item states available to resolve "进行中"/,
+  );
+});
+
+testInCleanTmp('workitem start with unmatched cached states lists alternatives', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+    work_item_states: {
+      'project-1::bug': {
+        values: [
+          { id: 'st-open', name: '打开', type: 'in_progress' },
+          { id: 'st-closed', name: '已关闭', type: 'closed' },
+        ],
+      },
+    },
+  });
+
+  await assert.rejects(
+    () => workItem.run(['start', '5edca524cad2fa112b06305c', '--workspace-cache', cachePath, '--dry-run']),
+    (exc) => {
+      assert.match(exc.message, /State "进行中" not found in cached work item states/);
+      assert.match(exc.message, /打开 \(in_progress\)/);
+      assert.match(exc.message, /Use --state to override/);
+      return true;
+    },
+  );
+});
+
+testInCleanEnv('workitem help mentions my, start and done', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('my [options]'));
+  assert.ok(output.includes('start <id|identifier>'));
+  assert.ok(output.includes('done <id|identifier>'));
+});
