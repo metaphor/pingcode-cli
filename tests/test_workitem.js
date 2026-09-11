@@ -2025,13 +2025,19 @@ testInCleanTmp('workitem my filters terminal states with cached dictionary', asy
       },
     },
   });
-  mockFetch(fakeResponse({
-    total: 2,
-    values: [
-      { id: 'w-open', state: { id: 'st-progress' } },
-      { id: 'w-done', state: { id: 'st-done' } },
-    ],
-  }));
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  mockFetch((url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/v1/auth/token') return fakeResponse({ access_token: 'tok', expires_in: 3600 });
+    return fakeResponse({
+      total: 2,
+      values: [
+        { id: 'w-open', state: { id: 'st-progress' } },
+        { id: 'w-done', state: { id: 'st-done' } },
+      ],
+    });
+  });
 
   let output = '';
   const originalLog = console.log;
@@ -2056,13 +2062,19 @@ testInCleanTmp('workitem my without cached states hints and shows all', async (t
       current_sprint_id: 'sprint-1',
     },
   });
-  mockFetch(fakeResponse({
-    total: 2,
-    values: [
-      { id: 'w-open', state_id: 'unknown-1' },
-      { id: 'w-done', state_id: 'unknown-2' },
-    ],
-  }));
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  mockFetch((url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/v1/auth/token') return fakeResponse({ access_token: 'tok', expires_in: 3600 });
+    return fakeResponse({
+      total: 2,
+      values: [
+        { id: 'w-open', state_id: 'unknown-1' },
+        { id: 'w-done', state_id: 'unknown-2' },
+      ],
+    });
+  });
 
   const errors = [];
   const originalError = console.error;
