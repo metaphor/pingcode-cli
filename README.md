@@ -8,19 +8,11 @@
 npx @metaphorli/pingcode-cli@latest
 ```
 
-一条命令会检测当前用户已存在的 Codex / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录，其中包含 `references/` 子目录：
+一条命令会检测当前用户已存在的 Codex / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录（仅 SKILL.md 单文件路由卡）：
 
 ```text
-~/.codex/skills/pingcode
-~/.codex/skills/pingcode/references/auth.md
-~/.codex/skills/pingcode/references/ctx.md
-~/.codex/skills/pingcode/references/workitem.md
-~/.codex/skills/pingcode/references/comment.md
-~/.config/opencode/skills/pingcode
-~/.config/opencode/skills/pingcode/references/auth.md
-~/.config/opencode/skills/pingcode/references/ctx.md
-~/.config/opencode/skills/pingcode/references/workitem.md
-~/.config/opencode/skills/pingcode/references/comment.md
+~/.codex/skills/pingcode/SKILL.md
+~/.config/opencode/skills/pingcode/SKILL.md
 ```
 
 默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
@@ -108,7 +100,7 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 安装要求：
 1. 直接运行：npx @metaphorli/pingcode-cli@latest --force
    该命令会检测当前用户已存在的 Codex 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
-2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode` 目录，且目录里有 SKILL.md 入口文件和 `references/` 子目录（按你当前使用的 Agent 选择对应路径即可）：
+2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode` 目录，且目录里有 SKILL.md 入口文件（按你当前使用的 Agent 选择对应路径即可）：
    - ~/.codex/skills/pingcode/SKILL.md
    - ~/.config/opencode/skills/pingcode/SKILL.md
 3. 安装完成后，引导我配置环境变量 PINGCODE_CLIENT_ID 和 PINGCODE_CLIENT_SECRET；不要把 secret 写入仓库文件，也不要在对话里回显完整 secret。
@@ -132,28 +124,15 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 - 协作：评论（多主体 `--principal-type`）、工时登记、评审、组织（成员/团队/部门/职位/角色/企业信息）、审计与登录日志
 - 通过子命令（`context`/`workitem`/`auth`/`comment`/`attachment`/`idea`/`product`/`ticket`/`testhub`/`project`/`sprint`/`board`/`version`/`tag`/`relation`/`deliverable`/`config`/`plans`/`wiki`/`scm`/`release`/`build`/`workload`/`review`/`directory`/`platform`）调用 PingCode API
 
-以上能力由同一个 `pingcode` skill 统一提供，并通过 `references/` 下的主题参考文档（`auth.md`、`ctx.md`、`workitem.md`、`comment.md`、`attachment.md`、`idea.md`、`product.md`、`ticket.md`、`testhub.md`、`entities.md`、`config.md`、`devops.md`、`collab.md`）补充详细用法与安全规则。
+以上能力由同一个 `pingcode` skill 统一提供；每个模块的用法与示例内建在 `pingcode <module> --help` 中（Examples 段），skill 只做路由与规则，不再是平行文档。
 
 ## Skill 结构
 
-安装后在同一个 skills 根目录下会有一个 `pingcode` skill 目录，其 `references/` 子目录按主题拆分参考文档：
+安装后在同一个 skills 根目录下会有一个 `pingcode` skill 目录，`SKILL.md` 是唯一入口：
 
 | 入口 | 作用 |
 |---|---|
-| `pingcode/SKILL.md` | 路由入口，统一提供 PingCode CLI 的各项能力 |
-| `pingcode/references/auth.md` | 用户令牌登录：`pingcode auth login`、grant-type 自动识别与覆盖、令牌类型说明 |
-| `pingcode/references/ctx.md` | 工作区上下文初始化：在 Agent 前台按编号选择当前项目、迭代、用户并写入缓存 |
-| `pingcode/references/workitem.md` | 工作项操作：`workitem list / create / get / update / delete / search / batch-update / transitions` 子命令及完整参数；含共享安全规则 |
-| `pingcode/references/idea.md` | 需求操作：`idea list / create / update / get / search` 等子命令、字典、流转记录及企业级配置；含安全规则 |
-| `pingcode/references/product.md` | 产品操作：`product list / get / create / update`、成员、标签、模块、排期、渠道、客户、外部用户及安全规则 |
-| `pingcode/references/comment.md` | 评论操作：`comment create / list / get / delete`（多主体 `--principal-type`）及安全规则 |
-| `pingcode/references/attachment.md` | 附件操作：`attachment upload-file / upload-snippet / list / get / delete` 子命令及安全规则 |
-| `pingcode/references/ticket.md` | 工单操作：CRUD、搜索、流转记录、字典与企业级状态/属性/方案管理 |
-| `pingcode/references/testhub.md` | 测试管理：测试库、用例、测试计划、执行用例与字典 |
-| `pingcode/references/entities.md` | 项目实体：项目、迭代、看板、发布版本、标签、关联、交付目标 |
-| `pingcode/references/config.md` | 企业配置：自定义类型/状态/属性、流程与类型/状态/属性方案 |
-| `pingcode/references/devops.md` | DevOps 集成：代码托管、部署环境与构建记录 |
-| `pingcode/references/collab.md` | 协作与组织：知识库、工时、评审、组织成员、关注人、审计日志 |
+| `pingcode/SKILL.md` | 路由卡：前置条件、黄金规则与 26 个模块一览；`SKILL.md` 即全部内容，各模块的子命令与参数细节不再单独成文，直接通过 `pingcode <module> --help` 查看 |
 
 ## 子命令
 
@@ -842,11 +821,6 @@ pingcode context init
 
 ## 参考资料
 
-- 主入口：[skills/pingcode/SKILL.md](skills/pingcode/SKILL.md)
-- 用户令牌登录：[skills/pingcode/references/auth.md](skills/pingcode/references/auth.md)
-- 工作区上下文：[skills/pingcode/references/ctx.md](skills/pingcode/references/ctx.md)
-- 工作项操作：[skills/pingcode/references/workitem.md](skills/pingcode/references/workitem.md)
-- 评论操作：[skills/pingcode/references/comment.md](skills/pingcode/references/comment.md)
-- 附件操作：[skills/pingcode/references/attachment.md](skills/pingcode/references/attachment.md)
+- 主入口：[skills/pingcode/SKILL.md](skills/pingcode/SKILL.md)（唯一入口；各模块用法见 `pingcode <module> --help`）
 - 官方文档：https://open.pingcode.com/
 

@@ -12,6 +12,11 @@ const ALL_BOOLEAN_FLAGS = new Set([
   ...EXTRA_BOOLEAN_FLAGS,
 ]);
 
+// State types treated as terminal (done) when listing unfinished work items.
+const TERMINAL_STATE_TYPES = new Set(['completed', 'closed']);
+const START_STATE_NAME = '进行中';
+const DONE_STATE_NAME = '已完成';
+
 // ── Cache lookup helpers ──────────────────────────────────────────────
 
 function findAllCachedStates(cache) {
@@ -207,6 +212,115 @@ async function runList(client, opts, args) {
     null,
     { dry_run: opts.dry_run, use_workspace_cache: true },
   );
+}
+
+// ── My subcommand ─────────────────────────────────────────────────────
+
+function parseMyArgs(tokens) {
+  const args = {
+    type: null,
+    project: null,
+    sprint: null,
+    limit: null,
+  };
+  const stringFlags = {
+    '--type': 'type',
+    '--project': 'project',
+    '--sprint': 'sprint',
+    '--limit': 'limit',
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg in stringFlags) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[stringFlags[arg]] = tokens[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1) {
+        const flag = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+        if (flag in stringFlags) {
+          args[stringFlags[flag]] = value;
+        } else {
+          throw new core.PingCodeError(`Unknown option: ${flag}`);
+        }
+      } else if (!ALL_BOOLEAN_FLAGS.has(arg)) {
+        throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem my --help for usage.`);
+      }
+    } else {
+      throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem my --help for usage.`);
+    }
+  }
+  return args;
+}
+
+function workItemStateRef(item) {
+  if (typeof item.state_id === 'string' && item.state_id) return item.state_id;
+  if (item.state && typeof item.state === 'object' && typeof item.state.id === 'string') {
+    return item.state.id;
+  }
+  return null;
+}
+
+async function runMy(client, opts, args) {
+  const cache = client.workspaceCache;
+
+  const params = core.applyDefaultWorkItemFilters(
+    '/v1/project/work_items',
+    {},
+    client,
+    opts.user_id,
+    opts.user_name,
+    true,
+    opts.all_projects,
+    opts.all_sprints,
+  );
+  // `my` is always scoped to the current user, like `list --assignee @me`.
+  params.assignee_ids = findCachedUser(cache, '@me').id;
+
+  if (args.type) {
+    params.type_ids = findCachedWorkItemType(cache, args.type).id;
+  }
+  if (args.project) {
+    params.project_ids = findCachedProject(cache, args.project).id;
+  }
+  if (args.sprint) {
+    params.sprint_ids = findCachedSprint(cache, args.sprint).id;
+  }
+  if (args.limit) {
+    params.page_size = String(args.limit);
+  }
+
+  const response = await client.request(
+    'GET',
+    '/v1/project/work_items',
+    params,
+    null,
+    { dry_run: opts.dry_run, use_workspace_cache: true },
+  );
+  if (opts.dry_run) return response;
+
+  // Exclude items whose state is terminal (completed/closed) using the
+  // cached state dictionary. Without cached states, degrade to a plain
+  // list and tell the user how to populate the cache.
+  const terminalIds = new Set(
+    findAllCachedStates(cache)
+      .filter((s) => TERMINAL_STATE_TYPES.has(String(s.type || '').toLowerCase()))
+      .map((s) => s.id),
+  );
+  if (terminalIds.size === 0) {
+    console.error(
+      'hint: no cached work item states; showing all states including completed/closed. ' +
+      'Run `pingcode context init --refresh` to cache dictionaries.',
+    );
+    return response;
+  }
+  const values = core.pageValues(response);
+  return { ...response, values: values.filter((item) => !terminalIds.has(workItemStateRef(item))) };
 }
 
 // ── Create subcommand ─────────────────────────────────────────────────
@@ -660,6 +774,80 @@ async function runUpdate(client, opts, args) {
   );
 }
 
+// ── Start / Done subcommands ──────────────────────────────────────────
+
+function parseStateChangeArgs(tokens, subcommand) {
+  let target = null;
+  let state = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (arg === '--state') {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError('Flag --state requires a value');
+      }
+      state = tokens[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--')) {
+      const eqIndex = arg.indexOf('=');
+      if (eqIndex !== -1 && arg.slice(0, eqIndex) === '--state') {
+        state = arg.slice(eqIndex + 1);
+        continue;
+      }
+      if (ALL_BOOLEAN_FLAGS.has(arg)) continue;
+      if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
+        i += 1;
+        continue;
+      }
+      throw new core.PingCodeError(`Unknown option: ${arg}. Use workitem ${subcommand} --help for usage.`);
+    }
+    if (target === null) {
+      target = arg;
+      continue;
+    }
+    throw new core.PingCodeError(`Unexpected argument: ${arg}. Use workitem ${subcommand} --help for usage.`);
+  }
+  if (!target) {
+    throw new core.PingCodeError(`A work item id or identifier is required. Use workitem ${subcommand} --help for usage.`);
+  }
+  return { target, state };
+}
+
+function resolveTargetStateId(cache, defaultName, overrideName, subcommand) {
+  const query = overrideName || defaultName;
+  const states = findAllCachedStates(cache);
+  try {
+    return core.findCachedItem(states, query, 'state').id;
+  } catch (exc) {
+    if (overrideName) throw exc;
+    if (states.length === 0) {
+      throw new core.PingCodeError(
+        `No cached work item states available to resolve "${defaultName}". ` +
+        'Refresh the workspace cache first, or use --state to specify the target state. ' +
+        `Use workitem ${subcommand} --help for usage.`,
+      );
+    }
+    const available = states.map((s) => `${s.name} (${s.type || 'unknown type'})`).join(', ');
+    throw new core.PingCodeError(
+      `State "${defaultName}" not found in cached work item states. ` +
+      `Available states: ${available}. ` +
+      'Use --state to override the target state. ' +
+      `Use workitem ${subcommand} --help for usage.`,
+    );
+  }
+}
+
+async function runStart(client, opts, args) {
+  const stateId = resolveTargetStateId(client.workspaceCache, START_STATE_NAME, args.state, 'start');
+  return await runUpdate(client, opts, { target: args.target, state: stateId });
+}
+
+async function runDone(client, opts, args) {
+  const stateId = resolveTargetStateId(client.workspaceCache, DONE_STATE_NAME, args.state, 'done');
+  return await runUpdate(client, opts, { target: args.target, state: stateId });
+}
+
 // ── Delete subcommand ────────────────────────────────────────────────
 
 function parseDeleteArgs(tokens) {
@@ -1031,6 +1219,12 @@ function printHelp() {
     '    --keywords <text>         Search keywords (title, identifier, etc.)',
     '    --limit N                 Max results per page',
     '',
+    '  my [options]                List my unfinished work items (compact)',
+    '    --project <id|name>       Scope to a project',
+    '    --sprint <id|name>        Scope to a sprint',
+    '    --type <name|id>          Filter by type',
+    '    --limit N                 Max results per page',
+    '',
     '  create --title TITLE        Create a new work item',
     '    --type <name|id>          Work item type',
     '    --project <id|name>       Target project',
@@ -1065,6 +1259,12 @@ function printHelp() {
     '    --remaining-workload NUM  New remaining workload',
     '    --properties JSON         New custom properties as JSON object',
     '',
+    '  start <id|identifier>       Move a work item to an in-progress state',
+    '    --state <name|id>         Target state name (default: 进行中)',
+    '',
+    '  done <id|identifier>        Move a work item to a completed state',
+    '    --state <name|id>         Target state name (default: 已完成)',
+    '',
     '  delete <id|identifier>      Delete a work item',
     '',
     '  search [options]            Search work items with a structured query',
@@ -1084,6 +1284,15 @@ function printHelp() {
     '',
     '  transition <history_id> <id|identifier>',
     '                              Get one transition history record',
+    '',
+    'Examples:',
+    '  # 查看我的未完成任务',
+    '  pingcode workitem my --compact',
+    '  # 创建工作项',
+    '  pingcode workitem create --title "修复登录超时" --type 缺陷',
+    '  # 开始并完成一个工作项',
+    '  pingcode workitem start SCR-123',
+    '  pingcode workitem done SCR-123',
     '',
     'Global options:',
     '  --base-url URL              PingCode base URL',
@@ -1120,6 +1329,22 @@ function printSubcommandHelp(subcommand) {
         '  --project <id|name>       Filter by project',
         '  --sprint <id|name>        Filter by sprint',
         '  --keywords <text>         Search keywords (title, identifier, etc.)',
+        '  --limit N                 Max results per page',
+      ].join('\n'));
+      break;
+    case 'my':
+      console.log([
+        'Usage: pingcode workitem my [options]',
+        '',
+        'List the current user\'s unfinished work items (compact output by default).',
+        'Equivalent to `workitem list --assignee @me` with completed/closed states',
+        'excluded using the cached state dictionary. Without cached states it falls',
+        'back to listing all of the current user\'s work items with a hint.',
+        '',
+        'Options:',
+        '  --project <id|name>       Scope to a project (default: current project)',
+        '  --sprint <id|name>        Scope to a sprint (default: current sprint)',
+        '  --type <name|id>          Filter by type',
         '  --limit N                 Max results per page',
       ].join('\n'));
       break;
@@ -1177,6 +1402,28 @@ function printSubcommandHelp(subcommand) {
         '  --estimated-workload NUM  New estimated workload',
         '  --remaining-workload NUM  New remaining workload',
         '  --properties JSON         New custom properties as JSON object',
+      ].join('\n'));
+      break;
+    case 'start':
+      console.log([
+        'Usage: pingcode workitem start <id|identifier> [options]',
+        '',
+        'Move a work item to an in-progress state (PATCH with the resolved state id).',
+        '',
+        'Options:',
+        '  --state <name|id>         Target state name (default: 进行中). Use this when',
+        '                            your workspace names the in-progress state differently.',
+      ].join('\n'));
+      break;
+    case 'done':
+      console.log([
+        'Usage: pingcode workitem done <id|identifier> [options]',
+        '',
+        'Move a work item to a completed state (PATCH with the resolved state id).',
+        '',
+        'Options:',
+        '  --state <name|id>         Target state name (default: 已完成). Use this when',
+        '                            your workspace names the completed state differently.',
       ].join('\n'));
       break;
     case 'delete':
@@ -1265,10 +1512,27 @@ async function run(argv) {
 
   try {
     let result;
+    let forceCompact = false;
     switch (subcommand) {
       case 'list': {
         const args = parseListArgs(subArgs);
         result = await runList(client, opts, args);
+        break;
+      }
+      case 'my': {
+        const args = parseMyArgs(subArgs);
+        forceCompact = true;
+        result = await runMy(client, opts, args);
+        break;
+      }
+      case 'start': {
+        const args = parseStateChangeArgs(subArgs, 'start');
+        result = await runStart(client, opts, args);
+        break;
+      }
+      case 'done': {
+        const args = parseStateChangeArgs(subArgs, 'done');
+        result = await runDone(client, opts, args);
         break;
       }
       case 'create': {
