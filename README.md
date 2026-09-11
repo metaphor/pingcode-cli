@@ -111,7 +111,8 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 
 - 使用 `client_credentials` 获取 PingCode 企业令牌
 - 通过 OAuth2 `authorization_code` 获取用户令牌（`pingcode auth login`，含 `refresh_token` 自动刷新）
-- 工作项全生命周期：查询、高级搜索（`workitem search` 组合过滤）、创建、更新、批量更新、删除、流转记录、子工作项
+- 工作项全生命周期：查询、高级搜索（`workitem search` 组合过滤）、创建、更新、批量更新、删除、流转记录、子工作项，以及高频一键命令 `workitem my`（我的未完成项）/ `start`（转为进行中）/ `done`（转为已完成）
+- **MCP 服务**：`pingcode mcp` 启动薄 MCP 层（20 个策展工具），`pingcode mcp init` 一键注册到 Codex / OpenCode / Oh My Pi 等客户端
 - 项目管理：项目 CRUD/克隆/进度/成员/项目属性，迭代（含分组/类别/批量创建），看板（看板栏/泳道），发布版本（阶段/分组/类别）
 - 工作项标签、关联、交付目标、关注人、跨资源关联、活动记录
 - 企业级配置：自定义类型/状态/属性、流程，以及类型/状态/属性方案（含状态流转）
@@ -179,6 +180,9 @@ pingcode context set-current-project my-project
 | `workitem batch-update` | 批量更新工作项属性（`--ids` + `--property-name/--property-value`） | `pingcode workitem batch-update --ids ID1,ID2 --property-name priority_id --property-value P1 --dry-run` |
 | `workitem transitions <id|identifier>` | 查询工作项状态流转记录列表 | `pingcode workitem transitions SCR-123 --compact` |
 | `workitem transition <hid> <id|identifier>` | 查看单条状态流转记录 | `pingcode workitem transition HISTORY_ID SCR-123` |
+| `workitem my` | 我的未完成工作项（按当前用户过滤，自动剔除已完成/已关闭，默认精简输出） | `pingcode workitem my --compact` |
+| `workitem start <id\|identifier>` | 一键转为进行中（状态名从缓存字典解析，`--state` 可覆盖） | `pingcode workitem start SCR-123 --dry-run` |
+| `workitem done <id\|identifier>` | 一键转为已完成 | `pingcode workitem done SCR-123 --dry-run` |
 
 ```bash
 # 查看当前用户的未完成任务
@@ -736,6 +740,29 @@ pingcode comment delete cmt-456 SCR-123 --dry-run
 | `review principal-remove <review_id> <principal_id>` | 移除评审内容 |
 
 所有模块均支持全局选项 `--dry-run`（预览请求不发送）、`--compact`（精简输出）、`--no-token-cache`、`--no-workspace-cache` 及连接/凭证选项；完整参数见 `pingcode <module> --help` 与 `pingcode <module> <subcommand> --help`。
+
+### MCP 服务 (`mcp`)
+
+CLI 是唯一引擎；`pingcode mcp` 把它包装成 MCP 服务，暴露 20 个策展工具（不是全部 432 个命令的直通），供 Claude Desktop / Cursor 等不会敲终端的客户端使用。
+
+| 子命令 | 说明 |
+|---|---|
+| `mcp` | 在 stdio 上启动 MCP 服务（供客户端配置 `command: pingcode, args: [mcp]`） |
+| `mcp init [--tool codex\|opencode\|omp ... \| --all]` | 把服务注册进 AI 客户端配置：Codex `~/.codex/config.toml`、OpenCode `~/.config/opencode/opencode.json`、Oh My Pi `~/.omp/agent/mcp.json`；保留其他 server，`--dry-run` 预览，`--yes` 跳过确认 |
+
+```bash
+# 启动 MCP 服务（一般由客户端自动拉起，无需手动常驻）
+pingcode mcp
+
+# 一键注册到全部支持的客户端（先预览）
+pingcode mcp init --all --dry-run
+pingcode mcp init --all --yes
+
+# 只注册到指定客户端
+pingcode mcp init --tool codex --tool omp --client-id ID --client-secret SECRET
+```
+
+策展工具清单（20 个）：`pingcode_auth_status`、`pingcode_list_projects`、`pingcode_list_sprints`、`pingcode_list_users`、`pingcode_context_get`、`pingcode_context_set`、`pingcode_workitem_list`、`pingcode_workitem_get`、`pingcode_workitem_create`、`pingcode_workitem_update`、`pingcode_workitem_delete`、`pingcode_workitem_search`、`pingcode_workitem_my`、`pingcode_workitem_start`、`pingcode_workitem_done`、`pingcode_comment_create`、`pingcode_comment_list`、`pingcode_workload_create`、`pingcode_product_list`、`pingcode_idea_list`。每个工具内部复用对应 CLI 命令的全部逻辑（identifier 解析、工作区缓存、错误提示）。长尾操作（测试库配置、知识库、DevOps 等）请在终端使用对应 CLI 命令。
 
 ## 凭证配置
 
