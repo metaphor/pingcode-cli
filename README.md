@@ -268,7 +268,7 @@ pingcode workitem list --state 进行中 --compact
 
 ## 工作区缓存
 
-CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，该目录已被 `.gitignore` 忽略。缓存内容包括：
+CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，建议在项目 `.gitignore` 中忽略该目录。缓存内容包括：
 - 当前项目 ID / 名称
 - 当前迭代 ID / 名称
 - 用户列表或项目成员列表
@@ -276,8 +276,6 @@ CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，�
 - 工作项状态字典
 - 工作项优先级字典
 - 工作项属性字典
-
-首次写入默认缓存时，如果当前项目已有 `.gitignore`，CLI 会自动确保 `.pingcode/` 已加入忽略列表。
 
 相对的缓存路径不随进程 cwd 漂移：CLI 会向上查找最近的已存在缓存（以 git 仓库根为边界），没有则锚定到 `git rev-parse --show-toplevel`，都不满足时才落到当前目录。因此在仓库子目录里执行命令，读写的是仓库根的同一份缓存。绝对路径与 `~/` 开头路径不受影响。
 
