@@ -30,6 +30,7 @@ token.json
 .claude/
 .codex/skills/
 .claude/skills/
+.codegraph/
 
 # OpenCode / agent runtime state
 .omo/
