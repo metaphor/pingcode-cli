@@ -8,7 +8,7 @@ const { spawnSync } = require('node:child_process');
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 function runInstall(args, env = process.env, input = null, cwd = REPO_ROOT) {
-  return spawnSync('node', [path.join(REPO_ROOT, 'bin/install.js'), ...args], {
+  return spawnSync('node', [path.join(REPO_ROOT, 'scripts/pingcode.js'), 'install', ...args], {
     cwd,
     encoding: 'utf8',
     env,
@@ -456,7 +456,7 @@ test('windows platform prints npm install guidance', () => {
       "const Module = require('module');",
       "const origCompile = Module.prototype._compile;",
       "Module.prototype._compile = function(content, filename) {",
-      "  if (filename.includes('bin/install.js')) {",
+      "  if (filename.includes('commands/install.js')) {",
       "    content = content.replace('process.platform === \"win32\"', 'true');",
       "  }",
       "  return origCompile.call(this, content, filename);",
@@ -467,8 +467,8 @@ test('windows platform prints npm install guidance', () => {
     const target = path.join(home, 'pingcode');
     const result = spawnSync('node', [
       '--require', preloadPath,
-      path.join(REPO_ROOT, 'bin/install.js'),
-      '--target', target, '--force',
+      path.join(REPO_ROOT, 'scripts/pingcode.js'),
+      'install', '--target', target, '--force',
     ], {
       cwd: REPO_ROOT,
       encoding: 'utf8',

@@ -1,4 +1,9 @@
-#!/usr/bin/env node
+'use strict';
+
+// pingcode install — install (or update) the pingcode skill into supported
+// AI agent directories (Codex, OpenCode, and the general ~/.agents root).
+// Formerly the standalone `pingcode-cli` installer bin; merged into the CLI
+// so the package ships a single `pingcode` command.
 
 const fs = require("node:fs");
 const os = require("node:os");
@@ -6,7 +11,9 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { stdin, stdout } = require("node:process");
 
-const packageRoot = path.resolve(__dirname, "..");
+const shared = require("./shared");
+
+const packageRoot = path.resolve(__dirname, "..", "..");
 const SKILL = {
   name: "pingcode",
   entries: ["skills/pingcode/SKILL.md"],
@@ -60,7 +67,7 @@ function projectAgentRoots() {
 
 function usage() {
   return [
-    "Usage: npx @metaphorli/pingcode-cli [--force] [--target <dir>]",
+    "Usage: pingcode install [--force] [--target <dir>]",
     "                        [--codex-only|--opencode-only|--general-only]",
     "                        [--interactive|--non-interactive]",
     "",
@@ -72,14 +79,17 @@ function usage() {
     "  General:   ~/.agents/skills/pingcode",
     "",
     "Project-level install is supported via --target:",
-    "  npx @metaphorli/pingcode-cli --target \".opencode/skills\" --force",
-    "  npx @metaphorli/pingcode-cli --target \".agents/skills\" --force",
+    '  pingcode install --target ".opencode/skills" --force',
+    '  pingcode install --target ".agents/skills" --force',
     "",
     "Interactive install lets you choose global/project scope and agents:",
-    "  npx @metaphorli/pingcode-cli --interactive",
+    "  pingcode install --interactive",
     "",
     "Non-interactive auto-install (useful for CI/scripts):",
-    "  npx @metaphorli/pingcode-cli --non-interactive",
+    "  pingcode install --non-interactive",
+    "",
+    "Without a global install, run the installer via npx:",
+    "  npx @metaphorli/pingcode-cli@latest install [options]",
     "",
     "Options:",
     "  --force            Overwrite existing installs in every selected root",
@@ -525,8 +535,8 @@ function runInteractiveInstall(options) {
   });
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
+async function run(argv) {
+  const options = parseArgs(argv || []);
   if (options.help) {
     console.log(usage());
     return 0;
@@ -546,14 +556,19 @@ async function main() {
     code = runMultiRootInstall(options);
   }
   installGlobalWrapper();
+  // The dispatcher exits with process.exitCode, so publish the installer's
+  // 0/1/2 status (ok / failed / partial success) there.
+  process.exitCode = code;
   return code;
 }
 
-main().then((code) => {
-  process.exitCode = code;
-}).catch((error) => {
-  console.error(`error: ${error.message}`);
-  console.error("");
-  console.error(usage());
-  process.exitCode = 1;
+shared.registerModule("install", {
+  name: "install",
+  description: "Install the pingcode skill into AI agents (Codex, OpenCode, general)",
+  run,
 });
+
+module.exports = {
+  run, parseArgs, usage, installToTarget, installGlobalWrapper,
+  AGENT_KEYS, SKILL,
+};

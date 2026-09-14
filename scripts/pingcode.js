@@ -22,7 +22,7 @@ require('./commands/config');
 require('./commands/context');
 require('./commands/deliverable');
 require('./commands/directory');
-require('./commands/idea');
+require('./commands/install');
 require('./commands/mcp');
 require('./commands/plans');
 require('./commands/platform');
@@ -36,7 +36,7 @@ require('./commands/sprint');
 require('./commands/tag');
 require('./commands/testhub');
 require('./commands/ticket');
-require('./commands/version');
+require('./commands/update');
 require('./commands/wiki');
 require('./commands/workitem');
 require('./commands/workload');
@@ -58,6 +58,13 @@ async function dispatcherMain(argv) {
     process.exit(0);
   }
 
+  // (1.5) -v / --version → print the running version and check npm for the
+  // latest release (best effort; offline degrades to a stderr notice).
+  if (tokens[0] === '-v' || tokens[0] === '--version') {
+    await require('./commands/update').printVersionInfo();
+    process.exit(0);
+  }
+
   const firstArg = tokens[0];
 
   // (2) Recognised module name → dispatch to that module.
@@ -65,7 +72,9 @@ async function dispatcherMain(argv) {
   if (mod) {
     try {
       await mod.run(tokens.slice(1));
-      process.exit(0);
+      // Modules may signal a non-zero exit (e.g. install partial failures)
+      // via process.exitCode; honor it while defaulting to success.
+      process.exit(process.exitCode || 0);
     } catch (exc) {
       fatal(exc.message);
     }

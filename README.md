@@ -1,11 +1,11 @@
 # PingCode CLI
 
-让 AI Agent 和开发者通过官方 REST API 操作 PingCode 的 Node.js 工具：**CLI（pingcode 命令，26 个模块 / 432 个子命令）**、**MCP 服务（pingcode mcp，20 个策展工具）** 与一份极简 skill 路由卡。
+让 AI Agent 和开发者通过官方 REST API 操作 PingCode 的 Node.js 工具：**CLI（pingcode 命令，28 个模块 / 432 个子命令，含 `install` skill 安装器与 `update` 自更新）**、**MCP 服务（pingcode mcp，20 个策展工具）** 与一份极简 skill 路由卡。
 
 ## 安装
 
 ```bash
-npx @metaphorli/pingcode-cli@latest
+npx @metaphorli/pingcode-cli@latest install
 ```
 
 一条命令会检测当前用户已存在的 Codex / OpenCode 目录，并只安装到这些已有 Agent。每个 Agent 的 skills 根目录下会安装一个 `pingcode` skill 目录（仅 SKILL.md 单文件路由卡）：
@@ -31,7 +31,7 @@ export PINGCODE_CLIENT_SECRET="..."
 直接运行安装命令会进入交互式向导：
 
 ```bash
-npx @metaphorli/pingcode-cli@latest
+npx @metaphorli/pingcode-cli@latest install
 ```
 
 流程：
@@ -60,15 +60,24 @@ Enter choices (1-2): 2
 在自动化环境中使用 `--non-interactive`，会保持原来的自动检测并安装到已有 Agent 目录的逻辑：
 
 ```bash
-npx @metaphorli/pingcode-cli@latest --non-interactive --force
+npx @metaphorli/pingcode-cli@latest install --non-interactive --force
 ```
 
 ### 更新
 
-升级到最新版本（覆盖当前用户已存在 Agent 的默认目录）：
+升级 CLI 到最新版本（检查 npm 最新版本并全局升级）：
 
 ```bash
-npx @metaphorli/pingcode-cli@latest --force
+pingcode update            # 检查并升级到最新版
+pingcode update --check    # 只检查，不安装
+```
+
+未全局安装时，等价命令是 `npm install -g @metaphorli/pingcode-cli@latest`；`pingcode -v` 会显示当前版本并顺带检查 npm 上的最新版本。
+
+升级后刷新已安装的 skill 文件：
+
+```bash
+npx @metaphorli/pingcode-cli@latest install --force
 ```
 
 ### 高级用法
@@ -76,16 +85,16 @@ npx @metaphorli/pingcode-cli@latest --force
 只安装到某一个 Agent：
 
 ```bash
-npx @metaphorli/pingcode-cli@latest --codex-only --force
-npx @metaphorli/pingcode-cli@latest --opencode-only --force
+npx @metaphorli/pingcode-cli@latest install --codex-only --force
+npx @metaphorli/pingcode-cli@latest install --opencode-only --force
 ```
 
 安装到自定义目录（例如项目本地的 `.codex/skills` 或 OpenCode 项目级 `.opencode/skills`）：
 
 ```bash
-npx @metaphorli/pingcode-cli@latest --target ".codex/skills" --force
-npx @metaphorli/pingcode-cli@latest --target "$HOME/.config/opencode/skills" --force
-npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
+npx @metaphorli/pingcode-cli@latest install --target ".codex/skills" --force
+npx @metaphorli/pingcode-cli@latest install --target "$HOME/.config/opencode/skills" --force
+npx @metaphorli/pingcode-cli@latest install --target ".opencode/skills" --force
 ```
 
 `--target` 与 `--codex-only` / `--opencode-only` 互斥；指定 `--target` 后只会安装到给定目录，不再走多 Agent 默认流程。
@@ -98,7 +107,7 @@ npx @metaphorli/pingcode-cli@latest --target ".opencode/skills" --force
 请帮我安装 PingCode CLI，让当前 AI Agent 可以通过 PingCode 官方 REST API 查询和操作项目/产品数据。
 
 安装要求：
-1. 直接运行：npx @metaphorli/pingcode-cli@latest --force
+1. 直接运行：npx @metaphorli/pingcode-cli@latest install --force
    该命令会检测当前用户已存在的 Codex 和 OpenCode 目录，并只把 skill 安装到这些已有 Agent 的个人 skills 目录。
 2. 安装结束后请检查对应 Agent skills 目录下是否存在 `pingcode` 目录，且目录里有 SKILL.md 入口文件（按你当前使用的 Agent 选择对应路径即可）：
    - ~/.codex/skills/pingcode/SKILL.md
@@ -219,6 +228,8 @@ Claude Desktop / Cursor 手动配置示例：
 | `attachment` | 附件：文件与代码片段上传、查询、删除 |
 | `context` | 工作区上下文：当前用户/项目/迭代与字典缓存 |
 | `auth` | 认证：用户令牌登录与状态查询 |
+| `install` | Skill 安装器：把 `pingcode` skill 安装/更新到 Codex、OpenCode 与通用 `.agents` 目录（全局安装后直接 `pingcode install`） |
+| `update` | 自更新：检查 npm 最新版本并全局升级（`--check` 只检查）；`pingcode -v` 显示当前版本并校验最新版本 |
 | `mcp` | MCP 服务与客户端配置 |
 
 所有模块均支持全局选项 `--dry-run`（预览请求）、`--compact`（精简输出）及连接/凭证选项。
