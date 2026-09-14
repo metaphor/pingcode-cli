@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const { execSync } = require('node:child_process');
 
 const DEFAULT_BASE_URL = 'https://open.pingcode.com';
 const DEFAULT_TOKEN_CACHE = '~/.cache/pingcode/token.json';
@@ -106,6 +107,47 @@ function expandUserPath(value) {
     return path.join(os.homedir(), value.slice(2));
   }
   return value;
+}
+
+function findGitToplevel(startDir) {
+  try {
+    const output = execSync('git rev-parse --show-toplevel', {
+      cwd: startDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const toplevel = output.trim();
+    return toplevel || null;
+  } catch (exc) {
+    return null;
+  }
+}
+
+function findNearestCacheAnchor(startDir, relativeCache, boundaryDir) {
+  let dir = path.resolve(startDir);
+  const boundary = boundaryDir ? path.resolve(boundaryDir) : null;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, relativeCache))) return dir;
+    if (boundary && dir === boundary) return null;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// Relative workspace cache paths anchor to a stable workspace root instead of
+// the process cwd: the nearest existing cache between cwd and the git
+// toplevel, else the git toplevel, else cwd. Absolute and ~/ paths unchanged.
+function resolveWorkspaceCachePath(value) {
+  if (!value) return value;
+  const expanded = expandUserPath(value);
+  if (path.isAbsolute(expanded)) return expanded;
+  const toplevel = findGitToplevel(process.cwd());
+  const anchor =
+    findNearestCacheAnchor(process.cwd(), expanded, toplevel) ||
+    toplevel ||
+    process.cwd();
+  return path.join(anchor, expanded);
 }
 
 function loadWorkspaceCache(cachePath) {
@@ -699,7 +741,7 @@ class PingCodeClient {
     this.clientSecret = client_secret;
     this.token = token;
     this.tokenCache = token_cache ? expandUserPath(token_cache) : null;
-    this.workspaceCachePath = workspace_cache ? expandUserPath(workspace_cache) : null;
+    this.workspaceCachePath = workspace_cache ? resolveWorkspaceCachePath(workspace_cache) : null;
     this.workspaceCache = loadWorkspaceCache(this.workspaceCachePath);
     this.grantType = grant_type;
   }
@@ -1365,8 +1407,8 @@ module.exports = {
   DEFAULT_BASE_URL,
   DEFAULT_TOKEN_CACHE,
   DEFAULT_WORKSPACE_CACHE,
+  resolveWorkspaceCachePath,
   HTTP_METHODS,
-  MAX_SELECTION_OPTIONS,
   CLI_COMMAND,
   CTX_COMMAND,
   AUTH_ENV_GUIDANCE,

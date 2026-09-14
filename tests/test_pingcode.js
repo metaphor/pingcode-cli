@@ -1047,3 +1047,98 @@ testInCleanEnv('dispatcher --method flag fails with unknown module after cleanup
   assert.strictEqual(result.status, 1);
   assert.ok(result.stderr.includes('Unknown module'));
 });
+
+// ── Workspace cache path anchoring ──────────────────────────────────
+
+const { execSync } = require('node:child_process');
+
+function withCwd(dir, fn) {
+  const original = process.cwd();
+  process.chdir(dir);
+  try {
+    return fn();
+  } finally {
+    process.chdir(original);
+  }
+}
+
+function makeGitRepo(dir) {
+  execSync('git init -q', { cwd: dir });
+}
+
+testInCleanEnv('workspace cache path keeps absolute paths unchanged', () => {
+  const absolute = path.join(path.sep, 'tmp', 'pingcode', 'cache.json');
+  assert.strictEqual(core.resolveWorkspaceCachePath(absolute), absolute);
+});
+
+testInCleanEnv('workspace cache path expands ~ without cwd anchoring', () => {
+  const resolved = core.resolveWorkspaceCachePath('~/.pingcode/cache.json');
+  assert.strictEqual(resolved, path.join(os.homedir(), '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('workspace cache anchors to git toplevel from a subdirectory', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  const repo = path.join(tmpdir, 'repo');
+  const sub = path.join(repo, 'a', 'b');
+  fs.mkdirSync(sub, { recursive: true });
+  makeGitRepo(repo);
+  const resolved = withCwd(sub, () => core.resolveWorkspaceCachePath('.pingcode/cache.json'));
+  assert.strictEqual(resolved, path.join(repo, '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('nearest existing cache between cwd and toplevel wins', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  const repo = path.join(tmpdir, 'repo');
+  const pkg = path.join(repo, 'pkg');
+  const sub = path.join(pkg, 'src');
+  fs.mkdirSync(sub, { recursive: true });
+  makeGitRepo(repo);
+  fs.mkdirSync(path.join(pkg, '.pingcode'));
+  fs.writeFileSync(path.join(pkg, '.pingcode', 'cache.json'), '{}');
+  const resolved = withCwd(sub, () => core.resolveWorkspaceCachePath('.pingcode/cache.json'));
+  assert.strictEqual(resolved, path.join(pkg, '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('git repo without cache prefers toplevel over ancestor cache', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  const repo = path.join(tmpdir, 'repo');
+  fs.mkdirSync(repo, { recursive: true });
+  makeGitRepo(repo);
+  fs.mkdirSync(path.join(tmpdir, '.pingcode'));
+  fs.writeFileSync(path.join(tmpdir, '.pingcode', 'cache.json'), '{}');
+  const resolved = withCwd(repo, () => core.resolveWorkspaceCachePath('.pingcode/cache.json'));
+  assert.strictEqual(resolved, path.join(repo, '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('non-git directory picks up nearest ancestor cache', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  fs.mkdirSync(path.join(tmpdir, '.pingcode'));
+  fs.writeFileSync(path.join(tmpdir, '.pingcode', 'cache.json'), '{}');
+  const sub = path.join(tmpdir, 'x');
+  fs.mkdirSync(sub);
+  const resolved = withCwd(sub, () => core.resolveWorkspaceCachePath('.pingcode/cache.json'));
+  assert.strictEqual(resolved, path.join(tmpdir, '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('non-git directory without ancestor cache falls back to cwd', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  const resolved = withCwd(tmpdir, () => core.resolveWorkspaceCachePath('.pingcode/cache.json'));
+  assert.strictEqual(resolved, path.join(tmpdir, '.pingcode', 'cache.json'));
+});
+
+testInCleanTmp('client writes cache at git toplevel when constructed in subdirectory', (t, tmpdir) => {
+  tmpdir = fs.realpathSync(tmpdir);
+  const repo = path.join(tmpdir, 'repo');
+  const sub = path.join(repo, 'a');
+  fs.mkdirSync(sub, { recursive: true });
+  makeGitRepo(repo);
+  const client = withCwd(sub, () => new core.PingCodeClient({
+    workspace_cache: core.DEFAULT_WORKSPACE_CACHE,
+    token_cache: path.join(tmpdir, 'token.json'),
+  }));
+  assert.strictEqual(client.workspaceCachePath, path.join(repo, '.pingcode', 'cache.json'));
+  client.workspaceCache.preferences.current_user_id = 'u1';
+  client.saveWorkspaceCache();
+  assert.ok(fs.existsSync(path.join(repo, '.pingcode', 'cache.json')));
+  assert.ok(!fs.existsSync(path.join(sub, '.pingcode')));
+});
