@@ -2,6 +2,7 @@
 
 const core = require('../core');
 const shared = require('./shared');
+const richText = require('../rich_text');
 
 // ── Identifier helpers ─────────────────────────────────────────────────
 
@@ -90,7 +91,9 @@ function printSubcommandHelp(subcommand) {
         '  --product ID                 (required) Raw product id',
         '  --title TEXT                 (required) Idea title (max 255 chars)',
         '  --assignee NAME              Assignee (name resolvable from workspace cache)',
-        '  --description TEXT           Description',
+        '  --description TEXT           Description (Markdown or plain text; converted',
+        '                               to rich-text HTML. Use --description-format)',
+        '  --description-format FMT     auto (default), markdown, html, or text',
         '  --suite ID                   Raw suite id',
         '  --priority ID                Raw priority id',
         '  --properties JSON            Properties as JSON object',
@@ -108,7 +111,9 @@ function printSubcommandHelp(subcommand) {
         '',
         'Options:',
         '  --title TEXT                 New title',
-        '  --description TEXT           New description',
+        '  --description TEXT           New description (Markdown converted to rich-text',
+        '                               HTML unless --description-format says otherwise)',
+        '  --description-format FMT     auto (default), markdown, html, or text',
         '  --state ID                   Raw state id',
         '  --priority ID                Raw priority id',
         '  --assignee NAME              Assignee (name resolvable from workspace cache)',
@@ -751,6 +756,7 @@ function parseCreateArgs(tokens) {
     title: null,
     assignee: null,
     description: null,
+    descriptionFormat: null,
     suite: null,
     priority: null,
     properties: null,
@@ -760,6 +766,7 @@ function parseCreateArgs(tokens) {
     '--title': 'title',
     '--assignee': 'assignee',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--suite': 'suite',
     '--priority': 'priority',
     '--properties': 'properties',
@@ -811,9 +818,9 @@ async function runCreate(client, opts, args) {
     title: args.title,
   };
 
-  // Description
+  // Description (converted to PingCode rich-text HTML)
   if (args.description) {
-    body.description = args.description;
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
   }
 
   // Suite (raw ID)
@@ -860,6 +867,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFormat: null,
     state: null,
     priority: null,
     assignee: null,
@@ -873,6 +881,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--state': 'state',
     '--priority': 'priority',
     '--assignee': 'assignee',
@@ -920,7 +929,7 @@ function parseUpdateArgs(tokens) {
   }
 
   const hasUpdateField = Object.entries(args).some(
-    ([key, value]) => key !== 'target' && value !== null,
+    ([key, value]) => key !== 'target' && key !== 'descriptionFormat' && value !== null,
   );
   if (!hasUpdateField) {
     throw new core.PingCodeError('At least one field to update is required. Use idea update --help for usage.');
@@ -963,7 +972,9 @@ async function runUpdate(client, opts, args) {
   const body = {};
 
   if (args.title) body.title = args.title;
-  if (args.description) body.description = args.description;
+  if (args.description) {
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  }
 
   if (args.state) {
     if (!isRawId(args.state)) {

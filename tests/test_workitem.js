@@ -916,7 +916,7 @@ testInCleanTmp('workitem update passes description and cached refs', async (t, t
   assert.strictEqual(result.json.state_id, 'state-open');
   assert.strictEqual(result.json.priority_id, 'prio-2');
   assert.strictEqual(result.json.assignee_id, 'user-bob');
-  assert.strictEqual(result.json.description, 'New description');
+  assert.strictEqual(result.json.description, '<p>New description</p>');
 });
 
 testInCleanTmp('workitem update numeric and timestamp fields', async (t, tmpdir) => {
@@ -1130,7 +1130,64 @@ testInCleanTmp('workitem create with --description passes description in body', 
   }
 
   const result = JSON.parse(output.trim());
-  assert.strictEqual(result.json.description, 'Some description text');
+  assert.strictEqual(result.json.description, '<p>Some description text</p>');
+});
+
+testInCleanTmp('workitem create converts markdown description to rich-text HTML', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'create',
+      '--title', 'With md desc',
+      '--description', '# 标题\n\n- 第一项',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '<h1>标题</h1><ul><li>第一项</li></ul>');
+});
+
+testInCleanTmp('workitem create --description-format html passes description verbatim', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+  });
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'create',
+      '--title', 'With html desc',
+      '--description', '# not markdown',
+      '--description-format', 'html',
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '# not markdown');
 });
 
 testInCleanTmp('workitem create with --parent passes parent_id', async (t, tmpdir) => {

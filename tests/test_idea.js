@@ -316,7 +316,7 @@ testInCleanTmp('idea create dry-run with all optional fields', async (t, tmpdir)
   assert.strictEqual(result.path, '/v1/ship/ideas');
   assert.strictEqual(result.json.product_id, '6422711c3f12e6c1e46d40e9');
   assert.strictEqual(result.json.title, 'Full idea');
-  assert.strictEqual(result.json.description, 'A description');
+  assert.strictEqual(result.json.description, '<p>A description</p>');
   assert.strictEqual(result.json.suite_id, '5cb9466afda1ce4ca0090001');
   assert.strictEqual(result.json.priority_id, '5cb9466afda1ce4ca0090005');
   assert.strictEqual(result.json.assignee_id, 'user-99');

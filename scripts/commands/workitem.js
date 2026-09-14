@@ -2,6 +2,7 @@
 
 const core = require('../core');
 const shared = require('./shared');
+const richText = require('../rich_text');
 
 // ── Extra global boolean flags ──────────────────────────────────────
 const EXTRA_BOOLEAN_FLAGS = ['--all-users', '--all-projects', '--all-sprints'];
@@ -335,6 +336,7 @@ function parseCreateArgs(tokens) {
     state: null,
     priority: null,
     description: null,
+    descriptionFormat: null,
     parent: null,
   };
   const stringFlags = {
@@ -346,6 +348,7 @@ function parseCreateArgs(tokens) {
     '--state': 'state',
     '--priority': 'priority',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--parent': 'parent',
   };
 
@@ -432,9 +435,9 @@ async function runCreate(client, opts, args) {
     body.priority_id = priorityItem.id;
   }
 
-  // Description
+  // Description (converted to PingCode rich-text HTML)
   if (args.description) {
-    body.description = args.description;
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
   }
 
   // Parent
@@ -554,6 +557,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFormat: null,
     type: null,
     project: null,
     sprint: null,
@@ -576,6 +580,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--type': 'type',
     '--project': 'project',
     '--sprint': 'sprint',
@@ -634,7 +639,7 @@ function parseUpdateArgs(tokens) {
   }
 
   const hasUpdateField = Object.entries(args).some(
-    ([key, value]) => key !== 'target' && value !== null,
+    ([key, value]) => key !== 'target' && key !== 'descriptionFormat' && value !== null,
   );
   if (!hasUpdateField) {
     throw new core.PingCodeError('At least one field to update is required. Use workitem update --help for usage.');
@@ -679,7 +684,9 @@ async function runUpdate(client, opts, args) {
   const body = {};
 
   if (args.title) body.title = args.title;
-  if (args.description) body.description = args.description;
+  if (args.description) {
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  }
 
   if (args.project) {
     const projectItem = findCachedProject(cache, args.project);
@@ -1362,7 +1369,9 @@ function printSubcommandHelp(subcommand) {
         '  --assignee <name|id|@me>  Assignee (defaults to @me)',
         '  --state <name|id>         Initial state',
         '  --priority <name|id>      Priority',
-        '  --description TEXT        Description text',
+        '  --description TEXT        Description (Markdown or plain text; converted to',
+        '                            rich-text HTML. Use --description-format to override)',
+        '  --description-format FMT  auto (default), markdown, html, or text',
         '  --parent <id|identifier>  Parent work item',
       ].join('\n'));
       break;
@@ -1383,7 +1392,9 @@ function printSubcommandHelp(subcommand) {
         '',
         'Options:',
         '  --title TEXT              New title',
-        '  --description TEXT        New description',
+        '  --description TEXT        New description (Markdown converted to rich-text',
+        '                            HTML unless --description-format says otherwise)',
+        '  --description-format FMT  auto (default), markdown, html, or text',
         '  --type <name|id>          New work item type',
         '  --project <id|name>       New project',
         '  --sprint <id|name>        New sprint',

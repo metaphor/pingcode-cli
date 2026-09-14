@@ -46,6 +46,8 @@ pingcode workitem update SCR-123 --title "修正后的标题" --priority 高 --s
 pingcode workitem create --title "test" --type task --dry-run
 ```
 
+正文格式：`workitem create/update`、`comment create`、`idea create/update`、`ticket create/update` 的 `--description`（comment 为 `--content`）接受 Markdown 或纯文本，发送前自动转为 PingCode 富文本 HTML；已是 HTML 的输入原样透传。可用 `--description-format`（comment 为 `--content-format`）指定 `auto`（默认）/`markdown`/`html`/`text`。
+
 ## 凭证配置
 
 在 PingCode 企业后台创建应用，配置数据访问范围，然后设置环境变量：

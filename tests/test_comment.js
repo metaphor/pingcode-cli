@@ -139,7 +139,7 @@ testInCleanTmp('comment create with identifier returns compound dry-run', async 
   assert.ok(result.post);
   assert.strictEqual(result.post.method, 'POST');
   assert.strictEqual(result.post.path, '/v1/comments');
-  assert.strictEqual(result.post.json.content, 'hello');
+  assert.strictEqual(result.post.json.content, '<p>hello</p>');
   assert.strictEqual(result.post.json.principal_type, 'work_item');
   assert.strictEqual(result.post.json.principal_id, '{id}');
 });
@@ -167,7 +167,7 @@ testInCleanTmp('comment create with raw id returns flat dry-run', async (t, tmpd
   assert.strictEqual(result.dry_run, true);
   assert.strictEqual(result.method, 'POST');
   assert.strictEqual(result.path, '/v1/comments');
-  assert.strictEqual(result.json.content, 'hello');
+  assert.strictEqual(result.json.content, '<p>hello</p>');
   assert.strictEqual(result.json.principal_id, '5edca524cad2fa1125cb0630');
   assert.strictEqual(result.json.principal_type, 'work_item');
   assert.strictEqual('resolution' in result, false);
@@ -194,7 +194,7 @@ testInCleanTmp('comment create with --reply-to includes reply_comment_id', async
   }
 
   const result = JSON.parse(output.trim());
-  assert.strictEqual(result.post.json.content, 'reply');
+  assert.strictEqual(result.post.json.content, '<p>reply</p>');
   assert.strictEqual(result.post.json.reply_comment_id, 'cmt-789');
 });
 

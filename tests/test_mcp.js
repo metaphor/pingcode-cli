@@ -519,7 +519,7 @@ testInCleanTmp('pingcode_comment_create posts a comment', async (t, tmpdir) => {
   const body = JSON.parse(calls[1].options.body);
   assert.strictEqual(body.principal_type, 'work_item');
   assert.strictEqual(body.principal_id, 'a1b2c3d4e5f6');
-  assert.strictEqual(body.content, 'LGTM');
+  assert.strictEqual(body.content, '<p>LGTM</p>');
   assert.strictEqual(comment.id, 'c-1');
 });
 

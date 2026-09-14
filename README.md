@@ -120,7 +120,7 @@ npx @metaphorli/pingcode-cli@latest install --target ".opencode/skills" --force
 
 - 使用 `client_credentials` 获取 PingCode 企业令牌
 - 通过 OAuth2 `authorization_code` 获取用户令牌（`pingcode auth login`，含 `refresh_token` 自动刷新）
-- 工作项全生命周期：查询、高级搜索（`workitem search` 组合过滤）、创建、更新、批量更新、删除、流转记录、子工作项，以及高频一键命令 `workitem my`（我的未完成项）/ `start`（转为进行中）/ `done`（转为已完成）
+- 工作项全生命周期：查询、高级搜索（`workitem search` 组合过滤）、创建、更新、批量更新、删除、流转记录、子工作项，以及高频一键命令 `workitem my`（我的未完成项）/ `start`（转为进行中）/ `done`（转为已完成）；`--description` 正文接受 Markdown，发送前自动转为 PingCode 富文本 HTML
 - **MCP 服务**：`pingcode mcp` 启动薄 MCP 层（20 个策展工具），`pingcode mcp init` 一键注册到 Codex / OpenCode / Oh My Pi 等客户端
 - 项目管理：项目 CRUD/克隆/进度/成员/项目属性，迭代（含分组/类别/批量创建），看板（看板栏/泳道），发布版本（阶段/分组/类别）
 - 工作项标签、关联、交付目标、关注人、跨资源关联、活动记录

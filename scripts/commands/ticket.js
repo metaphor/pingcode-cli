@@ -2,6 +2,7 @@
 
 const core = require('../core');
 const shared = require('./shared');
+const richText = require('../rich_text');
 
 // ── Identifier helpers ─────────────────────────────────────────────────
 
@@ -222,7 +223,9 @@ function printSubcommandHelp(subcommand) {
         '  --product ID              (required) Raw product id',
         '  --title TEXT              (required) Ticket title (max 255 chars)',
         '  --type ID                 (required) Raw ticket type id',
-        '  --description TEXT        Ticket description',
+        '  --description TEXT        Ticket description (Markdown or plain text;',
+        '                            converted to rich-text HTML. Use --description-format)',
+        '  --description-format FMT  auto (default), markdown, html, or text',
         '  --submitter ID            Raw submitter user id',
         '  --customer ID             Raw customer id',
         '  --channel ID              Raw channel id',
@@ -242,7 +245,9 @@ function printSubcommandHelp(subcommand) {
         '',
         'Options:',
         '  --title TEXT              New title',
-        '  --description TEXT        New description',
+        '  --description TEXT        New description (Markdown converted to rich-text',
+        '                            HTML unless --description-format says otherwise)',
+        '  --description-format FMT  auto (default), markdown, html, or text',
         '  --type ID                 New ticket type id',
         '  --state ID                New ticket state id',
         '  --assignee ID             New assignee user id',
@@ -605,6 +610,7 @@ function parseCreateArgs(tokens) {
     title: null,
     type: null,
     description: null,
+    descriptionFormat: null,
     submitter: null,
     customer: null,
     channel: null,
@@ -617,6 +623,7 @@ function parseCreateArgs(tokens) {
     '--title': 'title',
     '--type': 'type',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--submitter': 'submitter',
     '--customer': 'customer',
     '--channel': 'channel',
@@ -688,7 +695,7 @@ async function runCreate(client, opts, args) {
     type_id: args.type,
   };
   if (args.description) {
-    body.description = args.description;
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
   }
   for (const [, bodyKey, value] of optionalIds) {
     if (value) {
@@ -715,6 +722,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFormat: null,
     type: null,
     state: null,
     assignee: null,
@@ -727,6 +735,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-format': 'descriptionFormat',
     '--type': 'type',
     '--state': 'state',
     '--assignee': 'assignee',
@@ -773,7 +782,7 @@ function parseUpdateArgs(tokens) {
   }
 
   const hasUpdateField = Object.entries(args).some(
-    ([key, value]) => key !== 'target' && value !== null,
+    ([key, value]) => key !== 'target' && key !== 'descriptionFormat' && value !== null,
   );
   if (!hasUpdateField) {
     throw new core.PingCodeError('At least one field to update is required. Use ticket update --help for usage.');
@@ -803,7 +812,7 @@ async function runUpdate(client, opts, args) {
     body.title = args.title;
   }
   if (args.description) {
-    body.description = args.description;
+    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
   }
   for (const [, bodyKey, value] of idFields) {
     if (value) {

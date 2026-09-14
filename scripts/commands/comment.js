@@ -2,6 +2,7 @@
 
 const core = require('../core');
 const shared = require('./shared');
+const richText = require('../rich_text');
 
 function isIdentifier(arg) {
   return /^[A-Z]{3,6}-\d+$/.test(arg);
@@ -71,11 +72,13 @@ function compactCommentResponse(payload) {
 function parseCreateArgs(tokens) {
   const args = {
     content: null,
+    content_format: null,
     reply_to: null,
     principal_type: null,
   };
   const stringFlags = {
     '--content': 'content',
+    '--content-format': 'content_format',
     '--reply-to': 'reply_to',
     '--principal-type': 'principal_type',
   };
@@ -141,7 +144,7 @@ async function runCreate(client, opts, args, positionals) {
 
   const body = {
     principal_type: principalType,
-    content: args.content,
+    content: richText.convertRichText(args.content, args.content_format, { flag: '--content-format' }),
   };
 
   if (args.reply_to) {
@@ -561,7 +564,9 @@ function printSubcommandHelp(subcommand) {
         'Create a comment on a principal. --principal-type defaults to work_item.',
         '',
         'Options:',
-        '  --content TEXT            Comment content (required, non-empty)',
+        '  --content TEXT            Comment content (required, non-empty; Markdown',
+        '                            converted to rich-text HTML unless --content-format)',
+        '  --content-format FMT      auto (default), markdown, html, or text',
         '  --reply-to COMMENT_ID     Reply to an existing comment',
         '  --principal-type TYPE     Principal type (default: work_item; also work_item_deliverable, test_case, test_run, idea, ticket, page)',
       ].join('\n'));
