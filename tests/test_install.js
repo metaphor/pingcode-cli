@@ -577,3 +577,57 @@ test('wrapper keeps pointing at the running copy outside the npx cache', { skip:
     assert.strictEqual(fake.calls.length, 0, 'npm should not run for a non-npx copy');
   });
 });
+
+// ── Interactive install flow ────────────────────────────────────────
+
+const { PassThrough } = require('node:stream');
+const { fakeTtyStreams, collectOutput } = require('./helpers');
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('interactive install uses arrow menus on a TTY and installs the checked agents', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+  const calls = [];
+  const fakeInstall = (target) => {
+    calls.push(target);
+    return { subTargets: [] };
+  };
+
+  const pending = install.runInteractiveInstall({}, { input, output }, fakeInstall);
+  await delay(30);
+  input.write('\r'); // scope: Global (pre-highlighted first entry)
+  await delay(30);
+  input.write(' '); // untoggle the highlighted agent (Codex)
+  await delay(30);
+  input.write('\r'); // confirm the remaining agents
+  const code = await pending;
+
+  assert.strictEqual(code, 0);
+  assert.strictEqual(calls.length, 2, 'only the two remaining agents install');
+  assert.ok(!calls.some((target) => target.includes(path.join('.codex', 'skills'))), 'untoggled agent must not install');
+  assert.ok(calls.every((target) => target.includes(path.join('.config', 'opencode', 'skills')) || target.includes(path.join('.agents', 'skills'))));
+  const plain = chunks.join('').replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
+  assert.ok(plain.includes('Select install scope: (1/2)'));
+  assert.ok(plain.includes('Space toggle'), 'agent menu must advertise Space to toggle');
+  assert.strictEqual(input.rawMode, false, 'raw mode must be restored');
+});
+
+test('interactive install falls back to text prompts on piped stdin', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const calls = [];
+  const fakeInstall = (target) => {
+    calls.push(target);
+    return { subTargets: [] };
+  };
+
+  input.write('2\n1,3\n'); // scope: project; agents: 1 and 3
+  input.end();
+  const code = await install.runInteractiveInstall({}, { input, output }, fakeInstall);
+
+  assert.strictEqual(code, 0);
+  assert.strictEqual(calls.length, 2);
+  assert.ok(calls[0].includes(path.join('.codex', 'skills')));
+  assert.ok(calls[1].includes(path.join('.agents', 'skills')));
+});

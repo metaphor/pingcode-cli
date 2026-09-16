@@ -477,8 +477,59 @@ function printInteractiveSummary(successes, failures, scope) {
   }
 }
 
-function runInteractiveInstall(options) {
-  const rl = readline.createInterface({ input: stdin, output: stdout });
+// Copy the skill into every selected target and report per-target results.
+// Returns the process exit code: 0 ok, 1 all failed, 2 partial.
+function installWithSelection(scope, selectedKeys, options, installFn) {
+  const targets = buildTargets(scope, selectedKeys);
+  const successes = [];
+  const failures = [];
+
+  console.log("");
+  console.log("Installing...");
+  for (const target of targets) {
+    try {
+      const result = installFn(target.target, options);
+      successes.push({ ...target, subTargets: result.subTargets });
+    } catch (err) {
+      failures.push({ ...target, message: err.message });
+    }
+  }
+
+  printInteractiveSummary(successes, failures, scope);
+
+  if (successes.length === 0) return 1;
+  if (failures.length === 0) return 0;
+  return 2;
+}
+
+// Arrow-key flow for real terminals: scope as a single-select menu, agents as
+// a multi-select checklist with every agent preselected (the historical
+// "empty input installs all" default).
+async function arrowInteractiveInstall(options, streams, installFn) {
+  const roots = defaultAgentRoots();
+  const scope = await shared.arrowSelect({
+    title: "Select install scope",
+    input: streams.input,
+    output: streams.output,
+    options: [
+      { value: "global", label: "Global - install under home directory (e.g. ~/.config/opencode/skills)" },
+      { value: "project", label: "Project-level - install under current directory (e.g. ./.opencode/skills)" },
+    ],
+  });
+  const selectedKeys = await shared.arrowSelect({
+    title: "Select agents to install",
+    multi: true,
+    initialSelected: [...AGENT_KEYS],
+    input: streams.input,
+    output: streams.output,
+    options: AGENT_KEYS.map((key) => ({ value: key, label: roots[key].label })),
+  });
+  return installWithSelection(scope, selectedKeys, options, installFn);
+}
+
+// Text fallback for piped stdin, tests, and programmatic callers.
+function textInteractiveInstall(options, streams, installFn) {
+  const rl = readline.createInterface({ input: streams.input, output: streams.output });
   return new Promise((resolve, reject) => {
     let scope = null;
     let selectedKeys = null;
@@ -493,34 +544,14 @@ function runInteractiveInstall(options) {
     }
 
     function doInstall() {
+      let code;
       try {
-        const targets = buildTargets(scope, selectedKeys);
-        const successes = [];
-        const failures = [];
-
-        console.log("");
-        console.log("Installing...");
-        for (const target of targets) {
-          try {
-            const result = installToTarget(target.target, options);
-            successes.push({ ...target, subTargets: result.subTargets });
-          } catch (err) {
-            failures.push({ ...target, message: err.message });
-          }
-        }
-
-        printInteractiveSummary(successes, failures, scope);
-
-        if (successes.length === 0) {
-          finish(null, 1);
-        } else if (failures.length === 0) {
-          finish(null, 0);
-        } else {
-          finish(null, 2);
-        }
+        code = installWithSelection(scope, selectedKeys, options, installFn);
       } catch (err) {
         finish(err);
+        return;
       }
+      finish(null, code);
     }
 
     function askAgents() {
@@ -577,6 +608,17 @@ function runInteractiveInstall(options) {
   });
 }
 
+async function runInteractiveInstall(options, streams = {}, installFn = installToTarget) {
+  const io = {
+    input: streams.input || stdin,
+    output: streams.output || stdout,
+  };
+  if (io.input.isTTY && io.output.isTTY) {
+    return arrowInteractiveInstall(options, io, installFn);
+  }
+  return textInteractiveInstall(options, io, installFn);
+}
+
 async function run(argv) {
   const options = parseArgs(argv || []);
   if (options.help) {
@@ -613,5 +655,6 @@ shared.registerModule("install", {
 module.exports = {
   run, parseArgs, usage, installToTarget, installGlobalWrapper,
   isNpxCachePath, durableWrapperTarget,
+  runInteractiveInstall,
   AGENT_KEYS, SKILL,
 };
