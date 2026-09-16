@@ -83,6 +83,36 @@ test('compareVersions sorts prereleases below their release', () => {
   assert.strictEqual(update.compareVersions('1.0.0-beta.2', '1.0.0-beta.1'), 1);
 });
 
+// ── colorize ──────────────────────────────────────────────────────────
+
+test('colorize emits ANSI when enabled and plain text when disabled', () => {
+  assert.strictEqual(update.colorize('✔ Already up to date', update.YELLOW, true),
+    '\x1b[33m✔ Already up to date\x1b[0m');
+  assert.strictEqual(update.colorize('✓ Updated to 1.2.3', update.GREEN, true),
+    '\x1b[32m✓ Updated to 1.2.3\x1b[0m');
+  assert.strictEqual(update.colorize('plain', update.GREEN, false), 'plain');
+});
+
+test('colorEnabled honors NO_COLOR and FORCE_COLOR over TTY state', () => {
+  const originalNoColor = process.env.NO_COLOR;
+  const originalForce = process.env.FORCE_COLOR;
+  try {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    assert.strictEqual(update.colorEnabled({ isTTY: false }), false);
+    assert.strictEqual(update.colorEnabled({ isTTY: true }), true);
+    process.env.NO_COLOR = '1';
+    assert.strictEqual(update.colorEnabled({ isTTY: true }), false);
+    process.env.FORCE_COLOR = '1';
+    assert.strictEqual(update.colorEnabled({ isTTY: false }), true, 'FORCE_COLOR wins over NO_COLOR');
+  } finally {
+    if (originalNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = originalNoColor;
+    if (originalForce === undefined) delete process.env.FORCE_COLOR;
+    else process.env.FORCE_COLOR = originalForce;
+  }
+});
+
 // ── run() ─────────────────────────────────────────────────────────────
 
 test('update reports up to date without installing', async () => {
@@ -90,7 +120,9 @@ test('update reports up to date without installing', async () => {
   const { logs } = await withCapturedConsole(() =>
     update.run([], { npm: fake.npm, localVersion: () => '0.9.1' }));
   assert.strictEqual(fake.calls.length, 1);
-  assert.ok(logs.join('\n').includes('Already up to date'), logs.join('\n'));
+  assert.deepStrictEqual(logs[0], 'Current version: 0.9.1');
+  assert.ok(logs[1].includes('✔ Already up to date'), logs.join('\n'));
+  assert.strictEqual(logs.length, 2, logs.join('\n'));
 });
 
 test('update --check reports without installing', async () => {
@@ -98,7 +130,10 @@ test('update --check reports without installing', async () => {
   const { logs } = await withCapturedConsole(() =>
     update.run(['--check'], { npm: fake.npm, localVersion: () => '0.9.1' }));
   assert.strictEqual(fake.calls.length, 1, 'only npm view should run');
-  assert.ok(logs.join('\n').includes('Update available: 0.9.1 → 1.2.3'), logs.join('\n'));
+  assert.deepStrictEqual(logs[0], 'Current version: 0.9.1');
+  assert.ok(logs[1].includes('New version available: 1.2.3'), logs.join('\n'));
+  assert.ok(logs.join('\n').includes('Run `pingcode update` to install'), logs.join('\n'));
+  assert.ok(!logs.join('\n').includes('Updating...'), 'check mode must not install');
 });
 
 test('update upgrades the global package when behind', async () => {
@@ -112,8 +147,13 @@ test('update upgrades the global package when behind', async () => {
   assert.ok(installCall, 'npm install should run');
   assert.deepStrictEqual(installCall.args, ['install', '-g', '@metaphorli/pingcode-cli@latest']);
   assert.strictEqual(installCall.options.stdio, 'inherit');
-  assert.ok(logs.join('\n').includes('Updated to 1.2.3'), logs.join('\n'));
-  assert.ok(logs.join('\n').includes('pingcode install --force'), logs.join('\n'));
+  assert.deepStrictEqual(logs[0], 'Current version: 0.9.1');
+  const joined = logs.join('\n');
+  assert.ok(joined.includes('New version available: 1.2.3'), joined);
+  assert.ok(joined.includes('Updating...'), joined);
+  assert.ok(joined.includes('✓ Updated to 1.2.3'), joined);
+  assert.ok(!joined.includes(' at '), 'success line must not print a path');
+  assert.ok(joined.includes('pingcode install --force'), joined);
 });
 
 test('update surfaces npm view failures', async () => {

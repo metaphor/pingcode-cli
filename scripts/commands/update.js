@@ -15,6 +15,25 @@ const PACKAGE_NAME = shared.PACKAGE_NAME;
 const defaultNpm = shared.defaultNpm;
 const packageRoot = path.resolve(__dirname, "..", "..");
 
+// ── Output colors ─────────────────────────────────────────────────────
+// Green for "new version / updated", yellow for "already up to date".
+// Colors collapse to plain text on non-TTY output or under NO_COLOR.
+
+const RESET = "\x1b[0m";
+const GREEN = "\x1b[32m";
+const YELLOW = "\x1b[33m";
+
+function colorEnabled(stream = process.stdout) {
+  if (process.env.FORCE_COLOR && process.env.FORCE_COLOR !== "0") return true;
+  if (process.env.NO_COLOR) return false;
+  return Boolean(stream.isTTY);
+}
+
+function colorize(text, code, enabled = colorEnabled()) {
+  if (!enabled) return text;
+  return `${code}${text}${RESET}`;
+}
+
 function defaultLocalVersion() {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
   return pkg.version;
@@ -93,7 +112,7 @@ async function run(argv, deps = {}) {
   const localVersion = deps.localVersion || defaultLocalVersion;
 
   const current = localVersion();
-  console.log(`pingcode CLI ${current} — checking npm for updates...`);
+  console.log(`Current version: ${current}`);
 
   const view = npm(["view", PACKAGE_NAME, "version"]);
   if (view.error || view.status !== 0) {
@@ -103,16 +122,18 @@ async function run(argv, deps = {}) {
   const latest = view.stdout.trim().split("\n").pop().trim();
 
   if (compareVersions(latest, current) <= 0) {
-    console.log(`Already up to date (latest on npm: ${latest}).`);
+    console.log(colorize(`✔ Already up to date`, YELLOW));
     return 0;
   }
+
+  console.log(colorize(`New version available: ${latest}`, GREEN));
 
   if (options.check) {
-    console.log(`Update available: ${current} → ${latest}. Run \`pingcode update\` to install.`);
+    console.log(`Run \`pingcode update\` to install.`);
     return 0;
   }
 
-  console.log(`Updating ${current} → ${latest} via npm install -g ${PACKAGE_NAME}@latest ...`);
+  console.log("Updating...");
   const install = npm(["install", "-g", `${PACKAGE_NAME}@latest`], { stdio: "inherit" });
   if (install.error || install.status !== 0) {
     const detail = install.error ? install.error.message : `exit code ${install.status}`;
@@ -121,7 +142,7 @@ async function run(argv, deps = {}) {
     );
   }
 
-  console.log(`Updated to ${latest}.`);
+  console.log(colorize(`✓ Updated to ${latest}`, GREEN));
   refreshGlobalWrapper(npm);
   console.log("Run `pingcode install --force` to refresh installed skill files.");
   return 0;
@@ -232,5 +253,6 @@ shared.registerModule("update", {
 module.exports = {
   run, parseArgs, usage, compareVersions, printVersionInfo,
   findWrapperOnPath, wrapperTarget, refreshGlobalWrapper,
+  colorize, colorEnabled, GREEN, YELLOW,
   PACKAGE_NAME,
 };
