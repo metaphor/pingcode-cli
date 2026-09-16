@@ -23,6 +23,7 @@ package-lock.json
 .pingcode/
 pingcode-token*.json
 token.json
+pingcode-doctor-*.json
 
 # Local skill install targets
 .agents/

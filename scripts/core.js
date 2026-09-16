@@ -55,6 +55,25 @@ class PingCodeError extends Error {
   }
 }
 
+// ── Diagnostic sink (doctor mode) ────────────────────────────────────
+// When `--doctor` is active the dispatcher installs a sink here; every
+// HTTP exchange and workspace-cache hit is emitted into it. Diagnostics
+// are best effort: sink failures never affect command execution.
+let diagnosticSink = null;
+
+function setDiagnosticSink(sink) {
+  diagnosticSink = sink;
+}
+
+function emitDiagnostic(event) {
+  if (!diagnosticSink) return;
+  try {
+    diagnosticSink({ ts: new Date().toISOString(), ...event });
+  } catch (exc) {
+    // ignore: diagnostics must never break execution
+  }
+}
+
 function emptyWorkspaceCache() {
   return {
     version: 1,
@@ -880,17 +899,29 @@ class PingCodeClient {
     const url = buildUrl(this.baseUrl, rawPath, params);
     const headers = { Accept: 'application/json' };
     let fetchBody = undefined;
+    let bodyInfo = null;
     if (body !== null && body !== undefined) {
       if (body instanceof FormData) {
         fetchBody = body;
+        try {
+          bodyInfo = { type: 'form', fields: [...body.keys()].map(String) };
+        } catch (exc) {
+          bodyInfo = { type: 'form' };
+        }
       } else {
         fetchBody = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
+        bodyInfo = {
+          type: 'json',
+          keys: body && typeof body === 'object' ? Object.keys(body) : [],
+        };
       }
     }
     if (auth) {
       headers.Authorization = `Bearer ${await this.accessToken()}`;
     }
+    const startedAt = Date.now();
+    emitDiagnostic({ type: 'http_request', method, url, body: bodyInfo });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
@@ -901,11 +932,31 @@ class PingCodeClient {
         signal: controller.signal,
       });
       const content = await response.text();
+      const durationMs = Date.now() - startedAt;
       if (!response.ok) {
         const retryAfter = response.headers.get('x-pc-retry-after');
         const suffix = retryAfter ? ` retry_after=${retryAfter}` : '';
-        throw new PingCodeError(`HTTP ${response.status} ${response.statusText}.${suffix} ${content}`);
+        const message = `HTTP ${response.status} ${response.statusText}.${suffix} ${content}`;
+        emitDiagnostic({
+          type: 'http_error',
+          method,
+          url,
+          status: response.status,
+          duration_ms: durationMs,
+          // Response text may be long; bound it for the report.
+          error: message.length > 2000 ? message.slice(0, 2000) : message,
+        });
+        throw new PingCodeError(message);
       }
+      emitDiagnostic({
+        type: 'http_response',
+        method,
+        url,
+        status: response.status,
+        status_text: response.statusText,
+        duration_ms: durationMs,
+        bytes: content.length,
+      });
       if (!content) return {};
       try {
         const parsed = JSON.parse(content);
@@ -918,6 +969,14 @@ class PingCodeClient {
       }
     } catch (exc) {
       if (exc instanceof PingCodeError) throw exc;
+      emitDiagnostic({
+        type: 'http_error',
+        method,
+        url,
+        duration_ms: Date.now() - startedAt,
+        error: exc.message,
+        aborted: exc.name === 'AbortError',
+      });
       throw new PingCodeError(`Request failed: ${exc.message}`);
     } finally {
       clearTimeout(timeout);
@@ -943,6 +1002,7 @@ class PingCodeClient {
     if (use_workspace_cache) {
       const cached = cachedResponse(method, rawPath, requestParams, this.workspaceCache, this.baseUrl);
       if (cached !== null) {
+        emitDiagnostic({ type: 'workspace_cache_hit', method, raw_path: rawPath });
         return cached;
       }
     }
@@ -1408,6 +1468,7 @@ module.exports = {
   DEFAULT_TOKEN_CACHE,
   DEFAULT_WORKSPACE_CACHE,
   resolveWorkspaceCachePath,
+  setDiagnosticSink,
   HTTP_METHODS,
   CLI_COMMAND,
   CTX_COMMAND,

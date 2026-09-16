@@ -17,6 +17,8 @@ npx @metaphorli/pingcode-cli@latest install
 
 默认会进入交互式安装，先选择“全局 / 项目级”，再选择要安装的 Agent；在 CI 或脚本中可以使用 `--non-interactive` 保持旧的静默自动安装行为。任何一个已选择目录写入失败（权限、磁盘等问题）不会阻断其他目录，安装结束时会打印每个目录的成功/失败/跳过摘要。
 
+安装时还会在 `~/.local/bin/pingcode` 写入一个全局 wrapper，并把该目录加入 shell PATH。通过 npx 运行安装时，命令会先执行 `npm install -g @metaphorli/pingcode-cli@latest`，wrapper 指向这份持久的全局安装（而不是临时的 npx 缓存目录），因此后续 `pingcode update` 直接生效、不会出现"双安装"。
+
 如果设置了 `CODEX_HOME`，Codex 目录会变成 `$CODEX_HOME/skills/`；其他 Agent 的目录位置不受该变量影响。
 
 安装完成后，配置 PingCode 凭证（详见下文「凭证配置」一节）：
@@ -73,6 +75,8 @@ pingcode update --check    # 只检查，不安装
 ```
 
 未全局安装时，等价命令是 `npm install -g @metaphorli/pingcode-cli@latest`；`pingcode -v` 会显示当前版本并顺带检查 npm 上的最新版本。
+
+`pingcode update` 升级全局安装后，若 PATH 上的 `pingcode` 是指向 npx 缓存的旧 wrapper，会自动把它重新指向新的全局安装。从仍存在该问题的旧版本升级时，请先重跑一次 `npx @metaphorli/pingcode-cli@latest install` 修复 wrapper，之后的 `pingcode update` 即可完全自愈。
 
 升级后刷新已安装的 skill 文件：
 
@@ -315,6 +319,33 @@ pingcode context init
 使用 `$pingcode` skill 执行常规工作项查询或创建前，应先确认工作区缓存里有 `current_user_id`、`current_project_id`、`current_sprint_id`。缺少任一项时先运行 `pingcode context init`，完成后再重试原来的 PingCode 操作。
 
 查询工作项时，CLI 会自动补当前用户、当前项目、当前迭代过滤条件。用户明确要求“所有人”“全部项目”“全部迭代”时分别加 `--all-users`、`--all-projects`、`--all-sprints`。
+
+## 诊断排查（--doctor）
+
+命令执行失败、结果异常，或怀疑是跨平台环境问题（Windows 编码、代理、TLS、Node 版本等）时，在任意命令后追加 `--doctor` 重新执行一次：
+
+```bash
+# 正常执行
+pingcode auth login --client-id ID --client-secret SECRET
+
+# 带诊断执行：命令照常运行，结束后生成检测报告
+pingcode auth login --client-id ID --client-secret SECRET --doctor
+
+# 只检查环境、不执行业务命令
+pingcode --doctor
+```
+
+报告为 JSON 文件，**只生成在执行命令的当前目录**（`pingcode-doctor-<时间戳>.json`），不会自动发送或上传；需要排查时把该文件发给维护者即可。`--doctor-output <path>` 可指定报告文件或目录。
+
+报告内容（凭证与令牌在采集时即脱敏，只保留长度或首尾片段）：
+
+- **环境与系统参数**：CLI/Node 版本、OS/内核/架构、CPU/内存、locale 与编码（含 Windows 代码页）、PATH、代理与 TLS 相关环境变量
+- **凭证与缓存状态**：token 缓存/工作区缓存的存在性、可读性、JSON 合法性、过期时间（不含令牌值）
+- **执行日志**：每次 HTTP 请求/响应（方法、URL、状态码、耗时、错误）、工作区缓存命中、命令的 stdout/stderr 输出
+- **错误详情**：完整错误链与堆栈
+- **健康检查结论**：Node 版本达标、子进程可创建、临时目录/当前目录可写、非 ASCII 文件名读写、DNS 解析、API 可达性、时钟偏移等，给出 `healthy / degraded / unhealthy` 结论
+
+离线环境可设置 `PINGCODE_DOCTOR_NETWORK=0` 跳过网络探测。
 
 ## 参考资料
 

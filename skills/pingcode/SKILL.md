@@ -18,6 +18,7 @@ description: 操作 PingCode 数据（工作项、需求、产品、迭代、测
 3. 写操作先 `--dry-run` 预览。
 4. 列表输出加 `--compact`。
 5. 一切细节看 `pingcode <module> --help`。
+6. 命令失败、报错或怀疑环境问题（网络/编码/跨平台）时，在原命令后加 `--doctor` 重跑：报告生成在当前目录（`pingcode-doctor-*.json`，已脱敏，不会自动发送），把该文件交给维护者排查。
 
 ## 模块一览
 

@@ -24,7 +24,7 @@
     "scripts/"
   ],
   "scripts": {
-    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_workitem.js tests/test_auth.js tests/test_comment.js tests/test_idea.js tests/test_product.js tests/test_attachment.js tests/test_board.js tests/test_build.js tests/test_config.js tests/test_deliverable.js tests/test_directory.js tests/test_mcp.js tests/test_platform.js tests/test_plans.js tests/test_project.js tests/test_relation.js tests/test_release.js tests/test_review.js tests/test_rich_text.js tests/test_scm.js tests/test_sprint.js tests/test_tag.js tests/test_testhub.js tests/test_ticket.js tests/test_update.js tests/test_version.js tests/test_wiki.js tests/test_workload.js",
+    "test": "node --test tests/test_pingcode.js tests/test_install.js tests/test_context.js tests/test_doctor.js tests/test_workitem.js tests/test_auth.js tests/test_comment.js tests/test_idea.js tests/test_product.js tests/test_attachment.js tests/test_board.js tests/test_build.js tests/test_config.js tests/test_deliverable.js tests/test_directory.js tests/test_mcp.js tests/test_platform.js tests/test_plans.js tests/test_project.js tests/test_relation.js tests/test_release.js tests/test_review.js tests/test_rich_text.js tests/test_scm.js tests/test_sprint.js tests/test_tag.js tests/test_testhub.js tests/test_ticket.js tests/test_update.js tests/test_version.js tests/test_wiki.js tests/test_workload.js",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {

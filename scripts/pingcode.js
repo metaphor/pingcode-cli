@@ -50,11 +50,43 @@ function fatal(message) {
 }
 
 async function dispatcherMain(argv) {
-  const tokens = argv || process.argv.slice(2);
+  const rawTokens = argv || process.argv.slice(2);
+
+  // (0) Doctor mode: strip --doctor / --doctor-output from the token list
+  // and, when enabled, wrap the whole dispatch in a diagnostic session.
+  // The session records environment, HTTP traffic, output and errors,
+  // then writes a sanitized JSON report before the process exits.
+  const doctor = require('./doctor');
+  const { enabled, tokens, outputPath } = doctor.extractDoctorOptions(rawTokens);
+  const session = enabled ? new doctor.DoctorSession({ argv: rawTokens, outputPath }) : null;
+  if (session) {
+    session.start();
+    core.setDiagnosticSink((event) => session.recordEvent(event));
+    session.captureStreams();
+  }
+  // Finalize the report, flush streams (pipes are async and process.exit
+  // would truncate pending bytes), then exit. Doctor never changes a
+  // command's exit code; bare `pingcode --doctor` exits 1 only when a
+  // health check itself failed.
+  const finishDoctor = async (exitCode, error = null) => {
+    const result = await session.finish({ exitCode, error });
+    await doctor.flushStreams();
+    return result;
+  };
 
   // (1) No args, or --help / -h as the first positional arg → help.
-  if (tokens.length === 0 || tokens[0] === '--help' || tokens[0] === '-h') {
+  if (tokens.length === 0) {
+    if (!session) {
+      shared.printModulesHelp();
+      process.exit(0);
+    }
+    // Bare `pingcode --doctor`: environment-only health report.
+    const result = await finishDoctor(0);
+    process.exit(result.verdict === 'unhealthy' ? 1 : 0);
+  }
+  if (tokens[0] === '--help' || tokens[0] === '-h') {
     shared.printModulesHelp();
+    if (session) await finishDoctor(0);
     process.exit(0);
   }
 
@@ -62,6 +94,7 @@ async function dispatcherMain(argv) {
   // latest release (best effort; offline degrades to a stderr notice).
   if (tokens[0] === '-v' || tokens[0] === '--version') {
     await require('./commands/update').printVersionInfo();
+    if (session) await finishDoctor(0);
     process.exit(0);
   }
 
@@ -70,17 +103,32 @@ async function dispatcherMain(argv) {
   // (2) Recognised module name → dispatch to that module.
   const mod = shared.getModule(firstArg);
   if (mod) {
+    if (session) session.setCommand(firstArg, tokens.slice(1));
     try {
       await mod.run(tokens.slice(1));
       // Modules may signal a non-zero exit (e.g. install partial failures)
       // via process.exitCode; honor it while defaulting to success.
+      if (session) await finishDoctor(process.exitCode || 0);
       process.exit(process.exitCode || 0);
     } catch (exc) {
+      if (session) {
+        session.recordError(exc, 'command');
+        await finishDoctor(1, exc);
+        console.error(`error: ${exc.message}`);
+        process.exit(1);
+      }
       fatal(exc.message);
     }
   }
 
   // (3) Unknown argument.
+  if (session) {
+    const exc = new Error(`Unknown module: ${firstArg}`);
+    session.recordError(exc, 'dispatch');
+    await finishDoctor(1, exc);
+    console.error(`error: ${exc.message}`);
+    process.exit(1);
+  }
   fatal(`Unknown module: ${firstArg}`);
 }
 
