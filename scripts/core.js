@@ -969,15 +969,20 @@ class PingCodeClient {
       }
     } catch (exc) {
       if (exc instanceof PingCodeError) throw exc;
+      // Surface the underlying cause (ECONNREFUSED, ENOTFOUND, TLS cert
+      // codes, ...) — "fetch failed" alone is undiagnosable in a report.
+      const cause = exc && exc.cause
+        ? ` (${exc.cause.code || exc.cause.message || 'unknown cause'})`
+        : '';
       emitDiagnostic({
         type: 'http_error',
         method,
         url,
         duration_ms: Date.now() - startedAt,
-        error: exc.message,
+        error: `${exc.message}${cause}`,
         aborted: exc.name === 'AbortError',
       });
-      throw new PingCodeError(`Request failed: ${exc.message}`);
+      throw new PingCodeError(`Request failed: ${exc.message}${cause}`);
     } finally {
       clearTimeout(timeout);
     }

@@ -57,11 +57,14 @@ const REPORT_ENV_KEYS = [
 // ── Flag extraction (dispatcher level) ────────────────────────────────
 
 // Pull --doctor / --doctor-output out of the token list so that every
-// module sees the exact argv it would see without them.
+// module sees the exact argv it would see without them. `--base-url` is
+// only PEEKED (not stripped): the module still consumes it, while the
+// session probes the same endpoint the command will actually hit.
 function extractDoctorOptions(tokens) {
   const remaining = [];
   let enabled = false;
   let outputPath = null;
+  let baseUrl = null;
   for (let i = 0; i < tokens.length; i++) {
     const arg = tokens[i];
     if (arg === '--doctor') {
@@ -86,9 +89,24 @@ function extractDoctorOptions(tokens) {
       enabled = true;
       continue;
     }
+    if (arg === '--base-url') {
+      const value = tokens[i + 1];
+      remaining.push(arg);
+      if (value !== undefined && !value.startsWith('--')) {
+        baseUrl = value;
+        remaining.push(value);
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith('--base-url=')) {
+      baseUrl = arg.slice('--base-url='.length);
+      remaining.push(arg);
+      continue;
+    }
     remaining.push(arg);
   }
-  return { enabled, outputPath, tokens: remaining };
+  return { enabled, outputPath, baseUrl, tokens: remaining };
 }
 
 // ── Secret masking ─────────────────────────────────────────────────────
@@ -584,14 +602,15 @@ function flushStreams() {
 // ── Session ────────────────────────────────────────────────────────────
 
 class DoctorSession {
-  constructor({ argv = null, outputPath = null, network = null } = {}) {
+  constructor({ argv = null, outputPath = null, network = null, baseUrl = null } = {}) {
     this.argv = maskArgv(argv !== null && argv !== undefined ? argv : process.argv.slice(2));
     this.outputPath = outputPath;
     const envSetting = process.env.PINGCODE_DOCTOR_NETWORK;
     this.network = network !== null && network !== undefined
       ? !!network
       : !(envSetting === '0' || envSetting === 'false');
-    this.baseUrl = (process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL).replace(/\/$/, '');
+    // --base-url wins over the environment, mirroring parseGlobalOptions.
+    this.baseUrl = (baseUrl || process.env.PINGCODE_BASE_URL || core.DEFAULT_BASE_URL).replace(/\/$/, '');
     this.events = [];
     this.eventsTruncated = false;
     this.errors = [];
@@ -675,16 +694,24 @@ class DoctorSession {
     }
   }
 
-  async finish({ exitCode = 0, error = null } = {}) {
+  async finish({ exitCode = 0 } = {}) {
     this.stopCapturing();
     this.finishedAt = Date.now();
-    if (error) this.recordError(error, 'command');
     if (this.startedAt !== null) {
       this.command.duration_ms = this.finishedAt - this.startedAt;
     }
     this.command.exit_code = exitCode;
 
     const checks = await runChecks({ baseUrl: this.baseUrl, network: this.network });
+    // The run itself is part of the health verdict: a command that exited
+    // non-zero is unhealthy even when every environment check passes.
+    checks.push({
+      id: 'command_execution',
+      status: exitCode === 0 ? 'pass' : 'fail',
+      detail: this.command.module
+        ? `module '${this.command.module}' exited with ${exitCode}`
+        : `environment check exited with ${exitCode}`,
+    });
     const hasFail = checks.some((c) => c.status === 'fail');
     const hasWarn = checks.some((c) => c.status === 'warn');
     const verdict = hasFail ? 'unhealthy' : hasWarn ? 'degraded' : 'healthy';

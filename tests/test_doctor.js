@@ -32,7 +32,7 @@ function doctorSpawnEnv() {
 test('extractDoctorOptions strips --doctor anywhere in the token list', () => {
   assert.deepStrictEqual(
     doctor.extractDoctorOptions(['auth', 'login', '--doctor', '--client-secret', 'x']),
-    { enabled: true, outputPath: null, tokens: ['auth', 'login', '--client-secret', 'x'] },
+    { enabled: true, outputPath: null, baseUrl: null, tokens: ['auth', 'login', '--client-secret', 'x'] },
   );
   const leading = doctor.extractDoctorOptions(['--doctor', 'workitem', 'list', '--compact']);
   assert.strictEqual(leading.enabled, true);
@@ -43,17 +43,52 @@ test('extractDoctorOptions strips --doctor anywhere in the token list', () => {
 test('extractDoctorOptions consumes --doctor-output with a value', () => {
   assert.deepStrictEqual(
     doctor.extractDoctorOptions(['workitem', 'list', '--doctor-output', '/tmp/r.json']),
-    { enabled: true, outputPath: '/tmp/r.json', tokens: ['workitem', 'list'] },
+    { enabled: true, outputPath: '/tmp/r.json', baseUrl: null, tokens: ['workitem', 'list'] },
   );
   assert.deepStrictEqual(
     doctor.extractDoctorOptions(['--doctor-output=/tmp/r.json', 'config', 'list']),
-    { enabled: true, outputPath: '/tmp/r.json', tokens: ['config', 'list'] },
+    { enabled: true, outputPath: '/tmp/r.json', baseUrl: null, tokens: ['config', 'list'] },
   );
   assert.throws(
     () => doctor.extractDoctorOptions(['config', 'list', '--doctor-output', '--compact']),
     /--doctor-output requires/,
   );
   assert.throws(() => doctor.extractDoctorOptions(['--doctor-output']), /--doctor-output requires/);
+});
+
+test('extractDoctorOptions peeks --base-url without stripping it', () => {
+  const spaced = doctor.extractDoctorOptions(['directory', 'me', '--doctor', '--base-url', 'https://x.test']);
+  assert.strictEqual(spaced.baseUrl, 'https://x.test');
+  assert.ok(spaced.tokens.includes('--base-url'), '--base-url must stay for the module');
+  assert.ok(spaced.tokens.includes('https://x.test'));
+  const eq = doctor.extractDoctorOptions(['--doctor', '--base-url=https://y.test', 'config', 'list']);
+  assert.strictEqual(eq.baseUrl, 'https://y.test');
+  assert.deepStrictEqual(eq.tokens, ['--base-url=https://y.test', 'config', 'list']);
+  assert.strictEqual(doctor.extractDoctorOptions(['workitem', 'list']).baseUrl, null);
+});
+
+test('DoctorSession probes the base URL given by --base-url', () => {
+  // The dispatcher parses --base-url and passes it explicitly.
+  const { baseUrl } = doctor.extractDoctorOptions(['directory', 'me', '--doctor', '--base-url', 'https://x.test']);
+  const session = new doctor.DoctorSession({
+    argv: ['directory', 'me', '--doctor', '--base-url', 'https://x.test'],
+    baseUrl,
+    network: false,
+  });
+  assert.strictEqual(session.baseUrl, 'https://x.test');
+  const fallback = new doctor.DoctorSession({ argv: ['--doctor'], network: false });
+  assert.strictEqual(fallback.baseUrl, core.DEFAULT_BASE_URL);
+  const envWins = (() => {
+    const original = process.env.PINGCODE_BASE_URL;
+    process.env.PINGCODE_BASE_URL = 'https://env.test';
+    try {
+      return new doctor.DoctorSession({ argv: ['--doctor'], network: false }).baseUrl;
+    } finally {
+      if (original === undefined) delete process.env.PINGCODE_BASE_URL;
+      else process.env.PINGCODE_BASE_URL = original;
+    }
+  })();
+  assert.strictEqual(envWins, 'https://env.test');
 });
 
 // ── Secret masking ────────────────────────────────────────────────────
@@ -141,7 +176,8 @@ test('DoctorSession writes a sanitized report with command metadata', async () =
       url: 'https://open.pingcode.com/v1/auth/token?client_secret=xyz',
     });
     session.recordError(new Error('boom with client_secret=abc in text'), 'command');
-    const result = await session.finish({ exitCode: 1, error: new Error('HTTP 401 unauthorized') });
+    session.recordError(new Error('HTTP 401 unauthorized'), 'command');
+    const result = await session.finish({ exitCode: 1 });
 
     assert.strictEqual(result.path, reportPath);
     const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
@@ -149,11 +185,16 @@ test('DoctorSession writes a sanitized report with command metadata', async () =
     assert.strictEqual(report.command.module, 'auth');
     assert.strictEqual(report.command.exit_code, 1);
     assert.ok(Array.isArray(report.checks) && report.checks.length > 0);
-    assert.ok(['healthy', 'degraded', 'unhealthy'].includes(report.verdict));
+    // non-zero exit marks the run itself unhealthy via the synthetic check
+    assert.strictEqual(report.verdict, 'unhealthy');
+    const cmdCheck = report.checks.find((c) => c.id === 'command_execution');
+    assert.ok(cmdCheck, 'command_execution check recorded');
+    assert.strictEqual(cmdCheck.status, 'fail');
     assert.strictEqual(report.runtime.node, process.version);
     assert.ok(report.events.some((e) => e.type === 'http_request'));
     assert.ok(report.errors.some((e) => e.message.includes('boom')));
     assert.ok(report.errors.some((e) => e.message.includes('HTTP 401')));
+    assert.strictEqual(report.errors.length, 2, 'each error recorded exactly once');
 
     // secrets never reach the file, in any form
     const raw = fs.readFileSync(reportPath, 'utf8');

@@ -57,8 +57,8 @@ async function dispatcherMain(argv) {
   // The session records environment, HTTP traffic, output and errors,
   // then writes a sanitized JSON report before the process exits.
   const doctor = require('./doctor');
-  const { enabled, tokens, outputPath } = doctor.extractDoctorOptions(rawTokens);
-  const session = enabled ? new doctor.DoctorSession({ argv: rawTokens, outputPath }) : null;
+  const { enabled, tokens, outputPath, baseUrl } = doctor.extractDoctorOptions(rawTokens);
+  const session = enabled ? new doctor.DoctorSession({ argv: rawTokens, outputPath, baseUrl }) : null;
   if (session) {
     session.start();
     core.setDiagnosticSink((event) => session.recordEvent(event));
@@ -67,9 +67,10 @@ async function dispatcherMain(argv) {
   // Finalize the report, flush streams (pipes are async and process.exit
   // would truncate pending bytes), then exit. Doctor never changes a
   // command's exit code; bare `pingcode --doctor` exits 1 only when a
-  // health check itself failed.
-  const finishDoctor = async (exitCode, error = null) => {
-    const result = await session.finish({ exitCode, error });
+  // health check itself failed. Errors are recorded by the caller via
+  // session.recordError so each failure lands in the report exactly once.
+  const finishDoctor = async (exitCode) => {
+    const result = await session.finish({ exitCode });
     await doctor.flushStreams();
     return result;
   };
@@ -113,7 +114,7 @@ async function dispatcherMain(argv) {
     } catch (exc) {
       if (session) {
         session.recordError(exc, 'command');
-        await finishDoctor(1, exc);
+        await finishDoctor(1);
         console.error(`error: ${exc.message}`);
         process.exit(1);
       }
@@ -125,7 +126,7 @@ async function dispatcherMain(argv) {
   if (session) {
     const exc = new Error(`Unknown module: ${firstArg}`);
     session.recordError(exc, 'dispatch');
-    await finishDoctor(1, exc);
+    await finishDoctor(1);
     console.error(`error: ${exc.message}`);
     process.exit(1);
   }

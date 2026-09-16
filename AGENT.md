@@ -16,7 +16,7 @@ pingcode <原命令...> --doctor
 
 | 字段 | 内容 |
 |---|---|
-| `verdict` | `healthy` / `degraded`（有 warn）/ `unhealthy`（有 fail） |
+| `verdict` | `healthy` / `degraded`（有 warn）/ `unhealthy`（有 fail，或命令本身退出码非 0，见 `command_execution` 检查项） |
 | `command` | `{module, args, started_at, duration_ms, exit_code}`；bare 模式为 `null` |
 | `errors[]` | 按序记录的错误：`{name, message, stack, context}`，`message` 已脱敏 |
 | `checks[]` | 环境健康检查：`{id, status: pass\|warn\|fail\|skip, detail}` |
@@ -27,7 +27,7 @@ pingcode <原命令...> --doctor
 | `env` | 白名单环境变量，分 `general` / `pingcode` / `proxy` / `tls` 四组 |
 | `runtime` / `system` / `locale` | Node 版本（含 openssl）、OS/内核/CPU/内存、LANG/编码（Windows 含 `windows_codepage`） |
 
-checks 的 id：`node_version`、`spawn_node`、`token_cache`、`workspace_cache`、`tmp_writable`、`unicode_fs`、`cwd_writable`、`windows_codepage`（仅 win32）、`dns`、`api_reachable`、`clock_skew`。`dns`/`api_reachable`/`clock_skew` 为 `skip` 表示网络探测被禁用（`PINGCODE_DOCTOR_NETWORK=0`）。
+checks 的 id：`command_execution`（命令自身的退出结果，非 0 即 fail）、`node_version`、`spawn_node`、`token_cache`、`workspace_cache`、`tmp_writable`、`unicode_fs`、`cwd_writable`、`windows_codepage`（仅 win32）、`dns`、`api_reachable`、`clock_skew`。`dns`/`api_reachable`/`clock_skew` 为 `skip` 表示网络探测被禁用（`PINGCODE_DOCTOR_NETWORK=0`）；探测目标是 `--base-url` / `PINGCODE_BASE_URL` 解析出的实际 API 地址。`http_error.error` 在网络层失败时会带括号内的 cause code（如 `(ECONNREFUSED)`、`(ENOTFOUND)`、`(SELF_SIGNED_CERT_IN_CHAIN)`），这是定位网络问题的首要线索。
 
 ### 定位流程
 
@@ -47,7 +47,8 @@ checks 的 id：`node_version`、`spawn_node`、`token_cache`、`workspace_cache
 | errors 含 `Missing credentials` | 凭证未配置 | 设置 `PINGCODE_CLIENT_ID` / `PINGCODE_CLIENT_SECRET` |
 | `http_error.aborted: true` 或 `Request failed:` 且 `duration_ms`≈30000 | 请求超时（30s 上限） | 查 `env.proxy`、`checks.api_reachable`；代理问题修 `HTTPS_PROXY` |
 | `api_reachable` fail，error 含 `SELF_SIGNED_CERT` / `UNABLE_TO_VERIFY` | 企业代理 TLS 拦截 | 设 `NODE_EXTRA_CA_CERTS` 指向公司根证书 |
-| `dns` fail | 域名解析失败 | hosts / VPN / 内网 DNS |
+| `api_reachable` 或 `http_error` 含 `ECONNREFUSED` / `ETIMEDOUT` | 服务未监听、端口/防火墙问题 | 确认 base_url 与网络出口；私化部署查服务状态 |
+| `dns` fail 或 `http_error.error` 含 `(ENOTFOUND)` | 域名解析失败 | hosts / VPN / 内网 DNS |
 | `clock_skew` warn（偏差 >120s） | 系统时间不准 | 校准系统时间（会导致 TLS 与令牌校验失败的隐藏原因） |
 | `http_error.status: 429` | 触发限流 | 读响应头 `x-pc-retry-after`，等待后重试 |
 | `workspace_cache` not found 或 `preferences_keys` 缺 `current_user_id` / `current_project_id` / `current_sprint_id` | 工作区上下文未初始化 | `pingcode context init` 后重试原命令 |
