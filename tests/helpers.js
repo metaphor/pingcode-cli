@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { PassThrough } = require('node:stream');
 
 const core = require('../scripts/core');
 
@@ -90,6 +91,25 @@ function writeWorkspaceCache(cachePath, {
   return payload;
 }
 
+// TTY-like stream pair for driving arrow-key selectors without a terminal.
+// The input reports isTTY and accepts setRawMode like a tty.ReadStream.
+function fakeTtyStreams() {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  input.isTTY = true;
+  output.isTTY = true;
+  input.rawMode = null;
+  input.setRawMode = (mode) => { input.rawMode = mode; };
+  return { input, output };
+}
+
+// Collect output bytes as text so tests can assert on rendered menus.
+function collectOutput(stream) {
+  const collected = [];
+  stream.on('data', (chunk) => collected.push(chunk.toString('utf8')));
+  return collected;
+}
+
 module.exports = {
   shellQuote,
   tmpFile,
@@ -98,4 +118,6 @@ module.exports = {
   fakeResponse,
   mockFetch,
   writeWorkspaceCache,
+  fakeTtyStreams,
+  collectOutput,
 };
