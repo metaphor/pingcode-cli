@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -25,7 +27,7 @@ async function withCapturedConsole(fn) {
   return { logs, errors };
 }
 
-function fakeNpm(viewResult, installResult = null) {
+function fakeNpm(viewResult, installResult = null, rootResult = { status: 1 }) {
   const calls = [];
   return {
     calls,
@@ -34,9 +36,35 @@ function fakeNpm(viewResult, installResult = null) {
       if (args[0] === 'view') {
         return viewResult;
       }
+      if (args[0] === 'root') {
+        return rootResult;
+      }
       return installResult;
     },
   };
+}
+
+// Sandboxes HOME/PATH so wrapper reconciliation runs against throwaway files.
+async function withSandbox(run) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-update-'));
+  const prevHome = process.env.HOME;
+  const prevPath = process.env.PATH;
+  process.env.HOME = tmp;
+  try {
+    return await run(tmp);
+  } finally {
+    if (prevHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = prevHome;
+    }
+    if (prevPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = prevPath;
+    }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 // ── compareVersions ───────────────────────────────────────────────────
@@ -102,6 +130,93 @@ test('update surfaces failed global installs', async () => {
     () => update.run([], { npm: fake.npm, localVersion: () => '0.9.1' }),
     /Global install failed.*npm install -g @metaphorli\/pingcode-cli@latest/s,
   );
+});
+
+// ── wrapper reconciliation (refreshGlobalWrapper) ─────────────────────
+
+test('update re-points a stale npx-cache wrapper at the global install', { skip: process.platform === 'win32' }, async () => {
+  await withSandbox(async (tmp) => {
+    const binDir = path.join(tmp, '.local', 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const staleScript = path.join(tmp, '_npx', 'abc123', 'node_modules', '@metaphorli', 'pingcode-cli', 'scripts', 'pingcode.js');
+    const wrapperPath = path.join(binDir, 'pingcode');
+    fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec node '${staleScript}' "$@"\n`, { mode: 0o755 });
+
+    const globalLib = path.join(tmp, 'global', 'lib', 'node_modules');
+    const globalScript = path.join(globalLib, '@metaphorli', 'pingcode-cli', 'scripts', 'pingcode.js');
+    fs.mkdirSync(path.dirname(globalScript), { recursive: true });
+    fs.writeFileSync(globalScript, '#!/usr/bin/env node\n');
+    process.env.PATH = binDir;
+
+    const fake = fakeNpm(
+      { status: 0, stdout: '1.2.3\n' },
+      { status: 0 },
+      { status: 0, stdout: `${globalLib}\n` },
+    );
+    const { logs } = await withCapturedConsole(() =>
+      update.run([], { npm: fake.npm, localVersion: () => '0.9.1' }));
+
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.startsWith('#!/bin/sh'), content);
+    assert.ok(content.includes(globalScript), content);
+    assert.ok(content.includes('"$@"'), content);
+    assert.ok(logs.join('\n').includes('Re-pointed'), logs.join('\n'));
+  });
+});
+
+test('update leaves an already-current wrapper untouched', { skip: process.platform === 'win32' }, async () => {
+  await withSandbox(async (tmp) => {
+    const binDir = path.join(tmp, '.local', 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const globalLib = path.join(tmp, 'global', 'lib', 'node_modules');
+    const globalScript = path.join(globalLib, '@metaphorli', 'pingcode-cli', 'scripts', 'pingcode.js');
+    fs.mkdirSync(path.dirname(globalScript), { recursive: true });
+    fs.writeFileSync(globalScript, '#!/usr/bin/env node\n');
+    const wrapperPath = path.join(binDir, 'pingcode');
+    fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec node '${globalScript}' "$@"\n`, { mode: 0o755 });
+    process.env.PATH = binDir;
+
+    const fake = fakeNpm(
+      { status: 0, stdout: '1.2.3\n' },
+      { status: 0 },
+      { status: 0, stdout: `${globalLib}\n` },
+    );
+    const { logs } = await withCapturedConsole(() =>
+      update.run([], { npm: fake.npm, localVersion: () => '0.9.1' }));
+
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.includes(`exec node '${globalScript}' "$@"`), content);
+    assert.ok(!logs.join('\n').includes('Re-pointed'), logs.join('\n'));
+    assert.ok(!logs.join('\n').includes('does not manage'), logs.join('\n'));
+  });
+});
+
+test('update notes but never rewrites an unmanaged wrapper target', { skip: process.platform === 'win32' }, async () => {
+  await withSandbox(async (tmp) => {
+    const binDir = path.join(tmp, '.local', 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const checkoutScript = path.join(tmp, 'checkout', 'scripts', 'pingcode.js');
+    const wrapperPath = path.join(binDir, 'pingcode');
+    fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec node '${checkoutScript}' "$@"\n`, { mode: 0o755 });
+
+    const globalLib = path.join(tmp, 'global', 'lib', 'node_modules');
+    const globalScript = path.join(globalLib, '@metaphorli', 'pingcode-cli', 'scripts', 'pingcode.js');
+    fs.mkdirSync(path.dirname(globalScript), { recursive: true });
+    fs.writeFileSync(globalScript, '#!/usr/bin/env node\n');
+    process.env.PATH = binDir;
+
+    const fake = fakeNpm(
+      { status: 0, stdout: '1.2.3\n' },
+      { status: 0 },
+      { status: 0, stdout: `${globalLib}\n` },
+    );
+    const { logs } = await withCapturedConsole(() =>
+      update.run([], { npm: fake.npm, localVersion: () => '0.9.1' }));
+
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.includes(checkoutScript), content);
+    assert.ok(logs.join('\n').includes('does not manage'), logs.join('\n'));
+  });
 });
 
 test('update rejects unknown options', async () => {

@@ -7,6 +7,8 @@ const { spawnSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
+const install = require('../scripts/commands/install');
+
 function runInstall(args, env = process.env, input = null, cwd = REPO_ROOT) {
   return spawnSync('node', [path.join(REPO_ROOT, 'scripts/pingcode.js'), 'install', ...args], {
     cwd,
@@ -486,4 +488,92 @@ test('windows platform prints npm install guidance', () => {
   } finally {
     rmDir(tmpdir);
   }
+});
+
+// ── global wrapper target (npx cache vs durable install) ──────────────
+
+function fakeWrapperNpm({ installStatus = 0, rootStdout = '' } = {}) {
+  const calls = [];
+  return {
+    calls,
+    npm(args) {
+      calls.push(args);
+      if (args[0] === 'install') {
+        return installStatus === 0
+          ? { status: 0 }
+          : { status: 1, stderr: 'offline' };
+      }
+      return { status: 0, stdout: rootStdout };
+    },
+  };
+}
+
+function withHomeSandbox(run) {
+  const tmp = tmpDir();
+  const prevHome = process.env.HOME;
+  process.env.HOME = tmp;
+  try {
+    return run(tmp);
+  } finally {
+    if (prevHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = prevHome;
+    }
+    rmDir(tmp);
+  }
+}
+
+test('isNpxCachePath detects npx cache copies', () => {
+  assert.strictEqual(install.isNpxCachePath(
+    path.join(os.homedir(), '.npm', '_npx', 'abc123', 'node_modules', '@metaphorli', 'pingcode-cli')), true);
+  assert.strictEqual(install.isNpxCachePath(path.join(os.tmpdir(), 'some-checkout')), false);
+});
+
+test('wrapper pins the global install when running from the npx cache', { skip: process.platform === 'win32' }, () => {
+  withHomeSandbox((tmp) => {
+    const npxRoot = path.join(tmp, '_npx', 'abc123', 'node_modules', '@metaphorli', 'pingcode-cli');
+    const globalLib = path.join(tmp, 'global', 'lib', 'node_modules');
+    const globalScript = path.join(globalLib, '@metaphorli', 'pingcode-cli', 'scripts', 'pingcode.js');
+    fs.mkdirSync(path.dirname(globalScript), { recursive: true });
+    fs.writeFileSync(globalScript, '#!/usr/bin/env node\n');
+
+    const fake = fakeWrapperNpm({ rootStdout: `${globalLib}\n` });
+    install.installGlobalWrapper({ npm: fake.npm, root: npxRoot });
+
+    const wrapperPath = path.join(tmp, '.local', 'bin', 'pingcode');
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.startsWith('#!/bin/sh'), content);
+    assert.ok(content.includes(globalScript), content);
+    assert.deepStrictEqual(
+      fake.calls.find((args) => args[0] === 'install'),
+      ['install', '-g', '@metaphorli/pingcode-cli@latest'],
+    );
+  });
+});
+
+test('wrapper falls back to the npx cache copy when global install fails', { skip: process.platform === 'win32' }, () => {
+  withHomeSandbox((tmp) => {
+    const npxRoot = path.join(tmp, '_npx', 'abc123', 'node_modules', '@metaphorli', 'pingcode-cli');
+    const fake = fakeWrapperNpm({ installStatus: 1 });
+    install.installGlobalWrapper({ npm: fake.npm, root: npxRoot });
+
+    const wrapperPath = path.join(tmp, '.local', 'bin', 'pingcode');
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.includes(path.join(npxRoot, 'scripts', 'pingcode.js')), content);
+    assert.strictEqual(fake.calls.filter((args) => args[0] === 'root').length, 0, 'root -g should not run');
+  });
+});
+
+test('wrapper keeps pointing at the running copy outside the npx cache', { skip: process.platform === 'win32' }, () => {
+  withHomeSandbox((tmp) => {
+    const globalRoot = path.join(tmp, 'global', 'lib', 'node_modules', '@metaphorli', 'pingcode-cli');
+    const fake = fakeWrapperNpm();
+    install.installGlobalWrapper({ npm: fake.npm, root: globalRoot });
+
+    const wrapperPath = path.join(tmp, '.local', 'bin', 'pingcode');
+    const content = fs.readFileSync(wrapperPath, 'utf8');
+    assert.ok(content.includes(path.join(globalRoot, 'scripts', 'pingcode.js')), content);
+    assert.strictEqual(fake.calls.length, 0, 'npm should not run for a non-npx copy');
+  });
 });

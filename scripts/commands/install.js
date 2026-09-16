@@ -13,6 +13,9 @@ const { stdin, stdout } = require("node:process");
 
 const shared = require("./shared");
 
+const PACKAGE_NAME = shared.PACKAGE_NAME;
+const defaultNpm = shared.defaultNpm;
+
 const packageRoot = path.resolve(__dirname, "..", "..");
 const SKILL = {
   name: "pingcode",
@@ -243,7 +246,45 @@ function printCredentialGuidance() {
   console.log('  export PINGCODE_CLIENT_SECRET="..."');
 }
 
-function installGlobalWrapper() {
+function isNpxCachePath(target) {
+  // npm materializes `npx <pkg>` runs under <npm-cache>/_npx/<hash>/node_modules/…
+  return path.resolve(target).split(path.sep).includes("_npx");
+}
+
+// Resolve the script the global wrapper should execute. A copy inside the
+// npx cache is ephemeral (npm may prune it, and `npm install -g` updates a
+// different tree), so run a real global install first and pin the wrapper
+// to it. Falls back to the running copy when npm cannot provide one.
+function durableWrapperTarget(root, npm) {
+  const localScript = path.join(root, "scripts", "pingcode.js");
+  if (!isNpxCachePath(root)) {
+    return localScript;
+  }
+
+  console.log(`Running from the npx cache — running \`npm install -g ${PACKAGE_NAME}@latest\` so the wrapper points at a durable copy...`);
+  const globalInstall = npm(["install", "-g", `${PACKAGE_NAME}@latest`], { stdio: "inherit" });
+  if (globalInstall.error || globalInstall.status !== 0) {
+    const detail = globalInstall.error ? globalInstall.error.message : `exit code ${globalInstall.status}`;
+    console.warn(`Could not install ${PACKAGE_NAME} globally (${detail}).`);
+    console.warn("The wrapper will point at the temporary npx cache copy; re-run install once npm works.");
+    return localScript;
+  }
+
+  const rootOut = npm(["root", "-g"]);
+  if (!rootOut.error && rootOut.status === 0) {
+    const candidate = path.join(
+      (rootOut.stdout || "").trim(), "@metaphorli", "pingcode-cli", "scripts", "pingcode.js",
+    );
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  console.warn("Could not locate the global install after `npm install -g`.");
+  console.warn("The wrapper will point at the temporary npx cache copy; re-run install once npm works.");
+  return localScript;
+}
+
+function installGlobalWrapper(options = {}) {
   // On Windows, only print guidance — global wrapper via npm install -g
   if (process.platform === "win32") {
     console.log("");
@@ -255,7 +296,8 @@ function installGlobalWrapper() {
   const home = os.homedir();
   const binDir = path.join(home, ".local", "bin");
   const wrapperPath = path.join(binDir, "pingcode");
-  const pingcodeScript = path.join(packageRoot, "scripts", "pingcode.js");
+  const root = options.root || packageRoot;
+  const pingcodeScript = options.scriptPath || durableWrapperTarget(root, options.npm || defaultNpm);
 
   // Create ~/.local/bin if it does not exist
   try {
@@ -570,5 +612,6 @@ shared.registerModule("install", {
 
 module.exports = {
   run, parseArgs, usage, installToTarget, installGlobalWrapper,
+  isNpxCachePath, durableWrapperTarget,
   AGENT_KEYS, SKILL,
 };

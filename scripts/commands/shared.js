@@ -5,6 +5,7 @@
 // them without importing command files directly (avoids circular deps).
 
 const core = require('../core');
+const { spawnSync } = require('node:child_process');
 
 const registry = new Map();
 
@@ -37,6 +38,10 @@ function printModulesHelp() {
     const padded = m.name.padEnd(maxLen + 2);
     lines.push(`  ${padded}${m.description}`);
   }
+  lines.push('');
+  lines.push('Global options (work with any module):');
+  lines.push('  --doctor                    Run in diagnostic mode; executes normally and writes a sanitized JSON health report into the current directory');
+  lines.push('  --doctor-output <path>      Doctor report file or directory (default: ./pingcode-doctor-<timestamp>.json)');
   console.log(lines.join('\n'));
 }
 
@@ -139,8 +144,25 @@ function clientFromOpts(opts) {
   });
 }
 
+// ── Self-management (install/update) plumbing ────────────────────────
+// npm package coordinates and spawn wrapper shared by the commands that
+// manage the CLI's own installation. Goes through the user's `npm` on PATH
+// so the configured registry and prefix are honored.
+const PACKAGE_NAME = "@metaphorli/pingcode-cli";
+
+function defaultNpm(args, options = {}) {
+  return spawnSync("npm", args, {
+    encoding: "utf8",
+    // Windows resolves npm via npm.cmd, which needs a shell.
+    shell: process.platform === "win32",
+    ...options,
+  });
+}
+
 module.exports = {
   registerModule, getModule, listModules, printModulesHelp,
   BASE_GLOBAL_BOOLEAN_FLAGS, BASE_GLOBAL_STRING_FLAGS,
   defaultGlobalOpts, parseGlobalOptions, clientFromOpts,
+  PACKAGE_NAME, defaultNpm,
 };
+
