@@ -246,7 +246,27 @@ function isYes(value) {
   return /^(y|yes)$/i.test((value || '').trim());
 }
 
-async function selectClientsInteractive(label, clients, ask) {
+// One-shot text question with its own readline interface. Used on the arrow
+// path so no interface is ever attached to stdin while the raw-mode menu is
+// live (a lingering interface would eat keypresses and close on Ctrl+C).
+function askQuestion(prompt) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+async function selectClientsInteractive(label, clients, ask, useArrows) {
+  if (useArrows) {
+    return shared.arrowSelect({
+      title: label,
+      multi: true,
+      options: clients.map((client) => ({ value: client, label: `${client.name} (${client.id})` })),
+    });
+  }
   console.log(`\n${label}`);
   for (let i = 0; i < clients.length; i += 1) {
     console.log(`  ${i + 1}. ${clients[i].name} (${clients[i].id})`);
@@ -325,7 +345,7 @@ function parseMcpArgs(tokens) {
 
 // ── Init flow ─────────────────────────────────────────────────────────
 
-function selectClients(opts, ask) {
+function selectClients(opts, ask, useArrows) {
   if (opts.all) {
     return Promise.resolve(CLIENTS.slice());
   }
@@ -336,7 +356,7 @@ function selectClients(opts, ask) {
     }
     return Promise.resolve(CLIENTS.filter((c) => opts.tool.includes(c.id)));
   }
-  return selectClientsInteractive('Select AI clients to configure for PingCode MCP', CLIENTS, ask);
+  return selectClientsInteractive('Select AI clients to configure for PingCode MCP', CLIENTS, ask, useArrows);
 }
 
 async function promptCredentials(opts, ask) {
@@ -369,11 +389,22 @@ async function promptCredentials(opts, ask) {
   return env;
 }
 
-async function confirmSelection(selectedClients, ask, opts) {
+async function confirmSelection(selectedClients, ask, opts, useArrows) {
   if (opts.yes) {
     return true;
   }
   const names = selectedClients.map((client) => client.name).join(', ');
+  if (useArrows) {
+    // Cursor starts on No, matching the previous (y/N) safe default.
+    return shared.arrowSelect({
+      title: `Configure ${names}?`,
+      initialIndex: 1,
+      options: [
+        { value: true, label: 'Yes - write the configs' },
+        { value: false, label: 'No' },
+      ],
+    });
+  }
   const answer = await ask(`The following clients will be configured: ${names}. Proceed? (y/N): `);
   return isYes(answer);
 }
@@ -400,16 +431,23 @@ async function runInit(argv, inputFunc) {
     return;
   }
 
-  const ask = createAsk(inputFunc);
+  // Arrow-key menus need a real terminal and no injected answer queue; the
+  // text prompts stay available for piped stdin, tests, and programmatic use.
+  const useArrows = inputFunc === undefined
+    && Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  // On the arrow path `ask` answers each question with its own short-lived
+  // readline interface; on the text path one interface backs every question.
+  const textAsk = useArrows ? null : createAsk(inputFunc);
+  const ask = textAsk || askQuestion;
   try {
-    const selected = await selectClients(parsed.opts, ask);
+    const selected = await selectClients(parsed.opts, ask, useArrows);
     if (selected.length === 0) {
       console.log('No AI clients selected. Nothing to do.');
       return;
     }
 
     const env = await promptCredentials(parsed.opts, ask);
-    const confirmed = await confirmSelection(selected, ask, parsed.opts);
+    const confirmed = await confirmSelection(selected, ask, parsed.opts, useArrows);
     if (!confirmed) {
       console.log('Aborted.');
       return;
@@ -426,7 +464,7 @@ async function runInit(argv, inputFunc) {
       console.log(`Configured ${client.name}: ${filePath}`);
     }
   } finally {
-    closeAsk(ask);
+    closeAsk(textAsk);
   }
 }
 
