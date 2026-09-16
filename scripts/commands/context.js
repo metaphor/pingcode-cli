@@ -7,33 +7,60 @@ const shared = require('./shared');
 
 // ── Interactive selection ──────────────────────────────────────────
 
-async function promptChoice(label, items, inputFunc) {
+// Width-aware truncation/padding lives in shared (arrowSelect); the selector
+// below only maps PingCode entities to display labels.
+
+// Single-line description of a choice. Ids are intentionally omitted from the
+// interactive menus; each label keeps only its human-relevant details:
+//   project → `name (identifier)`, sprint → `name`, user → `name (account, email)`.
+function describeChoice(label, item) {
+  const entity = core.normalizedEntity(item);
+  const name = core.displayName(item);
+  const details = [];
+  if (label === 'project') {
+    if (typeof entity.identifier === 'string' && entity.identifier) {
+      details.push(entity.identifier);
+    }
+  } else if (label === 'user') {
+    if (typeof entity.name === 'string' && entity.name && entity.name !== name) {
+      details.push(entity.name);
+    }
+    if (typeof entity.email === 'string' && entity.email) {
+      details.push(entity.email);
+    }
+  }
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+  return `${name}${suffix}`;
+}
+
+async function promptChoice(label, items, inputFunc, options = {}) {
   if (!items || items.length === 0) {
     throw new core.PingCodeError(`No ${label} options are available`);
   }
+  if (typeof inputFunc === 'function') {
+    return textPromptChoice(label, items, inputFunc);
+  }
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    return arrowPromptChoice(label, items, options);
+  }
+  throw new core.PingCodeError(
+    `Selecting a ${label} requires an interactive terminal, and no input source is available.`
+  );
+}
+
+// Fallback for non-interactive callers (piped stdin, tests, programmatic
+// input): print a numbered list and accept a number, id, or name as text.
+async function textPromptChoice(label, items, inputFunc) {
   console.log(`\nSelect current ${label}:`);
   for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    const entity = core.normalizedEntity(item);
-    const details = [];
-    const itemIdentifier = entity.identifier;
-    const itemEmail = entity.email;
-    const itemName = entity.name;
-    if (typeof itemIdentifier === 'string' && itemIdentifier) {
-      details.push(itemIdentifier);
-    }
-    if (typeof itemName === 'string' && itemName && itemName !== core.displayName(item)) {
-      details.push(itemName);
-    }
-    if (typeof itemEmail === 'string' && itemEmail) {
-      details.push(itemEmail);
-    }
-    const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
-    console.log(`  ${index + 1}. ${core.displayName(item)} [${core.itemId(item, label)}]${suffix}`);
+    console.log(`  ${index + 1}. ${describeChoice(label, items[index])}`);
   }
 
   while (true) {
     const raw = await inputFunc(`Enter ${label} number, id, or name: `);
+    if (raw === null || raw === undefined) {
+      throw new core.PingCodeError(`No ${label} selected: input stream ended`);
+    }
     const trimmed = raw.trim();
     if (!trimmed) continue;
     if (/^\d+$/.test(trimmed)) {
@@ -48,6 +75,21 @@ async function promptChoice(label, items, inputFunc) {
       console.log(`Invalid ${label} selection: ${exc.message}`);
     }
   }
+}
+
+// Interactive selector: ↑/↓ to move, Enter to confirm, Esc/Ctrl+C to cancel.
+// With `columns` > 1 the items render as a row-major grid navigated with all
+// four arrow keys (grid moves clamp at the edges; a single column wraps).
+// Rendering and key handling live in shared.arrowSelect; streams are
+// injectable so tests can drive key events without a real TTY.
+async function arrowPromptChoice(label, items, { input = process.stdin, output = process.stdout, columns = 1 } = {}) {
+  return shared.arrowSelect({
+    title: `Select current ${label}`,
+    options: items.map((item) => ({ value: item, label: describeChoice(label, item) })),
+    columns,
+    input,
+    output,
+  });
 }
 
 async function fetchProjects(client, refresh = false) {
@@ -67,11 +109,13 @@ async function fetchSprints(client, projectId, refresh = false) {
 
 async function fetchUsers(client, projectId, refresh = false) {
   const usersCache = client.workspaceCache.users;
+  // The users cache is project-scoped: a payload without a matching project_id
+  // marker (e.g. a stale global directory listing) must never be trusted.
   if (
     refresh ||
     !usersCache ||
     typeof usersCache !== 'object' ||
-    (usersCache.project_id !== null && usersCache.project_id !== undefined && usersCache.project_id !== projectId)
+    usersCache.project_id !== projectId
   ) {
     return await core.cacheUsers(client, projectId);
   }
@@ -121,8 +165,9 @@ function printHelp(subcommand) {
       'Usage: pingcode context init [options]',
       '',
       'Interactively configure PingCode workspace context.',
-      'Prompts for project, sprint/iteration, and user selection,',
-      'then writes the results to the workspace cache.',
+      'Prompts for project, sprint/iteration, and user selection',
+      '(arrow keys + Enter), then writes the results to the workspace cache.',
+      'Falls back to text input when stdin is not a terminal.',
       '',
       'Options:',
       '  --workspace-cache PATH   Cache file path',
@@ -310,8 +355,13 @@ async function handleInit(opts, inputFunc) {
   const client = createClient(opts);
   const refresh = Boolean(opts.refresh);
 
+  // Arrow-key selector needs a real terminal on both ends; tests and callers
+  // with an injected inputFunc use the text fallback instead.
+  const useArrowSelector = typeof inputFunc !== 'function'
+    && Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
   let rl = null;
-  if (!inputFunc) {
+  if (!useArrowSelector && typeof inputFunc !== 'function') {
     rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -320,10 +370,13 @@ async function handleInit(opts, inputFunc) {
   }
 
   try {
-  const project = await promptChoice('project', core.pageValues(await fetchProjects(client, refresh)), inputFunc);
-  const projectId = core.itemId(project, 'project');
-  const sprint = await promptChoice('sprint', core.pageValues(await fetchSprints(client, projectId, refresh)), inputFunc);
-  const user = await promptChoice('user', core.pageValues(await fetchUsers(client, projectId, refresh)), inputFunc);
+    const choose = useArrowSelector
+      ? (label, list, options) => promptChoice(label, list, undefined, options)
+      : (label, list) => promptChoice(label, list, inputFunc);
+    const project = await choose('project', core.pageValues(await fetchProjects(client, refresh)));
+    const projectId = core.itemId(project, 'project');
+    const sprint = await choose('sprint', core.pageValues(await fetchSprints(client, projectId, refresh)), { columns: 3 });
+    const user = await choose('user', core.pageValues(await fetchUsers(client, projectId, refresh)));
     const dictionaries = await tryCacheProjectDictionaries(client, projectId);
     const result = await cacheContext(client, project, sprint, user, dictionaries);
     core.printJson(result);
@@ -515,4 +568,4 @@ shared.registerModule('context', {
   run,
 });
 
-module.exports = { run, printHelp, parseContextArgs, createClient };
+module.exports = { run, printHelp, parseContextArgs, createClient, promptChoice, arrowPromptChoice, displayWidth: shared.displayWidth };

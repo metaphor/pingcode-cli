@@ -887,6 +887,13 @@ testInCleanTmp('context init selects and caches workspace context', async (t, tm
     close: () => {},
   });
 
+  // Force the text fallback even when the suite runs attached to a TTY;
+  // the arrow selector would otherwise wait for real keystrokes.
+  const stdinDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const stdoutDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+  process.stdin.isTTY = false;
+  process.stdout.isTTY = false;
+
   try {
     await context.run([
       'init',
@@ -906,6 +913,16 @@ testInCleanTmp('context init selects and caches workspace context', async (t, tm
   } finally {
     console.log = originalLog;
     readline.createInterface = originalCreateInterface;
+    if (stdinDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+    } else {
+      delete process.stdin.isTTY;
+    }
+    if (stdoutDescriptor) {
+      Object.defineProperty(process.stdout, 'isTTY', stdoutDescriptor);
+    } else {
+      delete process.stdout.isTTY;
+    }
   }
 });
 

@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { test } = require('node:test');
 const assert = require('node:assert');
+const { PassThrough } = require('node:stream');
 
 const core = require('../scripts/core');
 const context = require('../scripts/commands/context');
@@ -905,4 +906,211 @@ testInCleanTmp('cacheProjectDictionaries requests states and properties per type
   const propertyCalls = requested.filter(p => p === '/v1/project/work_item/properties').length;
   assert.strictEqual(stateCalls, 2, 'one states call per work item type');
   assert.strictEqual(propertyCalls, 2, 'one properties call per work item type');
+}));
+
+// ── Arrow-key selector tests ────────────────────────────────────────
+
+function fakeTtyStreams() {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  input.isTTY = true;
+  input.rawMode = null;
+  input.setRawMode = (mode) => { input.rawMode = mode; };
+  return { input, output };
+}
+
+function collectOutput(stream) {
+  const collected = [];
+  stream.on('data', (chunk) => collected.push(chunk.toString('utf8')));
+  return collected;
+}
+
+const CONTEXT_ITEMS = [
+  { id: 'p1', name: 'Alpha Project', identifier: 'ALPHA' },
+  { id: 'p2', name: 'Beta Project' },
+  { id: 'p3', name: 'Gamma Project' },
+];
+
+testInCleanEnv('arrow selector moves with ↓ and confirms with Enter', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+
+  const pending = context.arrowPromptChoice('project', CONTEXT_ITEMS, { input, output });
+  input.write('\x1b[B'); // down
+  input.write('\r'); // enter
+  const chosen = await pending;
+
+  assert.strictEqual(chosen.id, 'p2');
+  const stripAnsi = (text) => text.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
+  const plain = stripAnsi(chunks.join(''));
+  assert.ok(plain.includes('Alpha Project (ALPHA)'));
+  assert.ok(plain.includes('❯ Beta Project'));
+  assert.ok(plain.includes('2/3'));
+  assert.ok(chunks.join('').includes('\u001b[?25h'), 'cursor visibility must be restored');
+  assert.strictEqual(input.rawMode, false, 'raw mode must be restored');
+  assert.strictEqual(input.listenerCount('keypress'), 0, 'keypress listener must be removed');
+});
+
+testInCleanEnv('arrow selector rejects on Ctrl+C and cleans up', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+
+  const pending = context.arrowPromptChoice('project', CONTEXT_ITEMS, { input, output });
+  input.write('\x03'); // ctrl+c
+  await assert.rejects(pending, (exc) => exc instanceof core.PingCodeError);
+
+  const text = chunks.join('');
+  assert.ok(text.includes('cancelled.'));
+  assert.ok(text.includes('\u001b[?25h'), 'cursor visibility must be restored');
+  assert.strictEqual(input.rawMode, false, 'raw mode must be restored');
+  assert.strictEqual(input.listenerCount('keypress'), 0, 'keypress listener must be removed');
+});
+
+testInCleanEnv('arrow selector scrolls the viewport for long lists', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+  const items = Array.from({ length: 15 }, (_, index) => ({ id: `item-${index}`, name: `Item ${index}` }));
+
+  const pending = context.arrowPromptChoice('project', items, { input, output });
+  for (let step = 0; step < 12; step++) {
+    input.write('\x1b[B'); // down ×12: one past the 12-line viewport
+  }
+  input.write('\r');
+  const chosen = await pending;
+
+  assert.strictEqual(chosen.id, 'item-12');
+  assert.ok(chunks.join('').includes('13/15'));
+});
+
+testInCleanEnv('text fallback still accepts numbers and errors on EOF', async () => {
+  const selections = ['2'];
+  const chosen = await context.promptChoice('project', CONTEXT_ITEMS, async () => selections.shift());
+  assert.strictEqual(chosen.id, 'p2');
+
+  await assert.rejects(
+    context.promptChoice('project', CONTEXT_ITEMS, async () => null),
+    (exc) => exc instanceof core.PingCodeError && exc.message.includes('input stream ended'),
+  );
+});
+
+testInCleanEnv('CJK menu lines never exceed the terminal width', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+  const items = [
+    { id: 'p1', name: '大数据服务工作组', identifier: 'SHU' },
+    { id: 'p2', name: '基础服务工作组', identifier: 'PAAS' },
+    { id: 'p3', name: '网运通项目组', identifier: 'WYT' },
+  ];
+
+  const pending = context.arrowPromptChoice('project', items, { input, output });
+  input.write('\x1b[B'); // down
+  input.write('\r');
+  const chosen = await pending;
+  assert.strictEqual(chosen.id, 'p2');
+
+  // A line that exceeds the terminal width wraps and shifts every subsequent
+  // cursor-up redraw (the stacking-menu bug), so every physical line the
+  // selector emits must fit an 80-column terminal with one cell to spare.
+  const stripAnsi = (line) => line.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
+  for (const line of chunks.join('').split('\n')) {
+    const visible = stripAnsi(line);
+    const cells = context.displayWidth(visible);
+    assert.ok(cells <= 79, `line must fit 80 columns, occupies ${cells}: ${JSON.stringify(visible)}`);
+  }
+  assert.ok(
+    chunks.join('').includes('\u001b[4A\r\u001b[J'),
+    'redraw must move the cursor up over the entire previous menu',
+  );
+});
+
+testInCleanEnv('grid selector navigates with four arrow keys and clamps at edges', async () => {
+  const { input, output } = fakeTtyStreams();
+  const chunks = collectOutput(output);
+  const items = Array.from({ length: 7 }, (_, index) => ({ id: `s${index}`, name: `Sprint ${index}` }));
+
+  const pending = context.arrowPromptChoice('sprint', items, { input, output, columns: 3 });
+  input.write('\x1b[C'); // right → index 1
+  input.write('\x1b[C'); // right → index 2
+  input.write('\x1b[B'); // down → index 5
+  input.write('\x1b[B'); // down → clamps to 6 (last row has a single cell)
+  input.write('\x1b[C'); // right → stays at 6
+  input.write('\x1b[D'); // left → 5
+  input.write('\r');
+  const chosen = await pending;
+
+  assert.strictEqual(chosen.id, 's5');
+  const text = chunks.join('');
+  const firstMenuLine = text.split('\n').find((line) => line.includes('Sprint 0'));
+  assert.ok(
+    firstMenuLine.includes('Sprint 1') && firstMenuLine.includes('Sprint 2'),
+    'three sprints must share one physical line',
+  );
+  assert.ok(text.includes('↑/↓/←/→ move'), 'grid mode advertises four-key navigation');
+});
+
+testInCleanTmp('context init refetches users when cache lacks a project marker', withMockedFetch(async (t, tmpdir) => {
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    // Stale global directory listing: no project_id marker, must not be trusted.
+    users: { values: [{ id: 'stale-user', name: 'john' }] },
+  });
+
+  const requested = [];
+  mockFetch((url) => {
+    const { pathname } = new URL(url);
+    requested.push(pathname);
+    if (pathname === '/v1/project/projects') {
+      return fakeResponse({ total: 1, values: [{ id: 'project-1', name: 'Core Project' }] });
+    }
+    if (pathname === '/v1/project/projects/project-1/sprints') {
+      return fakeResponse({ total: 1, values: [{ id: 'sprint-1', name: 'Sprint 1' }] });
+    }
+    if (pathname === '/v1/project/projects/project-1/members') {
+      return fakeResponse({
+        total: 2,
+        values: [
+          { id: 'member-1', user: { id: 'user-1', display_name: 'Alice', name: 'alice' } },
+          { id: 'member-2', user: { id: 'user-2', display_name: 'Bob', name: 'bob' } },
+        ],
+      });
+    }
+    return fakeResponse({ total: 0, values: [] });
+  });
+
+  const readline = require('node:readline');
+  const originalCreateInterface = readline.createInterface;
+  readline.createInterface = () => ({
+    question: (_, cb) => cb('1'),
+    close: () => {},
+  });
+  const stdinDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const stdoutDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+  process.stdin.isTTY = false;
+  process.stdout.isTTY = false;
+  try {
+    await context.run(['init', '--workspace-cache', cachePath, '--token', 'fake']);
+  } finally {
+    readline.createInterface = originalCreateInterface;
+    if (stdinDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+    } else {
+      delete process.stdin.isTTY;
+    }
+    if (stdoutDescriptor) {
+      Object.defineProperty(process.stdout, 'isTTY', stdoutDescriptor);
+    } else {
+      delete process.stdout.isTTY;
+    }
+  }
+
+  assert.ok(
+    requested.includes('/v1/project/projects/project-1/members'),
+    'project members must be fetched despite a cached users payload',
+  );
+  const cache = readCacheJson(cachePath);
+  assert.strictEqual(cache.users.project_id, 'project-1');
+  assert.strictEqual(cache.users.values.length, 2);
+  assert.strictEqual(cache.preferences.current_user_id, 'user-1');
 }));
