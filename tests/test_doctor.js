@@ -106,6 +106,13 @@ test('long path and rename probes pass on this platform', () => {
   assert.strictEqual(rename.ok, true, rename.detail);
 });
 
+test('osFamily maps platforms to readable families, win32 covers all Windows', () => {
+  assert.strictEqual(doctor.osFamily('win32'), 'windows');
+  assert.strictEqual(doctor.osFamily('darwin'), 'macos');
+  assert.strictEqual(doctor.osFamily('linux'), 'linux');
+  assert.strictEqual(doctor.osFamily('freebsd'), 'freebsd');
+});
+
 // ── Secret masking ────────────────────────────────────────────────────
 
 test('maskUrl redacts secret query parameters but keeps the rest', () => {

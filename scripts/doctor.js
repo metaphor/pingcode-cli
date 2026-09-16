@@ -229,9 +229,20 @@ function collectRuntime() {
   };
 }
 
+// Node reports `win32` for EVERY Windows variant (32-bit, 64-bit, ARM64);
+// bitness lives in process.arch. os_family gives reports a readable family.
+function osFamily(platform) {
+  if (platform === 'win32') return 'windows';
+  if (platform === 'darwin') return 'macos';
+  if (platform === 'linux') return 'linux';
+  return platform;
+}
+
 function collectSystem() {
   const cpus = os.cpus();
   return {
+    os_family: osFamily(process.platform),
+    platform: process.platform,
     type: os.type(),
     release: os.release(),
     arch: os.arch(),
@@ -855,6 +866,7 @@ module.exports = {
   collectRuntime,
   collectSystem,
   collectLocale,
+  osFamily,
   probeLongPath,
   probeFileRename,
   pathDuplicateStatus,

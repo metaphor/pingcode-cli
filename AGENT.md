@@ -71,7 +71,7 @@ checks 的 id：`command_execution`（命令自身的退出结果，非 0 即 fa
 | `file_rename` fail | 写/重命名/删除被拒（EBUSY/EPERM） | 杀软或 OneDrive 同步锁文件，加白名单或移出同步目录 |
 | `node_duplicates` warn | PATH 上有多个 node（nvm/scoop/volta/官方混装） | 旧版本优先被解析，清理 PATH 顺序 |
 
-Windows 平台还有两个固有事实，排查时需知道：`~/.local/bin` 包装脚本只在 POSIX 提供（Windows 的 `pingcode` 来自 npm 全局 bin）；npm 子进程调用固定走 `shell: true`。`spawn_node` fail 时优先怀疑杀软拦截。
+Windows 平台还有三个固有事实，排查时需知道：Node 的 `platform` 恒为 `win32`，它表示**所有 Windows**（32 位/64 位/ARM64），并不限定 32 位，位数与架构看 `system.arch`（`x64`/`arm64`/`ia32`），`os_family` 是其人类可读形式（windows/macos/linux），因此上文所有 win32 门控检查在 64 位 Windows 上同样执行；`~/.local/bin` 包装脚本只在 POSIX 提供（Windows 的 `pingcode` 来自 npm 全局 bin）；npm 子进程调用固定走 `shell: true`。`spawn_node` fail 时优先怀疑杀软拦截。
 
 ### 输出要求
 
