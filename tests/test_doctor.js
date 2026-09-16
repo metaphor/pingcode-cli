@@ -91,6 +91,21 @@ test('DoctorSession probes the base URL given by --base-url', () => {
   assert.strictEqual(envWins, 'https://env.test');
 });
 
+test('pathDuplicateStatus flags multiple and missing node entries', () => {
+  assert.strictEqual(doctor.pathDuplicateStatus(['/a/node', '/b/node.exe']).status, 'warn');
+  assert.ok(doctor.pathDuplicateStatus(['/a/node', '/b/node.exe']).detail.includes('/a/node'));
+  assert.strictEqual(doctor.pathDuplicateStatus(['/a/node', '/a/node']).status, 'pass', 'duplicates of the same path collapse');
+  assert.strictEqual(doctor.pathDuplicateStatus([]).status, 'warn');
+  assert.strictEqual(doctor.pathDuplicateStatus(['/only/node']).status, 'pass');
+});
+
+test('long path and rename probes pass on this platform', () => {
+  const longPath = doctor.probeLongPath(os.tmpdir());
+  assert.strictEqual(longPath.ok, true, longPath.detail);
+  const rename = doctor.probeFileRename(os.tmpdir());
+  assert.strictEqual(rename.ok, true, rename.detail);
+});
+
 // ── Secret masking ────────────────────────────────────────────────────
 
 test('maskUrl redacts secret query parameters but keeps the rest', () => {

@@ -407,6 +407,73 @@ function writeFileProbe(dir, basename) {
   }
 }
 
+// Windows MAX_PATH (260 chars) probe: deep paths break node_modules trees
+// and long cache paths unless LongPathsEnabled is on. No-op semantics on
+// other platforms (they happily handle long paths, so it passes there too).
+function probeLongPath(dir) {
+  const seg = 'd'.repeat(200);
+  let deep = dir;
+  try {
+    while (deep.length < 260) {
+      deep = path.join(deep, seg);
+      fs.mkdirSync(deep, { recursive: true });
+    }
+    const file = path.join(deep, 'probe.txt');
+    fs.writeFileSync(file, 'ok');
+    const readBack = fs.readFileSync(file, 'utf8');
+    fs.unlinkSync(file);
+    return { ok: readBack === 'ok', detail: `created and used a ${deep.length}-char path` };
+  } catch (exc) {
+    return { ok: false, detail: `${deep.length}-char path failed: ${exc.code || exc.message}` };
+  } finally {
+    try {
+      fs.rmSync(path.join(dir, seg), { recursive: true, force: true });
+    } catch (exc) {
+      // best effort cleanup
+    }
+  }
+}
+
+// Antivirus/sync-lock probe: rename+delete is where EBUSY/EPERM bites on
+// Windows (Defender, OneDrive). Throws when the filesystem blocks it.
+function probeFileRename(dir) {
+  const a = path.join(dir, `pingcode-doctor-rn-${process.pid}.tmp`);
+  const b = `${a}.renamed`;
+  fs.writeFileSync(a, 'ok');
+  fs.renameSync(a, b);
+  const ok = fs.readFileSync(b, 'utf8') === 'ok';
+  fs.unlinkSync(b);
+  return { ok, detail: ok ? 'write/rename/delete round-trip ok' : 'content mismatch after rename' };
+}
+
+// List every node executable reachable via PATH (multiple installs —
+// nvm/scoop/volta/native — are a classic cause of "works elsewhere").
+function findNodePathsOnDisk() {
+  try {
+    const res = process.platform === 'win32'
+      ? spawnSync('where.exe', ['node'], { encoding: 'utf8', timeout: 10000, windowsHide: true })
+      : spawnSync('which', ['-a', 'node'], { encoding: 'utf8', timeout: 10000, windowsHide: true });
+    if (res.error) return { error: res.error.message };
+    if (res.status !== 0) return { found: [] };
+    return {
+      found: (res.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+    };
+  } catch (exc) {
+    return { error: exc.message };
+  }
+}
+
+function pathDuplicateStatus(found) {
+  const distinct = [...new Set(found || [])];
+  if (distinct.length > 1) {
+    return { status: 'warn', detail: `multiple node executables on PATH: ${distinct.join(', ')}` };
+  }
+  if (distinct.length === 0) {
+    return { status: 'warn', detail: 'node executable not found on PATH (process started via explicit path)' };
+  }
+  return { status: 'pass', detail: distinct[0] };
+}
+
 async function runChecks({ baseUrl, network }) {
   const checks = [];
   const add = (id, status, detail) => checks.push({ id, status, detail });
@@ -425,6 +492,14 @@ async function runChecks({ baseUrl, network }) {
       res.error ? `spawn failed: ${res.error.message}` : `${process.execPath} -> ${(res.stdout || '').trim()}`);
   } catch (exc) {
     add('spawn_node', 'fail', exc.message);
+  }
+
+  const nodes = findNodePathsOnDisk();
+  if (nodes.error) {
+    add('node_duplicates', 'skip', `could not query PATH: ${nodes.error}`);
+  } else {
+    const dup = pathDuplicateStatus(nodes.found);
+    add('node_duplicates', dup.status, dup.detail);
   }
 
   const tokenCache = summarizeTokenCache(
@@ -483,6 +558,25 @@ async function runChecks({ baseUrl, network }) {
       add('windows_codepage', 'warn',
         `codepage ${codepage} is not UTF-8; non-ASCII output may be garbled (run chcp 65001)`);
     }
+
+    try {
+      const longPath = probeLongPath(os.tmpdir());
+      add('long_path', longPath.ok ? 'pass' : 'fail', longPath.detail);
+    } catch (exc) {
+      add('long_path', 'fail', exc.message);
+    }
+
+    try {
+      const rename = probeFileRename(os.tmpdir());
+      add('file_rename', rename.ok ? 'pass' : 'fail', rename.detail);
+    } catch (exc) {
+      add('file_rename', 'fail',
+        `rename/delete blocked (${exc.code || exc.message}); antivirus or sync (OneDrive) lock likely`);
+    }
+
+    const pathLen = (process.env.PATH || '').length;
+    add('path_length', pathLen > 2000 ? 'warn' : 'pass',
+      `PATH is ${pathLen} chars (cmd.exe/CreateProcess limit ~2047)`);
   }
 
   if (!network) {
@@ -761,6 +855,9 @@ module.exports = {
   collectRuntime,
   collectSystem,
   collectLocale,
+  probeLongPath,
+  probeFileRename,
+  pathDuplicateStatus,
   flushStreams,
   REPORT_SCHEMA,
 };

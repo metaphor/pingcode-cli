@@ -27,7 +27,7 @@ pingcode <原命令...> --doctor
 | `env` | 白名单环境变量，分 `general` / `pingcode` / `proxy` / `tls` 四组 |
 | `runtime` / `system` / `locale` | Node 版本（含 openssl）、OS/内核/CPU/内存、LANG/编码（Windows 含 `windows_codepage`） |
 
-checks 的 id：`command_execution`（命令自身的退出结果，非 0 即 fail）、`node_version`、`spawn_node`、`token_cache`、`workspace_cache`、`tmp_writable`、`unicode_fs`、`cwd_writable`、`windows_codepage`（仅 win32）、`dns`、`api_reachable`、`clock_skew`。`dns`/`api_reachable`/`clock_skew` 为 `skip` 表示网络探测被禁用（`PINGCODE_DOCTOR_NETWORK=0`）；探测目标是 `--base-url` / `PINGCODE_BASE_URL` 解析出的实际 API 地址。`http_error.error` 在网络层失败时会带括号内的 cause code（如 `(ECONNREFUSED)`、`(ENOTFOUND)`、`(SELF_SIGNED_CERT_IN_CHAIN)`），这是定位网络问题的首要线索。
+checks 的 id：`command_execution`（命令自身的退出结果，非 0 即 fail）、`node_version`、`spawn_node`、`node_duplicates`、`token_cache`、`workspace_cache`、`tmp_writable`、`unicode_fs`、`cwd_writable`、`windows_codepage`/`long_path`/`path_length`/`file_rename`（仅 win32）、`dns`、`api_reachable`、`clock_skew`。`dns`/`api_reachable`/`clock_skew` 为 `skip` 表示网络探测被禁用（`PINGCODE_DOCTOR_NETWORK=0`）；探测目标是 `--base-url` / `PINGCODE_BASE_URL` 解析出的实际 API 地址。`http_error.error` 在网络层失败时会带括号内的 cause code（如 `(ECONNREFUSED)`、`(ENOTFOUND)`、`(SELF_SIGNED_CERT_IN_CHAIN)`），这是定位网络问题的首要线索。
 
 ### 定位流程
 
@@ -57,6 +57,21 @@ checks 的 id：`command_execution`（命令自身的退出结果，非 0 即 fa
 | `spawn_node` fail | 子进程被杀软/权限拦截 | 放行 `node` 子进程 |
 | 非 2xx 且 error 带 5xx / `Response was not JSON` | 服务端或网关问题 | 让用户把报告文件提交 issue |
 | `exit_code` 为 0、`errors` 为空，但用户认为结果不对 | 数据或参数问题 | 读 `output.stdout` 看实际返回内容 |
+
+### 环境类问题（Windows 高发）
+
+判断「环境导致」最有力的方法是**双机对比**：让用户在正常机器和故障机器各跑一次 `pingcode --doctor`（不带命令），diff 两份报告的 `system`、`locale`、`env`、`paths`、`checks`。Windows 专属检查项及其含义：
+
+| 检查项 | 含义 | 处理 |
+|---|---|---|
+| `windows_codepage` warn | 控制台代码页非 65001，中文输出乱码 | `chcp 65001` 或开启系统 Beta UTF-8 选项 |
+| `unicode_fs` fail/warn | 非 ASCII（中文）文件名读写失败，典型于代码页问题 | 同上；检查 NTFS 卷与临时目录 |
+| `long_path` fail | 超过 260 字符（MAX_PATH）的路径读写失败 | 组策略开启 LongPathsEnabled，或缩短缓存/工作区路径 |
+| `path_length` warn | PATH 超过 ~2047 字符，spawn 随机失败 | 清理 PATH 冗余项 |
+| `file_rename` fail | 写/重命名/删除被拒（EBUSY/EPERM） | 杀软或 OneDrive 同步锁文件，加白名单或移出同步目录 |
+| `node_duplicates` warn | PATH 上有多个 node（nvm/scoop/volta/官方混装） | 旧版本优先被解析，清理 PATH 顺序 |
+
+Windows 平台还有两个固有事实，排查时需知道：`~/.local/bin` 包装脚本只在 POSIX 提供（Windows 的 `pingcode` 来自 npm 全局 bin）；npm 子进程调用固定走 `shell: true`。`spawn_node` fail 时优先怀疑杀软拦截。
 
 ### 输出要求
 
