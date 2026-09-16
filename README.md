@@ -37,11 +37,13 @@ npx @metaphorli/pingcode-cli@latest install
 ```
 
 流程：
-1. 选择安装范围：
+1. 选择安装范围（方向键 + 回车）：
    - **Global**（全局，安装到 `~/.codex`、`~/.config/opencode` 等）
    - **Project-level**（项目级，安装到当前目录的 `.codex`、`.opencode` 等）
-2. 选择要安装的 Agent（可多选）
+2. 选择要安装的 Agent（可多选：方向键移动，空格勾选/取消，回车确认；默认全部勾选）
 3. 安装完成后会打印摘要和凭证配置提示
+
+stdin 不是终端时（脚本/CI 管道）退化为编号文本输入；Esc 或 Ctrl+C 随时取消。
 
 示例输入（全局安装 OpenCode）：
 
@@ -314,7 +316,7 @@ CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，�
 pingcode context init
 ```
 
-该命令会在终端里引导选择当前项目、当前迭代和当前用户，并写入同一个工作区缓存。
+该命令会在终端里引导选择当前项目、当前迭代和当前用户，并写入同一个工作区缓存。项目和用户为单列列表（上下键），迭代为三列网格（上下左右键）；回车确认，Esc 或 Ctrl+C 取消；stdin 不是终端时（脚本/CI 管道）退化为文本输入。用户列表取自所选项目的成员，不含全租户用户。
 
 使用 `$pingcode` skill 执行常规工作项查询或创建前，应先确认工作区缓存里有 `current_user_id`、`current_project_id`、`current_sprint_id`。缺少任一项时先运行 `pingcode context init`，完成后再重试原来的 PingCode 操作。
 
