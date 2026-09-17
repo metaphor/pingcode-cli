@@ -207,6 +207,7 @@ function openBrowser(url, spawner = spawn) {
     || /microsoft/i.test(os.release())
   );
   let command, args;
+  let spawnOptions = {};
 
   if (platform === 'darwin') {
     command = 'open';
@@ -216,8 +217,12 @@ function openBrowser(url, spawner = spawn) {
     const escapedUrl = url.replace(/[&|<>^]/g, '^$&');
     args = ['/d', '/s', '/c', `start ${escapedUrl}`];
   } else if (platform === 'win32') {
+    // cmd.exe treats an unquoted `&` as a command separator, which truncates
+    // the URL at its first query param. Quote it and spawn the command line
+    // verbatim so Node's argument escaping cannot interfere.
     command = 'cmd';
-    args = ['/c', 'start', '""', url];
+    args = ['/d', '/s', '/c', `start "" "${url}"`];
+    spawnOptions = { windowsVerbatimArguments: true };
   } else {
     command = 'xdg-open';
     args = [url];
@@ -228,6 +233,7 @@ function openBrowser(url, spawner = spawn) {
     const child = spawner(command, args, {
       stdio: 'ignore',
       detached: true,
+      ...spawnOptions,
     });
     child.on('error', (err) => {
       if (settled) return;

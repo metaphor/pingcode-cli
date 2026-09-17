@@ -441,6 +441,30 @@ test('openBrowser uses the Windows browser launcher inside WSL', async () => {
   });
 });
 
+test('openBrowser quotes the URL on Windows so cmd does not split at &', async () => {
+  const originalPlatform = os.platform;
+  let invocation;
+
+  os.platform = () => 'win32';
+  try {
+    await authModule.openBrowser(
+      'https://open.pingcode.com/oauth2/authorize?response_type=code&client_id=abc&state=def',
+      (command, args, opts) => {
+        invocation = { command, args, opts };
+        return fakeSpawner(command, args, opts);
+      }
+    );
+  } finally {
+    os.platform = originalPlatform;
+  }
+
+  assert.deepStrictEqual(invocation.args, [
+    '/d', '/s', '/c',
+    'start "" "https://open.pingcode.com/oauth2/authorize?response_type=code&client_id=abc&state=def"',
+  ]);
+  assert.strictEqual(invocation.opts.windowsVerbatimArguments, true);
+});
+
 test('openBrowser rejects on spawn error', async () => {
   const error = new Error('spawn failed');
   const failingSpawner = (command, args, opts) => {
