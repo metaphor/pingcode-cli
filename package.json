@@ -1,6 +1,6 @@
 {
   "name": "@metaphorli/pingcode-cli",
-  "version": "0.13.4",
+  "version": "0.14.0",
   "description": "PingCode CLI and Codex skill, written in Node.js.",
   "license": "MIT",
   "publishConfig": {

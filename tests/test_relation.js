@@ -369,3 +369,75 @@ testInCleanEnv('relation unknown subcommand errors', async () => {
     /Unknown relation subcommand/,
   );
 });
+
+// ── Create subcommand (generic cross-resource association) ────────────
+
+testInCleanEnv('relation create --help shows usage', async () => {
+  const output = await captureLogAsync(() => relation.run(['create', '--help']));
+  assert.ok(output.includes('Usage: pingcode relation create'));
+  assert.ok(output.includes('--principal-type TYPE'));
+  assert.ok(output.includes('--target-type TYPE'));
+  assert.ok(output.includes('--target-id ID'));
+});
+
+testInCleanEnv('relation create dry-run builds correct request', async () => {
+  setupToken();
+
+  const output = await captureLogAsync(() => relation.run([
+    'create',
+    '--principal-type', 'workitem',
+    '--principal-id', '6a4b0b9a5c980582561877af',
+    '--target-type', 'idea',
+    '--target-id', '681023e372a449eae7986a2b',
+    '--dry-run',
+  ]));
+
+  const parsed = JSON.parse(output);
+  assert.strictEqual(parsed.dry_run, true);
+  assert.strictEqual(parsed.method, 'POST');
+  assert.strictEqual(parsed.path, '/v1/relations');
+  assert.deepStrictEqual(parsed.json, {
+    principal_type: 'workitem',
+    principal_id: '6a4b0b9a5c980582561877af',
+    target_type: 'idea',
+    target_id: '681023e372a449eae7986a2b',
+  });
+});
+
+testInCleanEnv('relation create accepts equals-style flags', async () => {
+  setupToken();
+
+  const output = await captureLogAsync(() => relation.run([
+    'create',
+    '--principal-type=workitem',
+    '--principal-id=6a4b0b9a5c980582561877af',
+    '--target-type=idea',
+    '--target-id=681023e372a449eae7986a2b',
+    '--dry-run',
+  ]));
+
+  const parsed = JSON.parse(output);
+  assert.strictEqual(parsed.path, '/v1/relations');
+  assert.strictEqual(parsed.json.principal_type, 'workitem');
+  assert.strictEqual(parsed.json.target_type, 'idea');
+});
+
+testInCleanEnv('relation create rejects positional arguments', async () => {
+  setupToken();
+  await assert.rejects(
+    () => relation.run(['create', 'SCR-4']),
+    /relation create uses flag options only/,
+  );
+});
+
+testInCleanEnv('relation create requires all four flags', async () => {
+  setupToken();
+  await assert.rejects(
+    () => relation.run(['create', '--principal-type', 'workitem']),
+    /--principal-id is required/,
+  );
+  await assert.rejects(
+    () => relation.run(['create', '--principal-type', 'workitem', '--principal-id', 'A', '--target-type', 'idea']),
+    /--target-id is required/,
+  );
+});

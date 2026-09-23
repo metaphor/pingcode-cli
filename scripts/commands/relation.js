@@ -15,6 +15,10 @@ function printHelp() {
     '  add <id|identifier> <target_work_item_id> --relation-type TYPE',
     '                              Relate a work item to a target work item',
     '',
+    '  create --principal-type TYPE --principal-id ID',
+    '         --target-type TYPE --target-id ID',
+    '                              Create a generic cross-resource association',
+    '                              (e.g. workitem ↔ idea 需求挂接)',
     '  get <relation_id> <id|identifier>',
     '                              Get one work item relation',
     '',
@@ -31,6 +35,8 @@ function printHelp() {
     'Examples:',
     '  # 建立关联（relate）',
     '  pingcode relation add SCR-123 TARGET_WORK_ITEM_ID --relation-type relate',
+    '  # 通用关联：史诗工作项挂接产品需求（idea）',
+    '  pingcode relation create --principal-type workitem --principal-id EPIC_ID --target-type idea --target-id IDEA_ID',
     '  # 查看工作项的全部关联',
     '  pingcode relation list SCR-123 --compact',
     '  # 列出可用的关联类型',
@@ -65,6 +71,23 @@ function printSubcommandHelp(subcommand) {
         '  --relation-type TYPE      Relation type: mention, clone, cloned_by, duplicate,',
         '                            relate, cause, caused_by, block, blocked_by, dependency,',
         '                            or a custom relation type id',
+      ].join('\n'));
+      break;
+    case 'create':
+      console.log([
+        'Usage: pingcode relation create --principal-type TYPE --principal-id ID --target-type TYPE --target-id ID',
+        '',
+        'Create a generic association between two resources (works across domains,',
+        'e.g. a pjm work item such as an epic and a ship idea/需求).',
+        '',
+        'Options:',
+        '  --principal-type TYPE     Subject resource type, e.g. workitem, idea, ticket, testrun',
+        '  --principal-id ID         Subject resource id',
+        '  --target-type TYPE        Target resource type, e.g. workitem, idea, ticket, testrun',
+        '  --target-id ID            Target resource id',
+        '',
+        'Example:',
+        '  pingcode relation create --principal-type workitem --principal-id EPIC_ID --target-type idea --target-id IDEA_ID',
       ].join('\n'));
       break;
     case 'get':
@@ -293,6 +316,85 @@ async function runAdd(client, opts, args) {
   );
 }
 
+// ── Create subcommand (generic cross-resource association) ────────────
+
+const CREATE_FLAGS = {
+  '--principal-type': 'principal_type',
+  '--principal-id': 'principal_id',
+  '--target-type': 'target_type',
+  '--target-id': 'target_id',
+};
+
+function parseCreateArgs(tokens) {
+  const args = {
+    principal_type: null,
+    principal_id: null,
+    target_type: null,
+    target_id: null,
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const arg = tokens[i];
+    if (!arg.startsWith('--')) {
+      throw new core.PingCodeError(`Unexpected positional argument: ${arg}. relation create uses flag options only. Use relation create --help for usage.`);
+    }
+    if (arg in CREATE_FLAGS) {
+      if (i + 1 >= tokens.length) {
+        throw new core.PingCodeError(`Flag ${arg} requires a value`);
+      }
+      args[CREATE_FLAGS[arg]] = tokens[i + 1];
+      i += 1;
+      continue;
+    }
+    const eqIndex = arg.indexOf('=');
+    if (eqIndex !== -1) {
+      const flag = arg.slice(0, eqIndex);
+      const value = arg.slice(eqIndex + 1);
+      if (flag in CREATE_FLAGS) {
+        args[CREATE_FLAGS[flag]] = value;
+        continue;
+      }
+      throw new core.PingCodeError(`Unknown option: ${flag}. Use relation create --help for usage.`);
+    }
+    if (shared.BASE_GLOBAL_BOOLEAN_FLAGS.has(arg)) continue;
+    if (shared.BASE_GLOBAL_STRING_FLAGS[arg]) {
+      i += 1;
+      continue;
+    }
+    throw new core.PingCodeError(`Unknown option: ${arg}. Use relation create --help for usage.`);
+  }
+
+  for (const key of Object.keys(args)) {
+    if (typeof args[key] !== 'string' || !args[key].trim()) {
+      throw new core.PingCodeError(
+        `--${key.replace(/_/g, '-')} is required and must be non-empty. Use relation create --help for usage.`,
+      );
+    }
+  }
+  return args;
+}
+
+async function runCreate(client, opts, args) {
+  const body = {
+    principal_type: args.principal_type,
+    principal_id: args.principal_id,
+    target_type: args.target_type,
+    target_id: args.target_id,
+  };
+
+  // Sort keys for deterministic dry-run output
+  const sortedBody = {};
+  for (const k of Object.keys(body).sort()) sortedBody[k] = body[k];
+
+  return await client.request(
+    'POST',
+    '/v1/relations',
+    null,
+    body,
+    { dry_run: opts.dry_run, use_workspace_cache: false },
+  );
+}
+
 // ── Get subcommand ────────────────────────────────────────────────────
 
 async function runGet(client, opts, args) {
@@ -494,6 +596,11 @@ async function run(argv) {
       case 'add': {
         const addArgs = parseAddArgs(subArgs);
         result = await runAdd(client, opts, addArgs);
+        break;
+      }
+      case 'create': {
+        const createArgs = parseCreateArgs(subArgs);
+        result = await runCreate(client, opts, createArgs);
         break;
       }
       case 'get': {
