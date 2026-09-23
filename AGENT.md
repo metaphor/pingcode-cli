@@ -1,6 +1,6 @@
 # AGENT.md
 
-给 AI Agent 的操作指引。当前内容：doctor 诊断报告的分析方法。
+给 AI Agent 的操作指引。当前内容：doctor 诊断报告的分析方法、发布流程说明。
 
 ## Doctor 诊断报告分析
 
@@ -76,3 +76,9 @@ Windows 平台还有三个固有事实，排查时需知道：Node 的 `platform
 ### 输出要求
 
 分析后向用户报告四件事：**现象**（哪个命令、什么退出码）→ **直接原因**（errors/checks/events 中的具体证据，引用原文）→ **根因**（对照表结论）→ **修复步骤**（给出具体可执行的命令）。修复后让用户去掉 `--doctor` 重跑原命令确认。无法定位时，让用户把报告文件附到仓库 issue。
+
+## 发布流程
+
+**发布 npm 包不需要单独执行发布流程**（禁止手动 `npm publish`）。GitHub Actions 会在每次 GitHub Release 创建后自动发布到 npm（`.github/workflows/npm-publish.yml`，触发条件 `release: created`：先跑 build + test，通过后以 `NODE_AUTH_TOKEN` 执行 `npm publish`）。
+
+发版只需：更新版本号（`npm version ...`）→ 推送 tag → 在 GitHub 上创建 Release，其余交给 Action。
