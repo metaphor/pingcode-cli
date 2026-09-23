@@ -316,7 +316,9 @@ CLI 默认把工作区偏好和常用字典缓存到 `.pingcode/cache.json`，�
 pingcode context init
 ```
 
-该命令会在终端里引导选择当前项目、当前迭代和当前用户，并写入同一个工作区缓存。项目和用户为单列列表（上下键），迭代为三列网格（上下左右键）；回车确认，Esc 或 Ctrl+C 取消；stdin 不是终端时（脚本/CI 管道）退化为文本输入。用户列表取自所选项目的成员，不含全租户用户。
+该命令会在终端里按 **产品线 → 项目 → 迭代 → 用户** 的顺序引导选择，并写入同一个工作区缓存（产品线为 `current_product_id`/`current_product_name`）。交互统一为 ASCII 表格：首列为 ○/● 光标圆圈（默认停在第一行），后面是名称、编号前缀（项目）或账号（用户），末列为 PingCode 实际 ID；回车确认，Esc 取消。**产品线为必选项**：获取失败或企业无产品线时终止并给出指引。迭代允许选择“（留空，运行时动态解析）”，选中后会清掉残留的 current_sprint_* 偏好，交回运行时解析链。stdin 不是终端时（脚本/CI 管道）退化为文本输入且跳过产品线步骤（保留已有产品偏好），用户列表取自所选项目的成员，不含全租户用户。
+
+**spec-kit-pingcode 扩展联动**：在 spec-kit 项目里运行时，若向上检测到已安装的 spec-kit-pingcode 扩展（`.specify/extensions/pingcode/extension.yml`），init 会先询问“是否同时初始化其配置”；确认后产品线与项目直接沿用本次 init 的选择（不再二次交互），仅需确认迭代（可留空走运行时解析链）并完成 Spec/Story 映射表格选择（光标默认停在当前值，含需求树层级归类与不跳级校验）。优先级映射、默认优先级、收尾状态、同步开关不在此初始化——已有文件的对应行原样保留。写前自动备份 `.bak`，注释原样保留。管道输入（非终端）自动跳过该步骤，`printf ... | pingcode context init` 等既有脚本不受影响；`--speckit-config` 强制开启（需真实终端），`--no-speckit-config` 始终跳过，`--dry-run` 只预览不写文件。结果 JSON 追加 `speckit_extension` 字段（`detected`/`action`/`config_path`/`changed`）。
 
 使用 `$pingcode` skill 执行常规工作项查询或创建前，应先确认工作区缓存里有 `current_user_id`、`current_project_id`、`current_sprint_id`。缺少任一项时先运行 `pingcode context init`，完成后再重试原来的 PingCode 操作。
 
