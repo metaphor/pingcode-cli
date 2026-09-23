@@ -1125,18 +1125,24 @@ async function cacheWorkItemProperties(client, projectId, workItemTypeId) {
 // Fetch every work item dictionary a project needs so that name-based lookups
 // (--type/--state/--priority) can resolve offline. States and properties are
 // keyed by (project_id, work_item_type_id), so they are fetched per type.
+// Requests run concurrently — serially this chain costs multiple seconds on
+// latency-bound links and blocks `context init` with no feedback.
 async function cacheProjectDictionaries(client, projectId) {
   if (typeof projectId !== 'string' || !projectId) {
     throw new PingCodeError('A project id is required to cache work item dictionaries.');
   }
+  // Types first: it performs authentication and primes the token cache, so
+  // the remaining concurrent fetches reuse it instead of double-authing.
   const types = await cacheWorkItemTypes(client, projectId);
-  await cacheWorkItemPriorities(client, projectId);
-  for (const type of pageValues(types)) {
-    const typeId = normalizedEntity(type).id;
-    if (typeof typeId !== 'string' || !typeId) continue;
-    await cacheWorkItemStates(client, projectId, typeId);
-    await cacheWorkItemProperties(client, projectId, typeId);
-  }
+  await Promise.all([
+    cacheWorkItemPriorities(client, projectId),
+    ...pageValues(types).map(async (type) => {
+      const typeId = normalizedEntity(type).id;
+      if (typeof typeId !== 'string' || !typeId) return;
+      await cacheWorkItemStates(client, projectId, typeId);
+      await cacheWorkItemProperties(client, projectId, typeId);
+    }),
+  ]);
   return types;
 }
 

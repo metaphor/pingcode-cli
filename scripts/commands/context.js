@@ -4,6 +4,7 @@ const readline = require('node:readline');
 
 const core = require('../core');
 const shared = require('./shared');
+const speckitExtension = require('../speckit_extension');
 
 // ── Interactive selection ──────────────────────────────────────────
 
@@ -33,6 +34,46 @@ function describeChoice(label, item) {
   return `${name}${suffix}`;
 }
 
+// TTY menus render as radio-style ASCII tables; each label defines its
+// columns. Project gains the identifier prefix column, per the extension UI.
+const TABLE_SPECS = {
+  project: {
+    columns: [{ header: '项目' }, { header: '编号' }, { header: 'ID' }],
+    cells: (item) => {
+      const entity = core.normalizedEntity(item);
+      return [core.displayName(item), entity.identifier || '', entity.id || ''];
+    },
+  },
+  sprint: {
+    columns: [{ header: '迭代' }, { header: 'ID' }],
+    cells: (item) => {
+      const entity = core.normalizedEntity(item);
+      return [core.displayName(item), entity.id || ''];
+    },
+  },
+  user: {
+    columns: [{ header: '用户' }, { header: '账号' }],
+    cells: (item) => {
+      const entity = core.normalizedEntity(item);
+      return [core.displayName(item), entity.name || ''];
+    },
+  },
+  product: {
+    columns: [{ header: '产品线' }, { header: 'ID' }],
+    cells: (item) => {
+      const entity = core.normalizedEntity(item);
+      return [core.displayName(item), entity.id || ''];
+    },
+  },
+  type: {
+    columns: [{ header: '类型' }, { header: 'ID' }],
+    cells: (item) => {
+      const entity = core.normalizedEntity(item);
+      return [core.displayName(item), entity.id || ''];
+    },
+  },
+};
+
 async function promptChoice(label, items, inputFunc, options = {}) {
   if (!items || items.length === 0) {
     throw new core.PingCodeError(`No ${label} options are available`);
@@ -41,6 +82,28 @@ async function promptChoice(label, items, inputFunc, options = {}) {
     return textPromptChoice(label, items, inputFunc);
   }
   if (process.stdin.isTTY && process.stdout.isTTY) {
+    const spec = TABLE_SPECS[label];
+    if (spec) {
+      // initialName pre-positions the cursor on the row whose entity name
+      // matches (the current config value); empty matches the 留空 row.
+      let initialIndex = 0;
+      if (options.initialName !== undefined) {
+        const wanted = String(options.initialName || '');
+        const exact = items.findIndex((item) => String((item && item.name) || '') === wanted);
+        if (exact >= 0) {
+          initialIndex = exact;
+        } else {
+          const emptyRow = items.findIndex((item) => item && item.__empty__);
+          if (emptyRow >= 0 && wanted === '') initialIndex = emptyRow;
+        }
+      }
+      return shared.arrowTable({
+        title: options.title || `Select current ${label}`,
+        columns: spec.columns,
+        rows: items.map((item) => ({ value: item, cells: spec.cells(item) })),
+        initialIndex,
+      });
+    }
     return arrowPromptChoice(label, items, options);
   }
   throw new core.PingCodeError(
@@ -125,9 +188,29 @@ async function fetchUsers(client, projectId, refresh = false) {
 // Prefetching dictionaries is best effort: writing the preferences is the
 // primary action and must not fail because an optional fetch did. Failures are
 // reported on stderr and in the command's JSON result rather than swallowed.
-async function tryCacheProjectDictionaries(client, projectId) {
+// Every dictionary the init/extension flow needs already cached for this
+// project? Then the whole refresh chain can be skipped — that is what makes
+// repeated `context init` runs instant instead of ~10-20s of serial API calls.
+function dictionariesCached(client, projectId) {
+  const cache = client.workspaceCache || {};
+  const types = core.pageValues((cache.work_item_types || {})[projectId]);
+  if (types.length === 0) return false;
+  if (core.pageValues((cache.work_item_priorities || {})[projectId]).length === 0) return false;
+  const states = cache.work_item_states || {};
+  for (const type of types) {
+    const typeId = core.normalizedEntity(type).id;
+    if (typeof typeId !== 'string' || !typeId) return false;
+    if (core.pageValues(states[`${projectId}::${typeId}`]).length === 0) return false;
+  }
+  return true;
+}
+
+async function tryCacheProjectDictionaries(client, projectId, refresh = false) {
   if (typeof projectId !== 'string' || !projectId) {
     return { cached: false, reason: 'no project id resolved' };
+  }
+  if (!refresh && dictionariesCached(client, projectId)) {
+    return { cached: true, reused: true };
   }
   try {
     await core.cacheProjectDictionaries(client, projectId);
@@ -138,15 +221,27 @@ async function tryCacheProjectDictionaries(client, projectId) {
   }
 }
 
-async function cacheContext(client, project, sprint, user, dictionaries) {
+async function cacheContext(client, project, sprint, user, product, dictionaries, productSelection) {
   if (!client.workspaceCache.preferences) client.workspaceCache.preferences = {};
   const preferences = client.workspaceCache.preferences;
   preferences.current_project_id = core.itemId(project, 'project');
   preferences.current_project_name = core.displayName(project);
-  preferences.current_sprint_id = core.itemId(sprint, 'sprint');
-  preferences.current_sprint_name = core.displayName(sprint);
+  if (sprint) {
+    preferences.current_sprint_id = core.itemId(sprint, 'sprint');
+    preferences.current_sprint_name = core.displayName(sprint);
+  } else {
+    // Explicitly cleared: drop stale sprint preferences so runtime resolution
+    // (args > config > in-progress sprint discovery) is not shadowed.
+    delete preferences.current_sprint_id;
+    delete preferences.current_sprint_name;
+  }
   preferences.current_user_id = core.itemId(user, 'user');
   preferences.current_user_name = core.displayName(user);
+  if (productSelection === 'picked' && product) {
+    preferences.current_product_id = core.itemId(product, 'product');
+    preferences.current_product_name = core.displayName(product);
+  }
+  // productSelection !== 'picked'（管道输入跳过）时保留已有产品偏好。
   client.saveWorkspaceCache();
   return {
     message: 'PingCode workspace context cached',
@@ -165,14 +260,22 @@ function printHelp(subcommand) {
       'Usage: pingcode context init [options]',
       '',
       'Interactively configure PingCode workspace context.',
-      'Prompts for project, sprint/iteration, and user selection',
+      'Prompts for product line, project, sprint/iteration, and user',
       '(arrow keys + Enter), then writes the results to the workspace cache.',
       'Falls back to text input when stdin is not a terminal.',
+      '',
+      'If a spec-kit-pingcode extension is detected around the working',
+      'directory (.specify/extensions/pingcode/), init also offers to configure',
+      'the extension\'s pingcode-config.yml: every key is confirmed individually',
+      'as old -> new, and the previous file is backed up to .bak. Skipped',
+      'automatically when stdin is not a terminal (piped input keeps working).',
       '',
       'Options:',
       '  --workspace-cache PATH   Cache file path',
       '  --no-workspace-cache     Disable workspace cache',
       '  --refresh                Re-fetch dictionaries from API',
+      '  --speckit-config         Force the extension config step (terminal required)',
+      '  --no-speckit-config      Skip the extension config step',
     ].join('\n'));
     return;
   }
@@ -276,7 +379,11 @@ function printHelp(subcommand) {
 // ── Parser ─────────────────────────────────────────────────────────
 
 function parseContextArgs(tokens) {
-  const { opts, remaining } = shared.parseGlobalOptions(tokens, ['--refresh']);
+  const { opts, remaining } = shared.parseGlobalOptions(tokens, [
+    '--refresh',
+    '--speckit-config',
+    '--no-speckit-config',
+  ]);
 
   const helpRequested = remaining.includes('--help') || remaining.includes('-h');
   const positionals = remaining.filter(a => !a.startsWith('-'));
@@ -351,6 +458,28 @@ function countDictionaryEntries(cache) {
 
 // ── Handlers ───────────────────────────────────────────────────────
 
+async function selectProduct(client, choose) {
+  // TTY-only step; 产品线为必选项。获取失败或企业无产品线时直接终止并给出
+  // 指引，而不是留空继续。
+  let products = [];
+  try {
+    const resp = await client.request('GET', speckitExtension.PRODUCTS_PATH, {}, null, {
+      dry_run: false,
+      use_workspace_cache: false,
+    });
+    products = core.pageValues(resp).filter((p) => p && typeof p.name === 'string' && p.name);
+  } catch (exc) {
+    throw new core.PingCodeError(
+      `无法获取产品线列表：${exc.message}。产品线为必选项，请检查网络或产品域权限后重试。`,
+    );
+  }
+  if (products.length === 0) {
+    throw new core.PingCodeError('当前企业没有可选的产品线。产品线为必选项，请先在 PingCode 创建产品线后重试。');
+  }
+  const picked = await choose('product', products);
+  return { selection: 'picked', product: picked };
+}
+
 async function handleInit(opts, inputFunc) {
   const client = createClient(opts);
   const refresh = Boolean(opts.refresh);
@@ -361,6 +490,7 @@ async function handleInit(opts, inputFunc) {
     && Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
   let rl = null;
+  let speckitRl = null;
   if (!useArrowSelector && typeof inputFunc !== 'function') {
     rl = readline.createInterface({
       input: process.stdin,
@@ -373,15 +503,67 @@ async function handleInit(opts, inputFunc) {
     const choose = useArrowSelector
       ? (label, list, options) => promptChoice(label, list, undefined, options)
       : (label, list) => promptChoice(label, list, inputFunc);
+    // 选择顺序：产品线（必选）→ 项目 → 迭代（可留空）→ 用户。产品线为
+    // TTY-only（管道脚本保持 3 行契约，保留已有产品偏好）；获取失败直接终止。
+    const { selection: productSelection, product } = useArrowSelector
+      ? await selectProduct(client, choose)
+      : { selection: 'skipped', product: null };
     const project = await choose('project', core.pageValues(await fetchProjects(client, refresh)));
     const projectId = core.itemId(project, 'project');
-    const sprint = await choose('sprint', core.pageValues(await fetchSprints(client, projectId, refresh)), { columns: 3 });
+    // Sprint is allowed to stay empty: a trailing sentinel row resolves to
+    // null, which clears stale current_sprint_* preferences so the runtime
+    // resolution chain (args > config > sprint list) takes over.
+    const sprintChoice = await choose('sprint', [
+      ...core.pageValues(await fetchSprints(client, projectId, refresh)),
+      { __empty__: true, name: '（留空，运行时动态解析）' },
+    ]);
+    const sprint = sprintChoice && sprintChoice.__empty__ ? null : sprintChoice;
     const user = await choose('user', core.pageValues(await fetchUsers(client, projectId, refresh)));
-    const dictionaries = await tryCacheProjectDictionaries(client, projectId);
-    const result = await cacheContext(client, project, sprint, user, dictionaries);
-    core.printJson(result);
+    const dictionaries = await tryCacheProjectDictionaries(client, projectId, refresh);
+    await cacheContext(client, project, sprint, user, product, dictionaries, productSelection);
+
+    // spec-kit-pingcode extension config: best effort, never fails the init.
+    // Runs only in a real terminal; piped stdin keeps its documented contract.
+    let speckitSummary = null;
+    try {
+      speckitSummary = await speckitExtension.maybeConfigureExtension({
+        client,
+        project,
+        sprint,
+        product,
+        productSelection,
+        opts,
+        interactive: useArrowSelector,
+        getAsk: () => {
+          if (!speckitRl) {
+            speckitRl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+          }
+          return (prompt) => new Promise((resolve) => {
+            // Raw-mode menus (arrowSelect/arrowTable) pause stdin on settle;
+            // a paused stdin neither delivers answers nor keeps the event
+            // loop alive, so a pending question would silently exit. Resume
+            // before every question.
+            process.stdin.resume();
+            speckitRl.question(prompt, resolve);
+          });
+        },
+        choose: (label, list, options) => promptChoice(label, list, undefined, options),
+      });
+    } catch (exc) {
+      console.error(`warning: spec-kit-pingcode 扩展配置未完成: ${exc.message}`);
+    }
+    if (speckitSummary && speckitSummary.preview) {
+      // --dry-run: show the config that would be written.
+      console.log(speckitSummary.preview);
+    }
+
+    console.log('配置已完成！');
   } finally {
     if (rl) rl.close();
+    if (speckitRl) speckitRl.close();
   }
 }
 

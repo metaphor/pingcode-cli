@@ -238,6 +238,130 @@ function arrowSelect({
   });
 }
 
+// Radio-style ASCII table selector. First column is a cursor circle: ○ idle,
+// ● on the row the cursor sits on (single select). The cursor always starts
+// on the first row.
+//   columns: [{ header }]
+//   rows:    [{ value, cells: [string, ...] }]  (cells count === columns count)
+// ↑/↓ move (wrapping), Enter resolves rows[selected].value, Esc/Ctrl+C cancel.
+function arrowTable({
+  title,
+  columns,
+  rows,
+  initialIndex = 0,
+  input = process.stdin,
+  output = process.stdout,
+}) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return Promise.reject(new core.PingCodeError(`${title}: no options are available`));
+  }
+  if (typeof input.setRawMode !== 'function') {
+    return Promise.reject(new core.PingCodeError(`${title} requires an interactive terminal.`));
+  }
+
+  let selected = Math.max(0, Math.min(rows.length - 1, initialIndex));
+  // Column widths from header + cell contents, display-width aware so CJK
+  // cells keep the vertical borders aligned. Column 0 is the cursor circle.
+  const SELECT_HEADER = '选择';
+  const selectWidth = Math.max(displayWidth(SELECT_HEADER), 2);
+  const columnWidths = columns.map((col, index) => {
+    let width = displayWidth(String(col.header || ''));
+    for (const row of rows) {
+      width = Math.max(width, displayWidth(String(row.cells[index] ?? '')));
+    }
+    return Math.max(width, 2);
+  });
+
+  const padCell = (text, width) => String(text) + ' '.repeat(Math.max(0, width - displayWidth(String(text))));
+  const borderLine = () => `+${[selectWidth, ...columnWidths].map((width) => '-'.repeat(width + 2)).join('+')}+`;
+  const headerLine = () =>
+    `| ${padCell(SELECT_HEADER, selectWidth)} | ${columns.map((col, index) => padCell(col.header || '', columnWidths[index])).join(' | ')} |`;
+  const dataLine = (row, isCursor) =>
+    `| ${padCell(isCursor ? '●' : '○', selectWidth)} | ${row.cells.map((cell, index) => padCell(cell ?? '', columnWidths[index])).join(' | ')} |`;
+
+  let visibleRows = Math.max(3, Math.min(12, (output.rows || 24) - 6));
+  let winStart = 0;
+  let drawn = 0;
+
+  const render = (firstRender) => {
+    if (selected < winStart) winStart = selected;
+    if (selected >= winStart + visibleRows) winStart = selected - visibleRows + 1;
+    const header = truncateToWidth(
+      `${title}: (${selected + 1}/${rows.length}) ↑/↓ move, Enter select, Esc cancel`,
+      Math.max(20, (output.columns || 80) - 1),
+    );
+    const lines = [header, borderLine(), headerLine(), borderLine()];
+    const end = Math.min(rows.length, winStart + visibleRows);
+    for (let index = winStart; index < end; index++) {
+      lines.push(dataLine(rows[index], index === selected));
+    }
+    lines.push(borderLine());
+    if (!firstRender) {
+      output.write(`\u001b[${drawn}A\r\u001b[J`);
+    }
+    output.write(`${lines.join('\n')}\n`);
+    drawn = lines.length;
+  };
+
+  readline.emitKeypressEvents(input);
+  const previousRaw = input.isRaw === true;
+  input.setRawMode(true);
+  input.resume();
+  output.write('\u001b[?25l'); // hide cursor while the table is live
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const settle = (error, value) => {
+      if (settled) return;
+      settled = true;
+      input.removeListener('keypress', onKey);
+      input.setRawMode(previousRaw);
+      input.pause();
+      output.write('\u001b[?25h'); // restore cursor
+      if (drawn > 0) output.write(`\u001b[${drawn}A\r\u001b[J`);
+      if (error) {
+        output.write(`${title}: cancelled.\n`);
+        reject(error);
+      } else {
+        const row = rows[selected];
+        output.write(`${title}: ${String(row.cells[0] ?? '').trim()}\n`);
+        resolve(value);
+      }
+    };
+
+    function onKey(str, key) {
+      if (!key || settled) return;
+      if (key.ctrl && key.name === 'c') {
+        settle(new core.PingCodeError(`${title}: cancelled`));
+        return;
+      }
+      switch (key.name) {
+        case 'up':
+          selected = (selected - 1 + rows.length) % rows.length;
+          render(false);
+          break;
+        case 'down':
+          selected = (selected + 1) % rows.length;
+          render(false);
+          break;
+        case 'return':
+        case 'enter':
+          settle(null, rows[selected].value);
+          break;
+        case 'escape':
+          settle(new core.PingCodeError(`${title}: cancelled`));
+          break;
+        default:
+          break;
+      }
+    }
+
+    input.on('keypress', onKey);
+    render(true);
+  });
+}
+
 function listModules() {
   const modules = [];
   for (const [name, config] of registry) {
@@ -385,6 +509,6 @@ module.exports = {
   BASE_GLOBAL_BOOLEAN_FLAGS, BASE_GLOBAL_STRING_FLAGS,
   defaultGlobalOpts, parseGlobalOptions, clientFromOpts,
   PACKAGE_NAME, defaultNpm,
-  arrowSelect, displayWidth, truncateToWidth,
+  arrowSelect, arrowTable, displayWidth, truncateToWidth,
 };
 
