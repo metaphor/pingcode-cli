@@ -189,8 +189,11 @@ async function fetchUsers(client, projectId, refresh = false) {
 // primary action and must not fail because an optional fetch did. Failures are
 // reported on stderr and in the command's JSON result rather than swallowed.
 // Every dictionary the init/extension flow needs already cached for this
-// project? Then the whole refresh chain can be skipped — that is what makes
-// repeated `context init` runs instant instead of ~10-20s of serial API calls.
+// project AND refreshed within the TTL? Then the whole refresh chain can be
+// skipped — that is what makes repeated `context init` runs instant instead
+// of ~10-20s of serial API calls. A complete-but-stale cache is refreshed:
+// blind trust in dictionaries causes silent downstream failures (stale state
+// names, missing priorities) that only surface at `workitem create` time.
 function dictionariesCached(client, projectId) {
   const cache = client.workspaceCache || {};
   const types = core.pageValues((cache.work_item_types || {})[projectId]);
@@ -202,10 +205,12 @@ function dictionariesCached(client, projectId) {
     if (typeof typeId !== 'string' || !typeId) return false;
     if (core.pageValues(states[`${projectId}::${typeId}`]).length === 0) return false;
   }
-  return true;
+  const stamped = Date.parse(cache.dictionary_cached_at || '');
+  if (!Number.isFinite(stamped)) return false;
+  return Date.now() - stamped < core.DICTIONARY_CACHE_TTL_MS;
 }
 
-async function tryCacheProjectDictionaries(client, projectId, refresh = false) {
+async function tryCacheProjectDictionaries(client, projectId, refresh = false, hardAuth = false) {
   if (typeof projectId !== 'string' || !projectId) {
     return { cached: false, reason: 'no project id resolved' };
   }
@@ -216,6 +221,12 @@ async function tryCacheProjectDictionaries(client, projectId, refresh = false) {
     await core.cacheProjectDictionaries(client, projectId);
     return { cached: true };
   } catch (exc) {
+    // `context init` treats auth as a hard requirement (it cannot pick
+    // anything without dictionaries); `context set-current-*` stay offline
+    // friendly and only warn.
+    if (hardAuth && core.isAuthError(exc)) {
+      throw new core.PingCodeError('未登录或认证已失效，请先执行: pingcode auth login');
+    }
     console.error(`warning: could not cache work item dictionaries: ${exc.message}`);
     return { cached: false, reason: exc.message };
   }
@@ -469,6 +480,9 @@ async function selectProduct(client, choose) {
     });
     products = core.pageValues(resp).filter((p) => p && typeof p.name === 'string' && p.name);
   } catch (exc) {
+    if (core.isAuthError(exc)) {
+      throw new core.PingCodeError('未登录或认证已失效，请先执行: pingcode auth login');
+    }
     throw new core.PingCodeError(
       `无法获取产品线列表：${exc.message}。产品线为必选项，请检查网络或产品域权限后重试。`,
     );
@@ -505,21 +519,34 @@ async function handleInit(opts, inputFunc) {
       : (label, list) => promptChoice(label, list, inputFunc);
     // 选择顺序：产品线（必选）→ 项目 → 迭代（可留空）→ 用户。产品线为
     // TTY-only（管道脚本保持 3 行契约，保留已有产品偏好）；获取失败直接终止。
-    const { selection: productSelection, product } = useArrowSelector
-      ? await selectProduct(client, choose)
-      : { selection: 'skipped', product: null };
-    const project = await choose('project', core.pageValues(await fetchProjects(client, refresh)));
-    const projectId = core.itemId(project, 'project');
-    // Sprint is allowed to stay empty: a trailing sentinel row resolves to
-    // null, which clears stale current_sprint_* preferences so the runtime
-    // resolution chain (args > config > sprint list) takes over.
-    const sprintChoice = await choose('sprint', [
-      ...core.pageValues(await fetchSprints(client, projectId, refresh)),
-      { __empty__: true, name: '（留空，运行时动态解析）' },
-    ]);
-    const sprint = sprintChoice && sprintChoice.__empty__ ? null : sprintChoice;
-    const user = await choose('user', core.pageValues(await fetchUsers(client, projectId, refresh)));
-    const dictionaries = await tryCacheProjectDictionaries(client, projectId, refresh);
+    // 认证失败统一转换为一条可执行指引，而不是裸 HTTP 错误中断。
+    let productSelection;
+    let product;
+    let project;
+    let sprint;
+    let user;
+    try {
+      ({ selection: productSelection, product } = useArrowSelector
+        ? await selectProduct(client, choose)
+        : { selection: 'skipped', product: null });
+      project = await choose('project', core.pageValues(await fetchProjects(client, refresh)));
+      const projectId = core.itemId(project, 'project');
+      // Sprint is allowed to stay empty: a trailing sentinel row resolves to
+      // null, which clears stale current_sprint_* preferences so the runtime
+      // resolution chain (args > config > in-progress discovery) takes over.
+      const sprintChoice = await choose('sprint', [
+        ...core.pageValues(await fetchSprints(client, projectId, refresh)),
+        { __empty__: true, name: '（留空，运行时动态解析）' },
+      ]);
+      sprint = sprintChoice && sprintChoice.__empty__ ? null : sprintChoice;
+      user = await choose('user', core.pageValues(await fetchUsers(client, projectId, refresh)));
+      var dictionaries = await tryCacheProjectDictionaries(client, projectId, refresh, true);
+    } catch (exc) {
+      if (core.isAuthError(exc)) {
+        throw new core.PingCodeError('未登录或认证已失效，请先执行: pingcode auth login');
+      }
+      throw exc;
+    }
     await cacheContext(client, project, sprint, user, product, dictionaries, productSelection);
 
     // spec-kit-pingcode extension config: best effort, never fails the init.

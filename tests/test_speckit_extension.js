@@ -493,6 +493,71 @@ test('maybeConfigureExtension gates by detection, interactivity and flags', asyn
 
 // ── context init integration (piped mode stays untouched) ───────────────
 
+test('context init with auth failure tells the user to run pingcode auth login', async () => {
+  const origCwd = process.cwd();
+  const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'speckit-auth-'));
+
+  process.env.PINGCODE_CLIENT_ID = 'cid';
+  process.env.PINGCODE_CLIENT_SECRET = 'csecret';
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  // No dictionaries cached → the init must fetch them → 401 surfaces there.
+  writeWorkspaceCache(cachePath, {
+    projects: [{ id: 'project-1', name: 'Core Project' }],
+    sprints: { 'project-1': { values: [{ id: 'sprint-1', name: 'Sprint 1' }] } },
+    users: [{ id: 'user-1', name: 'alice' }],
+  });
+
+  mockFetch((url) => {
+    const { pathname } = new URL(url);
+    if (pathname === '/v1/project/projects') {
+      return fakeResponse({ total: 1, values: [{ id: 'project-1', name: 'Core Project' }] });
+    }
+    if (pathname === '/v1/project/projects/project-1/sprints') {
+      return fakeResponse({ total: 1, values: [{ id: 'sprint-1', name: 'Sprint 1' }] });
+    }
+    if (pathname === '/v1/project/projects/project-1/members') {
+      return fakeResponse({
+        total: 1,
+        values: [{ id: 'member-1', user: { id: 'user-1', display_name: 'Alice', name: 'alice' } }],
+      });
+    }
+    return fakeResponse({ message: 'unauthorized' }, 401);
+  });
+
+  const readline = require('node:readline');
+  const originalCreateInterface = readline.createInterface;
+  readline.createInterface = () => ({
+    question: (_, cb) => cb('1'),
+    close: () => {},
+  });
+  const stdinDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  process.stdin.isTTY = false;
+  const originalLog = console.log;
+  const originalError = console.error;
+  const lines = [];
+  console.log = (...a) => lines.push(a.map(String).join(' '));
+  console.error = (...a) => lines.push(a.map(String).join(' '));
+  let failure = null;
+  try {
+    process.chdir(tmpdir);
+    await context.run(['init', '--workspace-cache', cachePath, '--token', 'fake']);
+  } catch (exc) {
+    failure = exc;
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+    readline.createInterface = originalCreateInterface;
+    if (stdinDescriptor) Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+    else delete process.stdin.isTTY;
+    process.chdir(origCwd);
+  }
+
+  assert.ok(failure, 'init must fail on auth errors');
+  assert.match(failure.message, /未登录或认证已失效/);
+  assert.match(failure.message, /pingcode auth login/);
+  assert.ok(!lines.join('\n').includes('配置已完成！'), 'must not claim completion');
+});
+
 test('context init in piped mode skips the extension flow and reports it', async () => {
   const origCwd = process.cwd();
   const tmpdir = makeTmpdir();

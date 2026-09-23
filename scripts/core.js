@@ -13,6 +13,9 @@ const DEFAULT_WORKSPACE_CACHE = '.pingcode/cache.json';
 const MAX_TOKEN_TTL_SECONDS = 29 * 24 * 60 * 60;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const USER_LOOKUP_RE = /@user:([^,]+)/g;
+// Dictionary caches older than this are refreshed on the next `context init`
+// even when complete; `--refresh` always forces a refetch.
+const DICTIONARY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SELECTION_OPTIONS = 20;
 
 const CLI_COMMAND = 'pingcode';
@@ -53,6 +56,14 @@ class PingCodeError extends Error {
     super(message);
     this.name = 'PingCodeError';
   }
+}
+
+// Auth failures (HTTP 401/403, expired-token wording) deserve one clear
+// message: "run `pingcode auth login`" — not a raw HTTP dump mid-command.
+// Deliberately narrow: a bare "token" appears in unrelated offline errors.
+function isAuthError(exc) {
+  return /HTTP 40[13]\b|unauthorized|forbidden|invalid_token|No valid user token|认证|授权/i
+    .test(String((exc && exc.message) || ''));
 }
 
 // ── Diagnostic sink (doctor mode) ────────────────────────────────────
@@ -1048,7 +1059,6 @@ class PingCodeClient {
 }
 
 const DEFAULT_PAGE_SIZE = 100;
-
 async function fetchAllPages(client, rawPath, params = {}) {
   const allValues = [];
   let pageIndex = 0;
@@ -1143,6 +1153,10 @@ async function cacheProjectDictionaries(client, projectId) {
       await cacheWorkItemProperties(client, projectId, typeId);
     }),
   ]);
+  if (client.workspaceCache && client.workspaceCachePath !== null) {
+    client.workspaceCache.dictionary_cached_at = new Date().toISOString();
+    saveWorkspaceCache(client.workspaceCachePath, client.workspaceCache);
+  }
   return types;
 }
 
@@ -1478,6 +1492,8 @@ module.exports = {
   DEFAULT_BASE_URL,
   DEFAULT_TOKEN_CACHE,
   DEFAULT_WORKSPACE_CACHE,
+  DICTIONARY_CACHE_TTL_MS,
+  isAuthError,
   resolveWorkspaceCachePath,
   setDiagnosticSink,
   HTTP_METHODS,
