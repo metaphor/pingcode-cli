@@ -10,6 +10,8 @@
 //   html     pass through verbatim, untouched
 //   text     HTML-escape and wrap in <p> blocks, no Markdown interpretation
 
+const fs = require('node:fs');
+
 const core = require('./core');
 
 const RICH_TEXT_FORMATS = ['auto', 'markdown', 'md', 'html', 'text'];
@@ -250,9 +252,36 @@ function convertRichText(value, format = 'auto', { flag = '--format' } = {}) {
   }
 }
 
+// ── File/stdin input ──────────────────────────────────────────────────
+
+// Resolves rich-text body content from an inline flag value or a file path.
+// The two sources are mutually exclusive; `-` reads stdin. Returns the text
+// (string) or null when neither source is provided. Content is read verbatim
+// — it never touches the command line, so shell length limits and newline
+// mangling cannot corrupt it.
+function resolveRichTextInput({ inline, file, inlineFlag = '--description', fileFlag = '--description-file' }) {
+  const hasInline = typeof inline === 'string';
+  const hasFile = typeof file === 'string';
+  if (hasInline && hasFile) {
+    throw new core.PingCodeError(`${inlineFlag} and ${fileFlag} are mutually exclusive; provide only one.`);
+  }
+  if (!hasFile) {
+    return hasInline ? inline : null;
+  }
+  try {
+    if (file === '-') {
+      return fs.readFileSync(0, 'utf8');
+    }
+    return fs.readFileSync(file, 'utf8');
+  } catch (exc) {
+    throw new core.PingCodeError(`${fileFlag}: cannot read ${file === '-' ? 'stdin' : file}: ${exc.message}`);
+  }
+}
+
 module.exports = {
   RICH_TEXT_FORMATS,
   convertRichText,
+  resolveRichTextInput,
   convertInline,
   looksLikeHtml,
   mdToHtml,

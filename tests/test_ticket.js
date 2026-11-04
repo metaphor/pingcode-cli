@@ -1015,3 +1015,27 @@ testInCleanEnv('ticket state-resource-list-all rejects unknown option', async ()
     /Unknown option/,
   );
 });
+
+// ── --description-file ───────────────────────────────────────────────
+
+testInCleanEnv('ticket create --description-file reads description from file', async () => {
+  mockToken();
+  const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-desc-'));
+  const descPath = path.join(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '工单描述来自文件', 'utf8');
+  try {
+    const output = await captureLogAsync(() => ticket.run([
+      'create',
+      '--product', PRODUCT_ID,
+      '--title', '来自文件的工单',
+      '--type', TYPE_ID,
+      '--description-file', descPath,
+      '--dry-run',
+    ]));
+
+    const parsed = JSON.parse(output);
+    assert.strictEqual(parsed.json.description, '<p>工单描述来自文件</p>');
+  } finally {
+    fs.rmSync(tmpdir, { recursive: true, force: true });
+  }
+});

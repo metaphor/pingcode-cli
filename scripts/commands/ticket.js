@@ -35,6 +35,7 @@ function printHelp() {
     '    --title TEXT              (required) Ticket title (max 255 chars)',
     '    --type ID                 (required) Raw ticket type id',
     '    --description TEXT        Ticket description',
+    '    --description-file PATH   Read description from file (UTF-8; "-" = stdin)',
     '    --submitter ID            Raw submitter user id',
     '    --customer ID             Raw customer id',
     '    --channel ID              Raw channel id',
@@ -45,6 +46,7 @@ function printHelp() {
     '  update <id> [options]       Partially update a ticket',
     '    --title TEXT              New title',
     '    --description TEXT        New description',
+    '    --description-file PATH   Read new description from file (UTF-8; "-" = stdin)',
     '    --type ID                 New ticket type id',
     '    --state ID                New ticket state id',
     '    --assignee ID             New assignee user id',
@@ -225,6 +227,7 @@ function printSubcommandHelp(subcommand) {
         '  --type ID                 (required) Raw ticket type id',
         '  --description TEXT        Ticket description (Markdown or plain text;',
         '                            converted to rich-text HTML. Use --description-format)',
+        '  --description-file PATH   Read description from file (UTF-8; "-" = stdin)',
         '  --description-format FMT  auto (default), markdown, html, or text',
         '  --submitter ID            Raw submitter user id',
         '  --customer ID             Raw customer id',
@@ -247,6 +250,7 @@ function printSubcommandHelp(subcommand) {
         '  --title TEXT              New title',
         '  --description TEXT        New description (Markdown converted to rich-text',
         '                            HTML unless --description-format says otherwise)',
+        '  --description-file PATH   Read new description from file (UTF-8; "-" = stdin)',
         '  --description-format FMT  auto (default), markdown, html, or text',
         '  --type ID                 New ticket type id',
         '  --state ID                New ticket state id',
@@ -610,6 +614,7 @@ function parseCreateArgs(tokens) {
     title: null,
     type: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     submitter: null,
     customer: null,
@@ -623,6 +628,7 @@ function parseCreateArgs(tokens) {
     '--title': 'title',
     '--type': 'type',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--submitter': 'submitter',
     '--customer': 'customer',
@@ -694,8 +700,9 @@ async function runCreate(client, opts, args) {
     title: args.title,
     type_id: args.type,
   };
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const createDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (createDescription) {
+    body.description = richText.convertRichText(createDescription, args.descriptionFormat, { flag: '--description-format' });
   }
   for (const [, bodyKey, value] of optionalIds) {
     if (value) {
@@ -722,6 +729,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     type: null,
     state: null,
@@ -735,6 +743,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--type': 'type',
     '--state': 'state',
@@ -811,8 +820,9 @@ async function runUpdate(client, opts, args) {
   if (args.title) {
     body.title = args.title;
   }
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const updateDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (updateDescription) {
+    body.description = richText.convertRichText(updateDescription, args.descriptionFormat, { flag: '--description-format' });
   }
   for (const [, bodyKey, value] of idFields) {
     if (value) {

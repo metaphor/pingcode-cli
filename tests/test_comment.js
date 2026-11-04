@@ -867,3 +867,49 @@ testInCleanTmp('comment principal type flag requires a value', async (t, tmpdir)
     /Flag --principal-type requires a value/,
   );
 });
+
+// ── --content-file ───────────────────────────────────────────────────
+
+testInCleanTmp('comment create --content-file reads content from file', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+  });
+  const contentPath = tmpFile(tmpdir, 'content.md');
+  fs.writeFileSync(contentPath, '来自文件的内容', 'utf8');
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await comment.run([
+      'create', '5edca524cad2fa1125cb0630',
+      '--content-file', contentPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.content, '<p>来自文件的内容</p>');
+});
+
+testInCleanTmp('comment create rejects --content together with --content-file', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: { current_user_id: 'user-1' },
+  });
+  const contentPath = tmpFile(tmpdir, 'content.md');
+  fs.writeFileSync(contentPath, '来自文件', 'utf8');
+
+  await assert.rejects(
+    () => comment.run([
+      'create', '5edca524cad2fa1125cb0630',
+      '--content', '内联内容',
+      '--content-file', contentPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]),
+    /--content and --content-file are mutually exclusive/,
+  );
+});

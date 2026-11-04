@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 const { test } = require('node:test');
 const assert = require('node:assert');
 
@@ -74,4 +78,56 @@ test('invalid format throws naming the flag', () => {
     () => richText.convertRichText('x', 'bogus', { flag: '--description-format' }),
     /--description-format/,
   );
+});
+
+// ── resolveRichTextInput ─────────────────────────────────────────────
+
+test('resolveRichTextInput returns inline text as-is, null when absent', () => {
+  assert.strictEqual(richText.resolveRichTextInput({ inline: '第一行\n第二行' }), '第一行\n第二行');
+  assert.strictEqual(richText.resolveRichTextInput({}), null);
+  assert.strictEqual(richText.resolveRichTextInput({ inline: null, file: null }), null);
+});
+
+test('resolveRichTextInput reads file content verbatim', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-rt-'));
+  const file = path.join(dir, 'desc.md');
+  const content = '# 标题\n\n- 第一项\n- 第二项\n\n> 引用';
+  fs.writeFileSync(file, content, 'utf8');
+  try {
+    assert.strictEqual(richText.resolveRichTextInput({ file }), content);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRichTextInput rejects inline and file together', () => {
+  assert.throws(
+    () => richText.resolveRichTextInput({ inline: 'a', file: 'b.md' }),
+    /--description and --description-file are mutually exclusive/,
+  );
+  assert.throws(
+    () => richText.resolveRichTextInput({ inline: 'a', file: 'b.md', inlineFlag: '--content', fileFlag: '--content-file' }),
+    /--content and --content-file are mutually exclusive/,
+  );
+});
+
+test('resolveRichTextInput reports unreadable files naming the flag', () => {
+  assert.throws(
+    () => richText.resolveRichTextInput({ file: '/nonexistent/no-such-desc.md' }),
+    /--description-file: cannot read \/nonexistent\/no-such-desc\.md/,
+  );
+});
+
+test('resolveRichTextInput reads stdin for "-"', async () => {
+  const modulePath = JSON.stringify(path.join(__dirname, '..', 'scripts', 'rich_text.js'));
+  const script = `const rt = require(${modulePath}); process.stdout.write(rt.resolveRichTextInput({ file: '-' }));`;
+  const output = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', script], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error(`child exited ${code}`))));
+    child.stdin.end('stdin 第一行\nstdin 第二行');
+  });
+  assert.strictEqual(output, 'stdin 第一行\nstdin 第二行');
 });

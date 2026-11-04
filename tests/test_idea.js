@@ -1812,3 +1812,53 @@ testInCleanTmp('idea property-resource-create unknown option errors', async (t, 
     process.exitCode = 0;
   }
 });
+
+// ── --description-file ───────────────────────────────────────────────
+
+testInCleanTmp('idea create --description-file reads description from file', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: {} });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '来自文件的描述', 'utf8');
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await idea.run([
+      'create',
+      '--product', '6422711c3f12e6c1e46d40e9',
+      '--title', 'File description idea',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '<p>来自文件的描述</p>');
+});
+
+testInCleanTmp('idea update --description-file supplies the new description', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, { preferences: {} });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '想法更新后的描述', 'utf8');
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await idea.run([
+      'update', 'Idea-1',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '<p>想法更新后的描述</p>');
+});

@@ -2287,3 +2287,133 @@ testInCleanEnv('workitem help mentions my, start and done', async () => {
   assert.ok(output.includes('start <id|identifier>'));
   assert.ok(output.includes('done <id|identifier>'));
 });
+
+// ── --description-file ───────────────────────────────────────────────
+
+testInCleanTmp('workitem create --description-file converts multi-line file to rich text', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    work_item_types: { 'project-1': { values: [{ id: 'story', name: '故事' }] } },
+    projects: [{ id: 'project-core', name: 'Core' }],
+  });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '> 来源: specs/demo/intent.md\n\n### Why now\n- 原因一', 'utf8');
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'create',
+      '--title', 'From file',
+      '--type', 'story',
+      '--project', 'Core',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(
+    result.json.description,
+    '<blockquote><p>来源: specs/demo/intent.md</p></blockquote><h3>Why now</h3><ul><li>原因一</li></ul>',
+  );
+});
+
+testInCleanTmp('workitem create rejects --description together with --description-file', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    work_item_types: { 'project-1': { values: [{ id: 'story', name: '故事' }] } },
+    projects: [{ id: 'project-core', name: 'Core' }],
+  });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '来自文件', 'utf8');
+
+  await assert.rejects(
+    () => workItem.run([
+      'create',
+      '--title', 'Both sources',
+      '--description', '内联描述',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]),
+    /--description and --description-file are mutually exclusive/,
+  );
+});
+
+testInCleanTmp('workitem create --description-file missing file errors without issuing a request', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    work_item_types: { 'project-1': { values: [{ id: 'story', name: '故事' }] } },
+    projects: [{ id: 'project-core', name: 'Core' }],
+  });
+
+  await assert.rejects(
+    () => workItem.run([
+      'create',
+      '--title', 'Bad path',
+      '--description-file', path.join(tmpdir, 'no-such-desc.md'),
+      '--workspace-cache', cachePath, '--dry-run',
+    ]),
+    /--description-file: cannot read/,
+  );
+});
+
+testInCleanTmp('workitem update --description-file supplies the new description', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    projects: [{ id: 'project-core', name: 'Core' }],
+  });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(descPath, '更新后的描述', 'utf8');
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'update', 'WI-123',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '<p>更新后的描述</p>');
+});
+
+testInCleanEnv('create --help mentions --description-file', async () => {
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run(['create', '--help']);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(output.includes('--description-file PATH'));
+});

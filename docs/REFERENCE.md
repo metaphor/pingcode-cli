@@ -48,6 +48,8 @@ pingcode workitem create --title "test" --type task --dry-run
 
 正文格式：`workitem create/update`、`comment create`、`idea create/update`、`ticket create/update` 的 `--description`（comment 为 `--content`）接受 Markdown 或纯文本，发送前自动转为 PingCode 富文本 HTML；已是 HTML 的输入原样透传。可用 `--description-format`（comment 为 `--content-format`）指定 `auto`（默认）/`markdown`/`html`/`text`。
 
+长正文建议改用 `--description-file`（comment 为 `--content-file`）从 UTF-8 文件读取，`-` 表示 stdin；内容字节级进入同一转换管道，不经过命令行，不受 shell 参数长度（Windows cmd 上限 8191 字符）与换行转义影响。与内联 flag 互斥，二者只给其一。
+
 ## 凭证配置
 
 在 PingCode 企业后台创建应用，配置数据访问范围，然后设置环境变量：

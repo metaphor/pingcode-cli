@@ -72,12 +72,14 @@ function compactCommentResponse(payload) {
 function parseCreateArgs(tokens) {
   const args = {
     content: null,
+    content_file: null,
     content_format: null,
     reply_to: null,
     principal_type: null,
   };
   const stringFlags = {
     '--content': 'content',
+    '--content-file': 'content_file',
     '--content-format': 'content_format',
     '--reply-to': 'reply_to',
     '--principal-type': 'principal_type',
@@ -138,13 +140,19 @@ async function runCreate(client, opts, args, positionals) {
     throw new core.PingCodeError(`Invalid --principal-type '${principalType}'. Allowed: ${Array.from(COMMENT_PRINCIPAL_TYPES).join(', ')}`);
   }
 
-  if (typeof args.content !== 'string' || !args.content.trim()) {
+  const content = richText.resolveRichTextInput({
+    inline: args.content,
+    file: args.content_file,
+    inlineFlag: '--content',
+    fileFlag: '--content-file',
+  });
+  if (typeof content !== 'string' || !content.trim()) {
     throw new core.PingCodeError('--content is required and must be non-empty. Use comment create --help for usage.');
   }
 
   const body = {
     principal_type: principalType,
-    content: richText.convertRichText(args.content, args.content_format, { flag: '--content-format' }),
+    content: richText.convertRichText(content, args.content_format, { flag: '--content-format' }),
   };
 
   if (args.reply_to) {
@@ -514,6 +522,7 @@ function printHelp() {
     'Subcommands:',
     '  create <id|identifier>     Create a comment on a work item',
     '    --content TEXT            Comment content (required)',
+    '    --content-file PATH       Read content from file (UTF-8; "-" = stdin)',
     '    --reply-to COMMENT_ID     Reply to an existing comment',
     '    --principal-type TYPE     Principal type (default: work_item)',
     '',
@@ -566,6 +575,7 @@ function printSubcommandHelp(subcommand) {
         'Options:',
         '  --content TEXT            Comment content (required, non-empty; Markdown',
         '                            converted to rich-text HTML unless --content-format)',
+        '  --content-file PATH       Read content from file (UTF-8; "-" = stdin)',
         '  --content-format FMT      auto (default), markdown, html, or text',
         '  --reply-to COMMENT_ID     Reply to an existing comment',
         '  --principal-type TYPE     Principal type (default: work_item; also work_item_deliverable, test_case, test_run, idea, ticket, page)',

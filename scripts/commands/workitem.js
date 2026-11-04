@@ -336,6 +336,7 @@ function parseCreateArgs(tokens) {
     state: null,
     priority: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     parent: null,
   };
@@ -348,6 +349,7 @@ function parseCreateArgs(tokens) {
     '--state': 'state',
     '--priority': 'priority',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--parent': 'parent',
   };
@@ -436,8 +438,9 @@ async function runCreate(client, opts, args) {
   }
 
   // Description (converted to PingCode rich-text HTML)
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const createDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (createDescription) {
+    body.description = richText.convertRichText(createDescription, args.descriptionFormat, { flag: '--description-format' });
   }
 
   // Parent
@@ -557,6 +560,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     type: null,
     project: null,
@@ -580,6 +584,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--type': 'type',
     '--project': 'project',
@@ -684,8 +689,9 @@ async function runUpdate(client, opts, args) {
   const body = {};
 
   if (args.title) body.title = args.title;
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const updateDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (updateDescription) {
+    body.description = richText.convertRichText(updateDescription, args.descriptionFormat, { flag: '--description-format' });
   }
 
   if (args.project) {
@@ -1371,6 +1377,8 @@ function printSubcommandHelp(subcommand) {
         '  --priority <name|id>      Priority',
         '  --description TEXT        Description (Markdown or plain text; converted to',
         '                            rich-text HTML. Use --description-format to override)',
+        '  --description-file PATH   Read description from file (UTF-8; "-" = stdin);',
+        '                            same conversion as --description',
         '  --description-format FMT  auto (default), markdown, html, or text',
         '  --parent <id|identifier>  Parent work item',
       ].join('\n'));
@@ -1394,6 +1402,7 @@ function printSubcommandHelp(subcommand) {
         '  --title TEXT              New title',
         '  --description TEXT        New description (Markdown converted to rich-text',
         '                            HTML unless --description-format says otherwise)',
+        '  --description-file PATH   Read new description from file (UTF-8; "-" = stdin)',
         '  --description-format FMT  auto (default), markdown, html, or text',
         '  --type <name|id>          New work item type',
         '  --project <id|name>       New project',

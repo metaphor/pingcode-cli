@@ -93,6 +93,7 @@ function printSubcommandHelp(subcommand) {
         '  --assignee NAME              Assignee (name resolvable from workspace cache)',
         '  --description TEXT           Description (Markdown or plain text; converted',
         '                               to rich-text HTML. Use --description-format)',
+        '  --description-file PATH      Read description from file (UTF-8; "-" = stdin)',
         '  --description-format FMT     auto (default), markdown, html, or text',
         '  --suite ID                   Raw suite id',
         '  --priority ID                Raw priority id',
@@ -113,6 +114,7 @@ function printSubcommandHelp(subcommand) {
         '  --title TEXT                 New title',
         '  --description TEXT           New description (Markdown converted to rich-text',
         '                               HTML unless --description-format says otherwise)',
+        '  --description-file PATH      Read new description from file (UTF-8; "-" = stdin)',
         '  --description-format FMT     auto (default), markdown, html, or text',
         '  --state ID                   Raw state id',
         '  --priority ID                Raw priority id',
@@ -756,6 +758,7 @@ function parseCreateArgs(tokens) {
     title: null,
     assignee: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     suite: null,
     priority: null,
@@ -766,6 +769,7 @@ function parseCreateArgs(tokens) {
     '--title': 'title',
     '--assignee': 'assignee',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--suite': 'suite',
     '--priority': 'priority',
@@ -819,8 +823,9 @@ async function runCreate(client, opts, args) {
   };
 
   // Description (converted to PingCode rich-text HTML)
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const createDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (createDescription) {
+    body.description = richText.convertRichText(createDescription, args.descriptionFormat, { flag: '--description-format' });
   }
 
   // Suite (raw ID)
@@ -867,6 +872,7 @@ function parseUpdateArgs(tokens) {
     target: null,
     title: null,
     description: null,
+    descriptionFile: null,
     descriptionFormat: null,
     state: null,
     priority: null,
@@ -881,6 +887,7 @@ function parseUpdateArgs(tokens) {
   const stringFlags = {
     '--title': 'title',
     '--description': 'description',
+    '--description-file': 'descriptionFile',
     '--description-format': 'descriptionFormat',
     '--state': 'state',
     '--priority': 'priority',
@@ -972,8 +979,9 @@ async function runUpdate(client, opts, args) {
   const body = {};
 
   if (args.title) body.title = args.title;
-  if (args.description) {
-    body.description = richText.convertRichText(args.description, args.descriptionFormat, { flag: '--description-format' });
+  const updateDescription = richText.resolveRichTextInput({ inline: args.description, file: args.descriptionFile });
+  if (updateDescription) {
+    body.description = richText.convertRichText(updateDescription, args.descriptionFormat, { flag: '--description-format' });
   }
 
   if (args.state) {
