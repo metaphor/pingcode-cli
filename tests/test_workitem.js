@@ -2406,6 +2406,42 @@ testInCleanTmp('workitem update --description-file supplies the new description'
   assert.strictEqual(result.json.description, '<p>更新后的描述</p>');
 });
 
+testInCleanTmp('workitem create --description-file omits leading comment header', async (t, tmpdir) => {
+  const cachePath = tmpFile(tmpdir, 'workspace.json');
+  writeWorkspaceCache(cachePath, {
+    preferences: {
+      current_user_id: 'user-1',
+      current_project_id: 'project-1',
+      current_sprint_id: 'sprint-1',
+    },
+    work_item_types: { 'project-1': { values: [{ id: 'story', name: '故事' }] } },
+    projects: [{ id: 'project-core', name: 'Core' }],
+  });
+  const descPath = tmpFile(tmpdir, 'desc.md');
+  fs.writeFileSync(
+    descPath,
+    '<!--\n临时文件：仅用于推送 PingCode 卡片描述，本注释发送前被剥离。\n-->\n\n正文标题\n',
+    'utf8',
+  );
+
+  let output = '';
+  const originalLog = console.log;
+  console.log = (...args) => { output += args.join(' ') + '\n'; };
+  try {
+    await workItem.run([
+      'create',
+      '--title', 'Header omitted',
+      '--description-file', descPath,
+      '--workspace-cache', cachePath, '--dry-run',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const result = JSON.parse(output.trim());
+  assert.strictEqual(result.json.description, '<p>正文标题</p>');
+});
+
 testInCleanEnv('create --help mentions --description-file', async () => {
   let output = '';
   const originalLog = console.log;

@@ -131,3 +131,39 @@ test('resolveRichTextInput reads stdin for "-"', async () => {
   });
   assert.strictEqual(output, 'stdin 第一行\nstdin 第二行');
 });
+
+test('resolveRichTextInput strips BOM and one leading comment header from files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-rt-'));
+  const file = path.join(dir, 'desc.md');
+  const header = [
+    '<!--',
+    'PingCode 推送临时文件：本文件经 --description-file 传给 CLI，',
+    '本注释块在发送前被剥离，不会进入卡片描述。',
+    '-->',
+    '',
+  ].join('\n');
+  const body = '# 标题\n\n- 第一项';
+  fs.writeFileSync(file, `\uFEFF${header}\n${body}`, 'utf8');
+  try {
+    assert.strictEqual(richText.resolveRichTextInput({ file }), body);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRichTextInput keeps files without a header verbatim', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-rt-'));
+  const file = path.join(dir, 'desc.md');
+  const content = '### 正文\n无注释头';
+  fs.writeFileSync(file, content, 'utf8');
+  try {
+    assert.strictEqual(richText.resolveRichTextInput({ file }), content);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRichTextInput does not strip comment-like text from inline input', () => {
+  const inline = '<!-- 不是头注释 -->\n正文';
+  assert.strictEqual(richText.resolveRichTextInput({ inline }), inline);
+});

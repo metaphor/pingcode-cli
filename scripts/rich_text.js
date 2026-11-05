@@ -268,14 +268,23 @@ function resolveRichTextInput({ inline, file, inlineFlag = '--description', file
   if (!hasFile) {
     return hasInline ? inline : null;
   }
+  let text;
   try {
     if (file === '-') {
-      return fs.readFileSync(0, 'utf8');
+      text = fs.readFileSync(0, 'utf8');
+    } else {
+      text = fs.readFileSync(file, 'utf8');
     }
-    return fs.readFileSync(file, 'utf8');
   } catch (exc) {
     throw new core.PingCodeError(`${fileFlag}: cannot read ${file === '-' ? 'stdin' : file}: ${exc.message}`);
   }
+  // File-channel convention: a UTF-8 BOM and ONE leading `<!-- ... -->`
+  // comment block carry human-facing metadata (what this transient file is)
+  // and are stripped before conversion; inline input stays verbatim.
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*\n?/, '')
+    .replace(/^\n+/, '');
 }
 
 module.exports = {
