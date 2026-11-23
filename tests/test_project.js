@@ -60,7 +60,7 @@ const MEMBER_ID = 'a0417f68e846aae315c85d24643678a9';
 const PROPERTY_ID = 'risk';
 
 const SUBCOMMANDS = [
-  'create', 'get', 'update', 'clone', 'progress', 'project-states',
+  'list', 'create', 'get', 'update', 'clone', 'progress', 'project-states',
   'member-add', 'member-get', 'member-update', 'member-list', 'member-remove',
   'prop-add', 'prop-get', 'prop-list', 'prop-remove', 'local-config-enable',
 ];
@@ -90,6 +90,70 @@ testInCleanEnv('project subcommand --help shows usage for every subcommand', asy
   for (const sub of SUBCOMMANDS) {
     const output = await captureLogAsync(() => project.run([sub, '--help']));
     assert.ok(output.includes(`Usage: pingcode project ${sub}`), `missing usage for ${sub}`);
+  }
+});
+
+// ── List subcommand ────────────────────────────────────────────────────
+
+testInCleanEnv('project list dry-run builds correct request', async () => {
+  setupAuth();
+
+  const output = await captureLogAsync(() => project.run(['list', '--dry-run']));
+
+  const parsed = JSON.parse(output);
+  assert.strictEqual(parsed.dry_run, true);
+  assert.strictEqual(parsed.method, 'GET');
+  assert.strictEqual(parsed.path, '/v1/project/projects');
+});
+
+testInCleanEnv('project list rejects unexpected arguments', async () => {
+  await assert.rejects(
+    () => project.run(['list', 'foo']),
+    /Unexpected argument/,
+  );
+  await assert.rejects(
+    () => project.run(['list', '--keywords', 'demo']),
+    /Unknown option/,
+  );
+});
+
+testInCleanEnv('project list fetches pages and refreshes workspace cache', async () => {
+  const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingcode-project-list-'));
+  const cachePath = path.join(tmpdir, 'workspace.json');
+  try {
+    setupAuth();
+    mockFetch((url) => {
+      const { pathname } = new URL(url);
+      if (pathname === '/v1/auth/token') {
+        return fakeResponse({ access_token: 'tok', expires_in: 3600 });
+      }
+      if (pathname === '/v1/project/projects') {
+        return fakeResponse({
+          total: 2,
+          values: [
+            { id: 'p1', name: 'One', identifier: 'ONE' },
+            { id: 'p2', name: 'Two', identifier: 'TWO' },
+          ],
+        });
+      }
+      return fakeResponse({ total: 0, values: [] });
+    });
+
+    const output = await captureLogAsync(() =>
+      project.run(['list', '--compact', '--workspace-cache', cachePath]));
+
+    const parsed = JSON.parse(output);
+    assert.strictEqual(parsed.count, 2);
+    assert.strictEqual(parsed.values.length, 2);
+    assert.strictEqual(parsed.values[0].name, 'One');
+
+    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    assert.strictEqual(
+      cache.projects.values.length, 2,
+      'project list must refresh the projects dictionary for cold starts',
+    );
+  } finally {
+    fs.rmSync(tmpdir, { recursive: true, force: true });
   }
 });
 

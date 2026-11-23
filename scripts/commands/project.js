@@ -12,6 +12,7 @@ function printHelp() {
     'Usage: pingcode project <subcommand> [options]',
     '',
     'Subcommands:',
+    '  list [options]              List all projects visible to the current user',
     '  create [options]            Create a project',
     '  get <id> [options]          Show a single project',
     '  update <id> [options]       Partially update a project',
@@ -41,6 +42,8 @@ function printHelp() {
     '                              Enable local configuration for a project',
     '',
     'Examples:',
+    '  # 列出当前用户有权限的全部项目',
+    '  pingcode project list --compact',
     '  # 新建 Scrum 项目',
     '  pingcode project create --type scrum --name 示例项目 --identifier DEMO',
     '  # 查看项目进度统计',
@@ -67,6 +70,16 @@ function printHelp() {
 
 function printSubcommandHelp(subcommand) {
   switch (subcommand) {
+    case 'list':
+      console.log([
+        'Usage: pingcode project list [options]',
+        '',
+        'List all projects visible to the current user. Follows pagination and',
+        'refreshes the projects dictionary in the workspace cache, so context',
+        'commands can resolve project names offline afterwards.',
+        '',
+      ].join('\n'));
+      break;
     case 'create':
       console.log([
         'Usage: pingcode project create [options]',
@@ -347,6 +360,28 @@ function parseDoubleIdArgs(tokens, subcommand, spec, secondKey, secondLabel) {
   args.project_id = positionals[0];
   args[secondKey] = positionals[1];
   return args;
+}
+
+// ── List subcommand ────────────────────────────────────────────────────
+
+function parseListArgs(tokens) {
+  for (const arg of tokens) {
+    if (arg.startsWith('--')) {
+      throw new core.PingCodeError(`Unknown option: ${arg}. Use project list --help for usage.`);
+    }
+    throw new core.PingCodeError(`Unexpected argument: ${arg}. Use project list --help for usage.`);
+  }
+  return {};
+}
+
+async function runList(client, opts) {
+  if (opts.dry_run) {
+    return { dry_run: true, method: 'GET', path: '/v1/project/projects', params: {} };
+  }
+  // cacheProjects follows pagination and refreshes the projects dictionary in
+  // the workspace cache, so `project list` returns the same complete list the
+  // context commands resolve names against (and warms it for cold starts).
+  return await core.cacheProjects(client);
 }
 
 // ── Create subcommand ──────────────────────────────────────────────────
@@ -744,6 +779,11 @@ async function run(argv) {
   try {
     let result;
     switch (subcommand) {
+      case 'list': {
+        parseListArgs(subArgs);
+        result = await runList(client, opts);
+        break;
+      }
       case 'create': {
         const createArgs = parseCreateArgs(subArgs);
         result = await runCreate(client, opts, createArgs);
